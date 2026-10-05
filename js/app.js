@@ -407,10 +407,14 @@ function openDocUploader(preselectedType=''){
        if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);
        Object.assign(car,patch);complianceUpdated=true;
      }
+     let refreshError=null;
+     try{await loadData()}catch(refreshErrCaught){refreshError=refreshErrCaught}
+     // The upload transaction is complete at this point. Close only after success;
+     // a list-refresh problem must not roll back a successfully saved document.
      m.remove();
      let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
      toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):name+' uploaded successfully!');
-     await loadData();
+     if(refreshError)toast('Document saved, but the document list could not refresh. Please refresh the page.','error');
    }catch(err){
      // Best-effort rollback keeps a failed replacement from leaving a ghost file/record or wrong compliance date.
      if(complianceUpdated&&oldPatch)await db.from('cars').update(oldPatch).eq('id',car.id).eq('user_id',user.id);
