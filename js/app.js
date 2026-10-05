@@ -257,12 +257,12 @@ async function generateSaleForms(){
  const tr=getTransferor(),relationText=relation+' '+relationName;
  const data={reg:car.registration_no,makeModel:car.make_model||'',vin:car.vin||'Not available',engine:car.engine_no||'Not available',transferor:tr.name||'Not available',transferorAddress:tr.address||'Not available',buyer:buyerName,relation:relationText,age,address,rto,saleDate,financier};
  try{
-   const wrapper=document.createElement('div');wrapper.id='salePdfPreview';
-   wrapper.innerHTML=buildSaleFormsHtml(data);document.body.appendChild(wrapper);
+   const wrapper=document.createElement('div');wrapper.id='salePdfPreview';wrapper.setAttribute('aria-hidden','true');wrapper.innerHTML=buildSaleFormsHtml(data);document.body.appendChild(wrapper);
    const pdfName='Form_29_30_'+buyerName.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+new Date(saleDate).getFullYear()+'.pdf';
    if(typeof html2pdf==='undefined')throw new Error('PDF engine did not load. Please refresh and try again.');
    const opt={margin:0,filename:pdfName,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
    const blob=await html2pdf().set(opt).from(wrapper).outputPdf('blob');
+   wrapper.remove();
    const path=user.id+'/'+car.id+'/archives/'+pdfName;
    const up=await db.storage.from('car-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});
    if(up.error)throw new Error('Archive upload failed: '+up.error.message);
@@ -271,7 +271,7 @@ async function generateSaleForms(){
    const previewUrl=URL.createObjectURL(blob);
    const pv=document.createElement('div');pv.id='saleGeneratedModal';pv.innerHTML='<div class="sale-generated-card"><div class="toolbar"><div><h3>Form 29 &amp; 30 Ready</h3><p class="muted">Saved securely to vehicle archives.</p></div><button class="ghost" id="saleGeneratedClose">✕</button></div><iframe src="'+previewUrl+'" title="Form 29 and Form 30 preview"></iframe><div class="sale-generated-actions"><button class="ghost" onclick="window.open(\''+previewUrl+'\',\'_blank\')">Open PDF</button><button class="primary" onclick="window.print()">Print</button></div></div>';
    document.body.appendChild(pv);$('saleGeneratedClose').onclick=()=>{pv.remove();URL.revokeObjectURL(previewUrl)};mClose('saleFormsModal');await loadData();toast('Form 29 & 30 generated and saved to Archives for '+car.registration_no+'!');
- }catch(e){toast('Failed to generate Form 29 & 30. '+(e?.message||e),'error')}finally{if(document.body.contains(btn)){btn.disabled=false;btn.textContent='GENERATE FORM 29 & 30'}}
+ }catch(e){let w=document.getElementById('salePdfPreview');if(w)w.remove();toast('Failed to generate Form 29 & 30. '+(e?.message||e),'error')}finally{if(document.body.contains(btn)){btn.disabled=false;btn.textContent='GENERATE FORM 29 & 30'}}
 }
 function mClose(id){let x=document.getElementById(id);if(x)x.remove()}
 function buildSaleFormsHtml(d){
