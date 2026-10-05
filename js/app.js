@@ -128,7 +128,7 @@ function showCarForm(){
  '<div class="field"><label>Registration Number *</label><input id="cfReg"></div>'+
  '<div class="field"><label>Make / Model *</label><input id="cfModel" placeholder="Hyundai Grand i10"></div>'+
  '<div class="field"><label>Model Year *</label><input id="cfYear" type="number" placeholder="2018"></div>'+
- '<div class="field"><label>Fuel Type *</label><select id="cfFuel"><option value="">Select</option><option>Petrol</option><option>Diesel</option></select></div>'+
+ '<div class="field"><label>Fuel Type *</label><select id="cfFuel"><option value="">Select</option><option>Petrol</option><option>Diesel</option><option>CNG</option><option>Hybrid</option><option>Electric</option></select></div>'+
  '<div class="field"><label>VIN / Chassis No. (Optional)</label><input id="cfVin"></div>'+
  '<div class="field"><label>Engine No. (Optional)</label><input id="cfEngine"></div>'+
  '<div class="field full"><label>Insurance Type * <span class="muted">(minimum 2)</span></label><select id="cfInsType" multiple size="4">'+insuranceTypes.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><small class="muted">Select at least 2 options.</small></div>'+
@@ -250,8 +250,8 @@ function history(){if(!car)return;let current=$('year').value||'all';let ys=[...
 $('year').onchange=history;
 function fyLabel(date){let d=new Date(date);let y=d.getFullYear();let start=y-(d.getMonth()<3?1:0);return start+'-'+String(start+1).slice(-2)}
 function docTypeLabel(d){return d.document_type==='other'?(d.document_name||'Other'):d.document_type==='rc'?'Registration Certificate':d.document_type==='puc'?'PUC':'Insurance'}
-function docExpired(d){return (d.document_type==='insurance'||d.document_type==='puc')&&d.document_expiry&&new Date(d.document_expiry+'T23:59:59')<new Date()}
-function docExpiringSoon(d){return (d.document_type==='insurance'||d.document_type==='puc')&&d.document_expiry&&!docExpired(d)&&((new Date(d.document_expiry+'T23:59:59')-new Date())/86400000)<=15}
+function docExpired(d){return (d.document_type==='insurance'||d.document_type==='puc'||d.document_type==='rc')&&d.document_expiry&&new Date(d.document_expiry+'T23:59:59')<new Date()}
+function docExpiringSoon(d){return (d.document_type==='insurance'||d.document_type==='puc'||d.document_type==='rc')&&d.document_expiry&&!docExpired(d)&&((new Date(d.document_expiry+'T23:59:59')-new Date())/86400000)<=15}
 function docStatus(d){if(d.archived_at)return ['Archived','archived'];if(docExpired(d))return ['Expired','expired'];if(docExpiringSoon(d))return ['Expiring Soon','soon'];return ['Active','active']}
 async function archiveExpiredDocuments(){if(!car||!docs.length)return;for(const d of docs){if(!docExpired(d)||d.archived_at)continue;let folder=docTypeLabel(d)+'-'+fyLabel(d.document_expiry);let safe=(d.file_name||'document').replace(/[^a-zA-Z0-9._-]/g,'_');let newPath=user.id+'/'+car.id+'/archives/'+folder+'/'+crypto.randomUUID()+'-'+safe;let mv=await db.storage.from('car-documents').move(d.storage_path,newPath);if(mv.error)continue;await db.from('documents').update({storage_path:newPath,archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',d.id).eq('car_id',car.id)}let r=await db.from('documents').select('*').eq('car_id',car.id).order('created_at',{ascending:false});if(!r.error)docs=r.data||[]}
 function renderDocFlipCard(d){
@@ -262,25 +262,52 @@ function renderDocFlipCard(d){
 function renderDocRow(d){let [status,cls]=docStatus(d);let title=docTypeLabel(d);return '<div class="doc-row '+cls+'"><div class="doc-icon">'+(d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄')+'</div><div class="doc-main"><b>'+esc(title)+'</b><span>'+esc(d.file_name)+'</span><small>Uploaded: '+new Date(d.created_at).toLocaleDateString()+'</small>'+(d.document_expiry?'<span class="doc-expiry">'+(status==='Expired'?'Expired on':'Expiry')+' '+esc(d.document_expiry)+'</span>':'')+'<span class="doc-badge '+cls+'">'+status+'</span>'+(d.archived_at?'<em>Archive: '+esc(d.archive_name||'Year Wise')+'</em>':'')+'</div><div class="doc-actions"><button class="ghost" onclick="openDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">View</button>'+(!d.archived_at?'<button class="ghost" onclick="downloadDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button>':'')+(!d.archived_at?'<button class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\')">Delete</button>':'')+'</div></div>'}
 async function docsView(){if(!car)return;await archiveExpiredDocuments();let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};active.forEach(d=>(groups[d.document_type]||groups.other).push(d));let html='<div class="doc-grid">';[['rc','Registration Certificate','📘'],['puc','PUC','🌿'],['insurance','Insurance','🛡️'],['other','Other Documents','📄']].forEach(([key,label,icon])=>{html+='<div class="doc-col"><div class="doc-col-head"><div><span class="doc-col-icon">'+icon+'</span><b>'+label+'</b></div><span>'+groups[key].length+'</span></div>'+(groups[key].length?'<div class="doc-flip-grid">'+groups[key].map(renderDocFlipCard).join('')+'</div>':'<div class="doc-empty">No '+label+' document</div>')+'</div>'});html+='</div>';if(!deletePasswordChanged())html+='<div class="doc-security-notice">🔒 Please change default password to unlock delete actions.</div>';if(arch.length){let by={};arch.forEach(d=>{let k=d.archive_name||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});html+='<div class="doc-archive"><div class="doc-archive-head">📁 Archived Documents</div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>'}$('docList').innerHTML=html;if(active.some(d=>docExpired(d)))showDocumentExpiryPopup()}
 function showDocumentExpiryPopup(){if(document.getElementById('docExpiryPopup'))return;let expired=docs.filter(d=>docExpired(d)&&!d.archived_at);let names=expired.map(d=>docTypeLabel(d)+' for Vehicle '+(car?.registration_no||'')).join(' and ');let w=document.createElement('div');w.id='docExpiryPopup';w.innerHTML='<div class="doc-popup"><div class="doc-popup-icon">⚠️</div><h3>Document Expired</h3><p>Your '+esc(names)+' expired. Please upload the new document to stay compliant.</p><button class="primary" onclick="document.getElementById(\'docExpiryPopup\').remove();openDocUploader()">＋ Upload New Document</button><button class="ghost" onclick="document.getElementById(\'docExpiryPopup\').remove()">Later</button></div>';document.body.appendChild(w)}
+function rcValidityYears(fuel){
+ const f=String(fuel||'').toLowerCase();
+ return f==='diesel'?10:15;
+}
+function calculateRcExpiry(issueDate,fuel){
+ if(!issueDate)return null;
+ const d=new Date(issueDate+'T00:00:00');
+ if(Number.isNaN(d.getTime()))return null;
+ const years=rcValidityYears(fuel);
+ d.setFullYear(d.getFullYear()+years);
+ d.setDate(d.getDate()-1);
+ return d.toISOString().slice(0,10);
+}
+function formatDateNice(x){
+ if(!x)return '';
+ const d=new Date(x+'T00:00:00');
+ return Number.isNaN(d.getTime())?x:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
 function openDocUploader(){
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
- m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3>Upload Vehicle Document</h3><p class="muted">New Insurance/PUC will replace the active document and keep the old file in archive.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date</label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png"></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
+ m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3>Upload Vehicle Document</h3><p class="muted">Insurance/PUC expiry is entered manually. RC expiry is calculated automatically from Issue Date + vehicle fuel type.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png"></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
  document.body.appendChild(m);
- let toggle=()=>{let t=$('docType').value;$('docNameWrap').style.display=t==='other'?'block':'none';$('docExpiryWrap').style.display=(t==='insurance'||t==='puc')?'block':'none'};
- $('docType').onchange=toggle;toggle();
+ const updateFields=()=>{
+   let t=$('docType').value,rc=t==='rc',expiry=t==='insurance'||t==='puc';
+   $('docNameWrap').style.display=t==='other'?'block':'none';
+   $('docExpiryWrap').style.display=expiry?'block':'none';
+   $('docIssueReq').textContent=(rc||t==='insurance'||t==='puc')?'*':'';
+   $('rcValidityInfo').style.display=rc?'block':'none';
+   if(rc){$('rcValidityYears').textContent=rcValidityYears(car?.fuel);let x=calculateRcExpiry($('docIssue').value,car?.fuel);$('rcCalculatedExpiry').textContent=x?formatDateNice(x):'—'}
+ };
+ $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();
  $('docUploadClose').onclick=()=>m.remove();
  m.onclick=e=>{if(e.target===m&&$('docUploadBtn')&&!$('docUploadBtn').disabled)m.remove()};
  $('docUploadBtn').onclick=async()=>{
-   let btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');
-   if(btn.disabled)return;
+   let btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
    btn.disabled=true;btn.classList.add('is-uploading');label.innerHTML='<span class="inline-spinner"></span> UPLOADING...';
-   let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null,e=(t==='insurance'||t==='puc')?$('docExpiry').value:'',f=$('docFile').files[0];
-   if(!f||!car){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Document upload failed: select a document file.','error')}
-   if(t==='other'&&!n){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Document upload failed: enter document name.','error')}
-   if((t==='insurance'||t==='puc')&&!e){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Document upload failed: expiry date is required.','error')}
+   let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null;
+   let e=(t==='rc')?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');
+   let f=$('docFile').files[0];
+   if(!f||!car){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload document. Select a file.','error')}
+   if(t==='other'&&!n){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload Other Document. Enter document name.','error')}
+   if((t==='rc'||t==='insurance'||t==='puc')&&!issue){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':'PUC Certificate')+'. Issue Date is required.','error')}
+   if((t==='insurance'||t==='puc')&&!e){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload '+(t==='insurance'?'Insurance Document':'PUC Certificate')+'. Expiry date is required.','error')}
    try{
-     if(t==='insurance'||t==='puc'){
+     if(t==='rc'||t==='insurance'||t==='puc'){
        let old=docs.find(d=>d.document_type===t&&!d.archived_at);
        if(old){
          let folder=docTypeLabel(old)+'-'+fyLabel(old.document_expiry||old.created_at),safe=(old.file_name||'document').replace(/[^a-zA-Z0-9._-]/g,'_'),np=user.id+'/'+car.id+'/archives/'+folder+'/'+crypto.randomUUID()+'-'+safe;
@@ -291,15 +318,15 @@ function openDocUploader(){
        }
      }
      let path=user.id+'/'+car.id+'/active/'+t+'/'+crypto.randomUUID()+'-'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-     let u=await db.storage.from('car-documents').upload(path,f);
-     if(u.error)throw new Error(u.error.message);
+     let u=await db.storage.from('car-documents').upload(path,f);if(u.error)throw new Error(u.error.message);
      let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:path,mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:true});
      if(ins.error){await db.storage.from('car-documents').remove([path]);throw new Error(ins.error.message)}
      m.remove();
-     toast(t==='insurance'?'Insurance Document uploaded successfully!':t==='puc'?'PUC Certificate uploaded successfully!':t==='rc'?'Registration Certificate uploaded successfully!':'Document uploaded successfully!');
+     let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
+     toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):name+' uploaded successfully!');
      try{await loadData()}catch(refreshErr){toast('Document uploaded, but list refresh failed: '+(refreshErr?.message||'Please refresh the page.'),'error')}
    }catch(err){
-     toast('Failed to upload '+(t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':t==='rc'?'Registration Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
+     toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
    }finally{
      if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}
    }
