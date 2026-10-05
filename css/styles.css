@@ -470,3 +470,22 @@ button,input,select,textarea{min-width:0;max-width:100%}
 #editServiceRecordModal .edit-modal-card{width:min(900px,calc(100vw - 28px));max-height:92vh;overflow:auto;background:#fff;border-radius:22px;padding:22px;box-shadow:0 30px 90px rgba(15,23,42,.28)}
 @media(max-width:760px){.service-item-detail.show{grid-template-columns:1fr 1fr}.table-scroll .table{min-width:700px}}
 @media(max-width:480px){.service-item-detail.show{grid-template-columns:1fr}}
+
+
+/* ===== STEP 5 profile / compliance history / sold lifecycle ===== */
+.step5-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;margin-bottom:12px;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:rgba(255,255,255,.72)}
+.step5-toolbar>div{display:flex;flex-direction:column;gap:3px}
+.step5-modal-card{width:min(980px,calc(100vw - 28px));max-height:92vh;overflow:auto;background:#fff;border-radius:22px;padding:22px;box-shadow:0 30px 90px rgba(15,23,42,.28)}
+#ownerProfileModal,#vehicleHistoryModal{position:fixed;inset:0;z-index:10020;background:rgba(15,23,42,.55);backdrop-filter:blur(8px);display:grid;place-items:center;padding:14px}
+.history-modal{width:min(1100px,calc(100vw - 24px))}
+.history-section{margin-top:16px;padding:14px;border:1px solid #e5e7eb;border-radius:16px;background:#f8fafc}
+.history-section h4{margin:0 0 10px}
+.history-section .table{min-width:700px}
+.sold-badge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:10px;font-weight:900;letter-spacing:.5px;vertical-align:middle}
+.vehicle-sold-card{border-color:#fecaca!important;background:linear-gradient(180deg,#fff,#fff7f7)}
+@media(max-width:760px){
+ .step5-toolbar{align-items:stretch;flex-direction:column}
+ .step5-toolbar button{width:100%}
+ .step5-modal-card{width:100%;max-height:94dvh;padding:14px;border-radius:18px}
+ .history-section{padding:10px}
+}
