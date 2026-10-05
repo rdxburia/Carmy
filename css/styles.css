@@ -297,3 +297,18 @@ button,input,select,textarea{min-width:0;max-width:100%}
  .mobile-nav{left:5px;right:5px}
  .mobile-nav button{font-size:9px}
 }
+
+/* Final iPhone viewport layering */
+#auth{position:relative;z-index:100000;min-height:100dvh}
+#app{position:relative;z-index:1}
+#mobileNav.auth-hidden{display:none!important}
+@media(max-width:760px){
+ body{overflow-x:hidden}
+ #auth{width:100%;min-height:100dvh;padding:max(18px,env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom))}
+ .loginbox{width:min(100%,430px);padding:25px 20px;border-radius:25px}
+ .loginbox h1{font-size:29px;line-height:1.12}
+ .loginbox .muted{line-height:1.45}
+ .main{padding-bottom:calc(125px + env(safe-area-inset-bottom))}
+ .mobile-nav{bottom:calc(7px + env(safe-area-inset-bottom));}
+ #dashboardFab{bottom:calc(88px + env(safe-area-inset-bottom))}
+}
