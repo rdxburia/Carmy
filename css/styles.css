@@ -82,3 +82,5 @@
 @keyframes avatarFloat{50%{transform:translateY(-6px)}}
 @media(max-width:900px){.garage-hero{grid-template-columns:1fr 1fr}.digital-cluster{justify-self:start}.dashboard-stats{grid-template-columns:1fr 1fr}.dashboard-analytics{grid-template-columns:1fr}.dashboard-doc-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.garage-hero{grid-template-columns:1fr;min-height:0;padding:22px}.garage-hero-info{text-align:center}.garage-hero-info small{margin-top:7px}.garage-avatar{order:2}.digital-cluster{order:3;justify-self:stretch;text-align:center}.dashboard-stats,.dashboard-doc-grid,.dashboard-bottom-grid,.doc-flip-grid{grid-template-columns:1fr}.timeline-event{grid-template-columns:24px 75px 1fr auto}.timeline-chevron{display:none}.timeline-detail{grid-column:2/5}.glass-stat,.glass-panel{padding:16px}#dashboardFab{right:16px;bottom:78px}.fab-menu{width:195px}.main{padding-bottom:110px}}
+
+.rc-auto-box{padding:11px 13px;border:1px solid rgba(37,99,235,.18);border-radius:12px;background:rgba(37,99,235,.06);color:#475569;font-size:12px}.rc-auto-box b{color:#1d4ed8}
