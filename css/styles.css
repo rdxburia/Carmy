@@ -202,3 +202,98 @@ button,input,select,textarea{max-width:100%}
   .mobile-nav{left:5px;right:5px}
   .mobile-nav button{font-size:9px}
 }
+
+/* ===== iPhone / Mobile UX hardening ===== */
+html,body{max-width:100%;overflow-x:hidden}
+body{min-width:0;-webkit-text-size-adjust:100%;padding-bottom:0}
+img,svg,video,iframe{max-width:100%}
+button,input,select,textarea{min-width:0;max-width:100%}
+@media(max-width:760px){
+ body{padding-bottom:calc(86px + env(safe-area-inset-bottom));overflow-x:hidden}
+ .top{height:58px;padding:0 13px;position:sticky;top:0}
+ .top .brand{font-size:18px}
+ .top>div:last-child{display:flex;align-items:center;gap:6px}
+ .top #logout{padding:7px 9px;font-size:11px}
+ .layout{min-height:calc(100vh - 58px);width:100%;display:block}
+ .main{width:100%;max-width:100%;padding:12px 11px 30px;overflow:hidden}
+ .toolbar,.hero{width:100%;align-items:stretch;gap:10px}
+ .toolbar>div,.hero>div{min-width:0}
+ .toolbar h2,.hero h1{font-size:21px;line-height:1.15}
+ .toolbar .primary,.toolbar .ghost,.hero .primary{width:auto;white-space:nowrap;padding:9px 11px;font-size:11px}
+ .hero{padding-bottom:4px}
+ .form{width:100%;grid-template-columns:1fr!important;gap:10px}
+ .field.full{grid-column:auto}
+ .field input,.field select,.field textarea{font-size:16px;padding:11px;min-height:44px}
+ .card{width:100%;padding:13px;margin-bottom:11px;overflow:hidden}
+ .table-wrap,.table,.report-table{max-width:100%}
+ .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+ .table{min-width:650px}
+ .itemgrid{grid-template-columns:1fr!important}
+ .choice-grid{grid-template-columns:1fr!important}
+ .choice-card{min-height:45px;padding:11px}
+ .doc-toolbar-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+ .doc-toolbar-actions .primary{grid-column:1/-1;width:100%}
+ .doc-toolbar-actions button{width:100%;font-size:11px;padding:9px}
+ .doc-grid,.doc-flip-grid{grid-template-columns:1fr!important}
+ .dashboard-stats{grid-template-columns:1fr!important}
+ .dashboard-analytics{grid-template-columns:1fr!important}
+ .dashboard-doc-grid{grid-template-columns:1fr!important}
+ .dashboard-bottom-grid{grid-template-columns:1fr!important}
+ .garage-hero{width:100%;grid-template-columns:1fr!important;padding:17px 14px;gap:12px;border-radius:20px}
+ .garage-hero-info h2{font-size:30px;overflow-wrap:anywhere}
+ .garage-hero-info p{font-size:12px;overflow-wrap:anywhere}
+ .garage-avatar .avatar-car{font-size:70px}
+ .digital-cluster{width:100%;justify-self:stretch;padding:12px}
+ .digital-cluster strong{font-size:28px}
+ .glass-stat,.glass-panel{padding:14px;border-radius:17px}
+ .panel-heading{align-items:flex-start}
+ .panel-heading h3{font-size:16px}
+ .panel-heading .ghost{padding:7px 9px;font-size:10px}
+ .timeline-event{grid-template-columns:22px 68px minmax(0,1fr) auto!important;gap:6px;padding:10px 2px}
+ .timeline-main{min-width:0}
+ .timeline-main b,.timeline-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .timeline-cost{font-size:10px}
+ .timeline-detail{grid-column:2/-1!important;font-size:10px;overflow-wrap:anywhere}
+ .spend-bars{gap:13px}
+ .spend-bars span{font-size:10px}
+ .flip-card{min-height:145px}
+ .flip-inner{min-height:145px}
+ .flip-front,.flip-back{padding:13px}
+ #dashboardFab{right:14px;bottom:calc(82px + env(safe-area-inset-bottom));z-index:5000}
+ .fab-main{width:54px;height:54px}
+ .fab-menu{right:0;bottom:64px;width:min(210px,calc(100vw - 28px))}
+ .mobile-nav{
+   left:8px;right:8px;bottom:calc(7px + env(safe-area-inset-bottom));
+   width:auto;height:68px;min-height:68px;
+   grid-template-columns:repeat(5,minmax(0,1fr));
+   padding:5px;gap:3px;border-radius:18px;
+   z-index:10000
+ }
+ .mobile-car-tab{display:none}
+ .mobile-nav button{min-width:0;width:100%;height:56px;padding:4px 1px;font-size:10px;line-height:1.15;overflow:hidden}
+ .mobile-nav button br{display:block}
+ #toast{left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));bottom:auto;width:auto;max-width:none;z-index:2147483646}
+ #operationOverlay,#appLoadingOverlay,#documentPreviewModal{z-index:2147483645}
+ .document-preview-card{width:100%;height:calc(100vh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));max-height:none}
+ .document-preview-head{padding:11px 12px}
+ .document-preview-body{padding:7px}
+ .document-preview-frame{min-height:0;height:100%}
+ .document-preview-foot{padding:9px 12px}
+ .edit-modal-card{width:calc(100vw - 16px);max-width:none;max-height:calc(100vh - 24px);padding:15px;border-radius:18px;overflow-y:auto}
+ .report-sheet{width:100%;padding:14px;overflow:hidden}
+ .report-grid{grid-template-columns:1fr!important}
+ .report-head h1{font-size:23px}
+ .report-reg{font-size:17px;max-width:100%;overflow-wrap:anywhere}
+}
+@media(max-width:390px){
+ .main{padding-left:9px;padding-right:9px}
+ .top{padding-left:10px;padding-right:10px}
+ .top .brand{font-size:16px}
+ .top #logout{font-size:10px;padding:6px 8px}
+ .toolbar h2,.hero h1{font-size:19px}
+ .garage-hero-info h2{font-size:27px}
+ .digital-cluster strong{font-size:24px}
+ .health-badge{font-size:9px;padding:7px 9px}
+ .mobile-nav{left:5px;right:5px}
+ .mobile-nav button{font-size:9px}
+}
