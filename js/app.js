@@ -61,30 +61,35 @@ function policeLogoutAnimation(type){
 async function forceLogoutWithJoke(msg){localStorage.setItem('carcare_logout_joke',msg);await db.auth.signOut()}
 function showCarForm(){
  $('carForm').classList.remove('hidden');
- $('carForm').innerHTML='<div class="toolbar"><h3>Add Car</h3><button class="ghost" onclick="hideCarForm()">Cancel</button></div><div class="form">'+
+ $('carForm').innerHTML='<div class="toolbar"><div><h3>Add Car</h3><p class="muted">Save complete vehicle, insurance and PUC details.</p></div><button class="ghost" onclick="hideCarForm()">Cancel</button></div><div class="form">'+
  '<div class="field"><label>Registration Number *</label><input id="cfReg"></div>'+
  '<div class="field"><label>Make / Model *</label><input id="cfModel" placeholder="Hyundai Grand i10"></div>'+
  '<div class="field"><label>Model Year *</label><input id="cfYear" type="number" placeholder="2018"></div>'+
  '<div class="field"><label>Fuel Type *</label><select id="cfFuel"><option value="">Select</option><option>Petrol</option><option>Diesel</option></select></div>'+
  '<div class="field"><label>VIN / Chassis No. (Optional)</label><input id="cfVin"></div>'+
  '<div class="field"><label>Engine No. (Optional)</label><input id="cfEngine"></div>'+
+ '<div class="field full"><label>Insurance Type * <span class="muted">(minimum 2)</span></label><select id="cfInsType" multiple size="4">'+insuranceTypes.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><small class="muted">Select at least 2 options.</small></div>'+
+ '<div class="field full"><label>Insurance Add-ons (Optional)</label><select id="cfInsAddons" multiple size="4">'+insuranceAddons.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select></div>'+
  '<div class="field"><label>Insurance Company *</label><select id="cfIns">'+insuranceCompanies.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select></div>'+
+ '<div class="field"><label>Insurance Policy Number *</label><input id="cfInsNo" placeholder="Policy number"></div>'+
  '<div class="field"><label>Insurance Expiry *</label><input id="cfInsExp" type="date"></div>'+
  '<div class="field"><label>PUC *</label><select id="cfPuc"><option value="">Select</option><option value="yes">Yes</option><option value="no">No</option></select></div>'+
+ '<div class="field" id="cfPucNoWrap" style="display:none"><label>PUC Number *</label><input id="cfPucNo" placeholder="PUC certificate number"></div>'+
  '<div class="field" id="cfPucStateWrap" style="display:none"><label>PUC State *</label><select id="cfPucState"><option value="">Select State</option>'+pucStates.map(x=>'<option>'+x+'</option>').join('')+'</select></div>'+
+ '<div class="field" id="cfPucValidityWrap" style="display:none"><label>PUC Validity *</label><select id="cfPucValidity"><option value="">Select</option><option value="6">6 Months</option><option value="12">12 Months</option></select></div>'+
  '<div class="field" id="cfPucExpWrap" style="display:none"><label>PUC Expiry *</label><input id="cfPucExp" type="date"></div>'+
  '<div class="field"><label>Current KM</label><input id="cfKm" type="number" value="0"></div>'+
  '<div class="full"><button class="primary" onclick="saveCarForm()">SAVE CAR</button></div></div>';
- $('cfIns').onchange=()=>{if($('cfIns').value==='Not Available')forceLogoutWithJoke('Insurance available nahi hai. '+randomJoke())};
- $('cfPuc').onchange=()=>{let yes=$('cfPuc').value==='yes';$('cfPucStateWrap').style.display=yes?'block':'none';$('cfPucExpWrap').style.display=yes?'block':'none';if($('cfPuc').value==='no')forceLogoutWithJoke('PUC nahi hai. '+randomJoke())};
+ $('cfPuc').onchange=()=>{let yes=$('cfPuc').value==='yes';['cfPucNoWrap','cfPucStateWrap','cfPucValidityWrap','cfPucExpWrap'].forEach(id=>$(id).style.display=yes?'block':'none')};
 }
 function hideCarForm(){$('carForm').classList.add('hidden');$('carForm').innerHTML=''}
 $('newCar').onclick=showCarForm;
 async function saveCarForm(){
- let reg=$('cfReg').value.trim().toUpperCase(),model=$('cfModel').value.trim(),year=$('cfYear').value.trim(),fuel=$('cfFuel').value,ins=$('cfIns').value,insExp=$('cfInsExp').value,puc=$('cfPuc').value,pucState=puc==='yes'?$('cfPucState').value:'',pucExp=puc==='yes'?$('cfPucExp').value:'';
- if(!reg||!model||!year||!fuel||ins==='Not Available'||!insExp||puc!=='yes'||!pucState||!pucExp)return toast('Registration, Make/Model, Year, Fuel, Insurance Company, Insurance Expiry and PUC details are required');
- let r=await db.from('cars').insert({user_id:user.id,registration_no:reg,make_model:model,model_year:+year,fuel,current_km:+($('cfKm').value||0),vin:$('cfVin').value.trim()||null,engine_no:$('cfEngine').value.trim()||null,insurance_company:ins,insurance_expiry:insExp,puc_certificate_no:pucState,puc_state:pucState,puc_expiry:pucExp}).select().single();
- if(r.error)return toast(r.error.message);cars.push(r.data);car=r.data;hideCarForm();toast('Car added');await loadData();nav('dashboard');
+ let reg=$('cfReg').value.trim().toUpperCase(),model=$('cfModel').value.trim(),year=$('cfYear').value.trim(),fuel=$('cfFuel').value,ins=$('cfIns').value,insNo=$('cfInsNo').value.trim(),insExp=$('cfInsExp').value,puc=$('cfPuc').value,pucNo=puc==='yes'?$('cfPucNo').value.trim():'',pucState=puc==='yes'?$('cfPucState').value:'',pucValidity=puc==='yes'?$('cfPucValidity').value:'',pucExp=puc==='yes'?$('cfPucExp').value:'';
+ let insTypes=[...$('cfInsType').selectedOptions].map(o=>o.value),insAddons=[...$('cfInsAddons').selectedOptions].map(o=>o.value);
+ if(!reg||!model||!year||!fuel||ins==='Not Available'||!insNo||!insExp||insTypes.length<2||puc!=='yes'||!pucNo||!pucState||!pucValidity||!pucExp)return toast('Complete all required fields. Insurance Type needs minimum 2 selections.');
+ let r=await db.from('cars').insert({user_id:user.id,registration_no:reg,make_model:model,model_year:+year,fuel,current_km:+($('cfKm').value||0),vin:$('cfVin').value.trim()||null,engine_no:$('cfEngine').value.trim()||null,insurance_company:ins,insurance_number:insNo,insurance_type:insTypes,insurance_addons:insAddons,insurance_expiry:insExp,puc_certificate_no:pucNo,puc_state:pucState,puc_validity_months:+pucValidity,puc_expiry:pucExp}).select().single();
+ if(r.error)return toast(r.error.message);cars.push(r.data);car=r.data;updateCarTab();hideCarForm();toast('Car added');await loadData();nav('dashboard');
 }
 window.openCar=async id=>{car=cars.find(x=>x.id===id);updateCarTab();await loadData();nav('dashboard')};
 function dash(){if(!car){$('dash').innerHTML='<div class="card">Add your first car.</div>';return}$('dashTitle').textContent=car.registration_no;$('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');let cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],i=st(car.insurance_expiry),p=st(car.puc_expiry);$('dash').innerHTML='<div class="grid"><div class="card stat">Current KM<b>'+esc(car.current_km||0)+'</b></div><div class="card stat">Lifetime Cost<b>'+money(cost)+'</b></div><div class="card">Insurance<h3><span class="status '+i[1]+'">'+i[0]+'</span></h3>'+esc(car.insurance_expiry||'Missing')+'</div><div class="card">PUC<h3><span class="status '+p[1]+'">'+p[0]+'</span></h3>'+esc(car.puc_expiry||'Missing')+'</div></div><div class="grid"><div class="card"><b>Vehicle</b><p>'+esc(car.make_model||'—')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><p>VIN: '+esc(car.vin||'—')+'<br>Engine: '+esc(car.engine_no||'—')+'</p></div><div class="card"><b>Last Service</b><h3>'+esc(last?.service_date||'No records')+'</h3><p>'+esc(last?.description||'')+'</p></div><div class="card"><b>Quick actions</b><p><button class="ghost" onclick="window.openCarEdit()">Edit Car / Insurance / PUC</button></p><p><button class="primary" onclick="nav(\'add\')">Add Record</button> <button class="ghost" onclick="nav(\'docs\')">Documents</button></p></div></div>'}
