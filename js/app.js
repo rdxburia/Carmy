@@ -448,17 +448,42 @@ function forgotDeletePassword(){let p=prompt('Forgot PIN? Set a new 4-character 
 function setDeletePassword(){changeDeletePassword(false)}
 async function deleteDoc(id,path,isArchived=false){
  if(!deletePasswordChanged())return toast('Please change default password to unlock delete actions.','error');
+ if(!id||!path||!car)return toast('Document delete request is invalid.','error');
+ let target=docs.find(d=>d.id===id&&d.car_id===car.id);
+ if(!target)return toast('Document was not found for this vehicle. Refresh and try again.','error');
+ if(target.storage_path!==path)return toast('Document path verification failed. Refresh and try again.','error');
  let p=prompt('Enter your 4-character security PIN to confirm permanent deletion.','');
  if(p===null)return;
  let saved=localStorage.getItem('carcare_delete_password');
- if(p.trim()!==saved)return toast('Invalid Security PIN. Document was not deleted.','error');
+ if(!saved||p.trim()!==saved)return toast('Invalid Security PIN. Document was not deleted.','error');
  if(!confirm((isArchived?'Delete this archived document permanently from the server?':'Delete this document permanently?')+' This cannot be undone.'))return;
- let s=await db.storage.from('car-documents').remove([path]);
- if(s.error)return toast('Server file deletion failed: '+s.error.message,'error');
- let r=await db.from('documents').delete().eq('id',id).eq('car_id',car.id);
- if(r.error)return toast('Database record deletion failed after file removal: '+r.error.message,'error');
- toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');
- await loadData();
+ let btns=[...document.querySelectorAll('.doc-delete')].filter(b=>b.offsetParent!==null);
+ btns.forEach(b=>b.disabled=true);
+ try{
+   // Database RLS verifies both document ownership and parent vehicle ownership.
+   // Storage RLS independently verifies user + vehicle folder ownership.
+   let r=await db.from('documents').delete().eq('id',target.id).eq('car_id',car.id).eq('user_id',user.id).select('id').maybeSingle();
+   if(r.error)throw new Error('Database authorization/deletion failed: '+r.error.message);
+   if(!r.data)throw new Error('Document could not be deleted. Server authorization rejected the request.');
+   let s=await db.storage.from('car-documents').remove([target.storage_path]);
+   if(s.error){
+     // Restore the DB row if the file could not be removed, so a failed delete is retryable.
+     let restore=await db.from('documents').insert({
+       id:target.id,user_id:target.user_id,car_id:target.car_id,file_name:target.file_name,
+       storage_path:target.storage_path,mime_type:target.mime_type,file_size:target.file_size,
+       document_type:target.document_type,document_name:target.document_name,document_expiry:target.document_expiry,
+       archive_name:target.archive_name,archived_at:target.archived_at,active:target.active
+     });
+     if(restore.error)throw new Error('Storage deletion failed and the database restore also failed. Do not retry repeatedly; refresh and verify the document: '+s.error.message);
+     throw new Error('Server file deletion failed; document was restored safely. '+s.error.message);
+   }
+   toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');
+   await loadData();
+ }catch(err){
+   toast(err?.message||'Document deletion failed.','error');
+ }finally{
+   btns.forEach(b=>b.disabled=false);
+ }
 }
 async function pickInsuranceCompany(current=''){return new Promise(resolve=>{let old=document.getElementById('insurancePicker');if(old)old.remove();let wrap=document.createElement('div');wrap.id='insurancePicker';wrap.style='position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(5px);display:grid;place-items:center;z-index:100';wrap.innerHTML='<div style="background:#fff;padding:22px;border-radius:18px;width:min(420px,calc(100% - 30px));box-shadow:0 25px 70px rgba(15,23,42,.25)"><h3 style="margin:0 0 12px">Select Insurance Company *</h3><select id="insurancePickerSelect" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:10px">'+insuranceCompanies.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="ghost" id="insurancePickerCancel">Cancel</button><button class="primary" id="insurancePickerOk">Select</button></div></div>';document.body.appendChild(wrap);let sel=document.getElementById('insurancePickerSelect');sel.value=insuranceCompanies.includes(current)?current:'Not Available';document.getElementById('insurancePickerCancel').onclick=()=>{wrap.remove();resolve(null)};document.getElementById('insurancePickerOk').onclick=()=>{let v=sel.value;wrap.remove();resolve(v)};sel.focus()})}
 async function ensureRequiredCarDetails(){if(!car){toast('Please add a car first');await nav('cars');return false}let missing=[];if(!car.registration_no)missing.push('Registration Number');if(!car.make_model)missing.push('Make / Model');if(!car.model_year)missing.push('Model Year');if(!car.fuel)missing.push('Fuel Type');if(!car.insurance_company||car.insurance_company==='Not Available')missing.push('Insurance Company');if(!car.insurance_expiry)missing.push('Insurance Expiry');if(!car.puc_state||!car.puc_expiry)missing.push('PUC State / PUC Expiry');if(!car.insurance_number)missing.push('Insurance Policy Number');if(!Array.isArray(car.insurance_type)||car.insurance_type.length<2)missing.push('Insurance Type (minimum 2)');if(!car.puc_certificate_no)missing.push('PUC Number');if(!car.puc_validity_months)missing.push('PUC Validity');if(!missing.length)return true;let msg='Required information missing:\n\n• '+missing.join('\n• ')+'\n\nPlease complete the required vehicle details.';if(!confirm(msg))return false;let ok=await window.editCar();if(!ok)return false;return !!car.make_model&&!!car.model_year&&!!car.fuel&&!!car.insurance_company&&car.insurance_company!=='Not Available'&&!!car.insurance_expiry&&!!car.insurance_number&&Array.isArray(car.insurance_type)&&car.insurance_type.length>=2&&!!car.puc_state&&!!car.puc_certificate_no&&!!car.puc_validity_months&&!!car.puc_expiry}
