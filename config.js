@@ -1,0 +1,1 @@
+window.CARCARE_CONFIG={url:'https://hlrmuvzmaegnbgzvvfsn.supabase.co',key:'sb_publishable_UxbDw0SkyCxXVrnEwmGDJQ_ec-mbl6q'};
