@@ -205,8 +205,8 @@ function openDocUploader(){
      let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:path,mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:true});
      if(ins.error){await db.storage.from('car-documents').remove([path]);throw new Error(ins.error.message)}
      m.remove();
-     await loadData();
      toast(t==='insurance'?'Insurance Document uploaded successfully!':t==='puc'?'PUC Certificate uploaded successfully!':t==='rc'?'Registration Certificate uploaded successfully!':'Document uploaded successfully!');
+     try{await loadData()}catch(refreshErr){toast('Document uploaded, but list refresh failed: '+(refreshErr?.message||'Please refresh the page.'),'error')}
    }catch(err){
      toast('Failed to upload '+(t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':t==='rc'?'Registration Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
    }finally{
