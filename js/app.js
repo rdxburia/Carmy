@@ -154,7 +154,92 @@ async function saveCarForm(){
  if(r.error)return toast('Failed to save Vehicle: '+r.error.message,'error');cars.push(r.data);car=r.data;updateCarTab();hideCarForm();toast('Vehicle '+reg+' added successfully!');await loadData();nav('dashboard');
 }
 window.openCar=async id=>{car=cars.find(x=>x.id===id);updateCarTab();await loadData();nav('dashboard')};
-function dash(){if(!car){$('dash').innerHTML='<div class="card">Add your first car.</div>';return}$('dashTitle').textContent=car.registration_no;$('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');let cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],i=st(car.insurance_expiry),p=st(car.puc_expiry);$('dash').innerHTML='<div class="grid"><div class="card stat">Current KM<b>'+esc(car.current_km||0)+'</b></div><div class="card stat">Lifetime Cost<b>'+money(cost)+'</b></div><div class="card">Insurance<h3><span class="status '+i[1]+'">'+i[0]+'</span></h3>'+esc(car.insurance_expiry||'Missing')+'</div><div class="card">PUC<h3><span class="status '+p[1]+'">'+p[0]+'</span></h3>'+esc(car.puc_expiry||'Missing')+'</div></div><div class="grid"><div class="card"><b>Vehicle</b><p>'+esc(car.make_model||'—')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><p>VIN: '+esc(car.vin||'—')+'<br>Engine: '+esc(car.engine_no||'—')+'</p></div><div class="card"><b>Last Service</b><h3>'+esc(last?.service_date||'No records')+'</h3><p>'+esc(last?.description||'')+'</p></div><div class="card"><b>Quick actions</b><p><button class="ghost" onclick="window.openCarEdit()">Edit Car / Insurance / PUC</button></p><p><button class="primary" onclick="nav(\'add\')">Add Record</button> <button class="ghost" onclick="nav(\'docs\')">Documents</button></p></div></div>'}
+function vehicleBodyType(model=''){
+ let m=model.toLowerCase();
+ if(/suv|bolero|scorpio|thar|creta|venue|nexon|xuv|fortuner|harrier|seltos|brezza|sonet|ecosport|duster|jimny/.test(m))return 'SUV';
+ if(/sedan|city|verna|virtus|slavia|ciaz|dzire|aura|aspire|rapid|octavia|superb|camry|altis/.test(m))return 'SEDAN';
+ if(/ev|electric|nexon ev|tiago ev|comet|ioniq|seal|e6/.test(m))return 'EV';
+ return 'HATCHBACK';
+}
+function vehicleAvatar(type,fuel){
+ const icon=type==='SUV'?'🚙':type==='SEDAN'?'🚘':type==='EV'?'⚡':'🚗';
+ return '<div class="garage-avatar '+type.toLowerCase()+'"><div class="avatar-glow"></div><div class="avatar-car">'+icon+'</div><span>'+esc(type)+' • '+esc(fuel||'—')+'</span></div>';
+}
+function dashboardHealth(){
+ const ins=st(car.insurance_expiry),puc=st(car.puc_expiry);
+ const hasRecords=records.length>0;
+ const last=records[0];
+ let serviceDue=false;
+ if(last?.service_date){
+   const days=(Date.now()-new Date(last.service_date+'T23:59:59'))/86400000;
+   serviceDue=days>=150;
+ }
+ if(ins[0]==='EXPIRED'||puc[0]==='EXPIRED'||ins[0]==='MISSING'||puc[0]==='MISSING')return ['ACTION REQUIRED','danger','Insurance / PUC needs attention'];
+ if(serviceDue)return ['SERVICE DUE SOON','warn','Your maintenance history suggests a service check'];
+ if(!hasRecords)return ['ALL SYSTEMS GREEN','ok','Vehicle compliance is currently valid'];
+ return ['ALL SYSTEMS GREEN','ok','Insurance, PUC and service history look healthy'];
+}
+function maintenanceCostPerKm(){
+ const km=Number(car.current_km||0),cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0);
+ return km>0?cost/km:null;
+}
+function yearlySpendData(){
+ const y=new Date().getFullYear(), rows=records.filter(r=>new Date(r.service_date).getFullYear()===y);
+ let regular=0,major=0,other=0;
+ rows.forEach(r=>{
+   const c=Number(r.total_cost||0);
+   if(r.record_type==='Regular Service')regular+=c;
+   else if(['Engine Service','Brake Work','Tyre Work','Accident / Repair','Battery'].includes(r.record_type))major+=c;
+   else other+=c;
+ });
+ return {year:y,regular,major,other,total:regular+major+other};
+}
+function dashTimeline(){
+ if(!records.length)return '<div class="timeline-empty">No service events yet. Your future maintenance timeline will appear here.</div>';
+ return '<div class="maintenance-timeline">'+records.slice(0,12).map((r,i)=>{
+   const type=r.record_type||'Other';
+   const cls=type==='Regular Service'?'regular':(['Tyre Work','Brake Work'].includes(type)?'brake':type==='Accident / Repair'?'accident':'other');
+   const items=(r.record_items||[]).map(x=>x.item_name).join(', ');
+   const cost=money(r.total_cost);
+   return '<button class="timeline-event '+cls+'" onclick="toggleTimelineEvent(\''+r.id+'\')"><span class="timeline-node"></span><span class="timeline-date">'+esc(r.service_date)+'</span><span class="timeline-main"><b>'+esc(type)+'</b><small>'+esc(items||r.description||'Maintenance record')+'</small></span><span class="timeline-cost">'+cost+'</span><span class="timeline-chevron">⌄</span><span class="timeline-detail" id="timeline-'+r.id+'"><b>Workshop:</b> '+esc(r.workshop||'Not recorded')+'<br><b>KM:</b> '+esc(r.odometer_km||0)+'<br><b>Parts:</b> '+money(r.parts_cost)+' • <b>Labour:</b> '+money(r.labour_cost)+' • <b>Other:</b> '+money(r.other_cost)+'<br><b>Invoice:</b> '+esc(r.invoice_no||'Not attached')+(r.notes?'<br><b>Notes:</b> '+esc(r.notes):'')+'</span></button>';
+ }).join('')+'</div>';
+}
+function toggleTimelineEvent(id){const e=document.getElementById('timeline-'+id);if(e)e.classList.toggle('open')}
+function dash(){
+ if(!car){$('dash').innerHTML='<div class="card">Add your first car.</div>';return}
+ const body=vehicleBodyType(car.make_model), health=dashboardHealth(), cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry),cpk=maintenanceCostPerKm(),spend=yearlySpendData(),max=Math.max(spend.total,1);
+ $('dashTitle').textContent=car.registration_no;
+ $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
+ const docsActive=docs.filter(d=>!d.archived_at).filter(d=>['rc','insurance','puc'].includes(d.document_type)).slice(0,6);
+ $('dash').innerHTML=
+ '<section class="garage-hero"><div class="garage-hero-info"><div class="eyebrow">YOUR VEHICLE GARAGE</div><h2>'+esc(car.registration_no)+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><div class="health-badge '+health[1]+'"><i></i>'+health[0]+'</div><small>'+esc(health[2])+'</small></div>'+
+ vehicleAvatar(body,car.fuel)+
+ '<div class="digital-cluster"><span>CURRENT ODOMETER</span><strong>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+'</strong><em>KM</em></div></section>'+
+ '<div class="dashboard-grid dashboard-stats"><div class="glass-stat"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>All recorded maintenance</small></div><div class="glass-stat"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry||'Missing')+'</small></div><div class="glass-stat"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry||'Missing')+'</small></div></div>'+
+ '<div class="dashboard-grid dashboard-analytics"><div class="glass-panel"><div class="panel-heading"><div><span class="panel-kicker">MAINTENANCE EFFICIENCY</span><h3>Cost per KM</h3></div><span class="gauge-value">'+(cpk!==null?'₹'+cpk.toFixed(2):'—')+'<small>/ KM</small></span></div><div class="radial-gauge" style="--gauge:'+Math.min((cpk||0)/10*100,100)+'%"><div><b>'+(cpk!==null?Math.round(Math.max(0,100-Math.min(cpk/10*100,100))):'—')+'</b><span>efficiency</span></div></div><p class="muted">Based on recorded maintenance cost and current odometer.</p></div>'+
+ '<div class="glass-panel"><div class="panel-heading"><div><span class="panel-kicker">YEAR '+spend.year+'</span><h3>Spend Breakdown</h3></div><b>'+money(spend.total)+'</b></div><div class="spend-bars"><div><span>Regular Service</span><b>'+money(spend.regular)+'</b><i style="width:'+(spend.regular/max*100)+'%"></i></div><div><span>Major Repairs</span><b>'+money(spend.major)+'</b><i style="width:'+(spend.major/max*100)+'%"></i></div><div><span>Other</span><b>'+money(spend.other)+'</b><i style="width:'+(spend.other/max*100)+'%"></i></div></div><small class="muted">Insurance premium is not included because no premium amount is currently stored.</small></div></div>'+
+ '<div class="glass-panel timeline-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE HISTORY</span><h3>Maintenance Timeline</h3></div><button class="ghost" onclick="nav(\'history\')">View all</button></div>'+dashTimeline()+'</div>'+
+ '<div class="glass-panel glovebox-panel"><div class="panel-heading"><div><span class="panel-kicker">DIGITAL GLOVEBOX</span><h3>Vehicle Documents</h3></div><button class="ghost" onclick="nav(\'docs\')">Open Documents</button></div><div class="dashboard-doc-grid">'+(docsActive.length?docsActive.map(renderDashDocCard).join(''):'<div class="timeline-empty">No active RC / Insurance / PUC documents.</div>')+'</div></div>'+
+ '<div class="dashboard-bottom-grid"><div class="glass-panel"><b>Vehicle Identity</b><p>'+esc(car.make_model||'—')+' • '+esc(car.fuel||'—')+'</p><p>VIN: '+esc(car.vin||'—')+'<br>Engine: '+esc(car.engine_no||'—')+'</p></div><div class="glass-panel"><b>Last Service</b><h3>'+esc(last?.service_date||'No records')+'</h3><p>'+esc(last?.description||'No service record yet')+'</p></div></div>';
+ renderFab();
+}
+function renderDashDocCard(d){
+ const [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':'📘';
+ return '<div class="flip-card" tabindex="0"><div class="flip-inner"><div class="flip-front"><div class="doc-card-icon">'+icon+'</div><b>'+esc(title)+'</b><small>'+esc(d.document_type==='insurance'?(car.insurance_number||'Policy document'):d.document_type==='puc'?(car.puc_state||'PUC certificate'):'Registration Certificate')+'</small><span class="doc-badge '+cls+'">'+status+'</span><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'Vehicle document')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><p>'+esc(d.file_name)+'</p><div><button class="ghost" onclick="event.stopPropagation();openDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Preview</button><button class="ghost" onclick="event.stopPropagation();downloadDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button></div></div></div></div>';
+}
+function renderFab(){
+ let f=document.getElementById('dashboardFab');if(f)f.remove();
+ f=document.createElement('div');f.id='dashboardFab';f.innerHTML='<button class="fab-main" aria-label="Quick actions">＋</button><div class="fab-menu"><button onclick="nav(\'add\')">🛠️ <span>Add Service Log</span></button><button onclick="openDocUploader()">📄 <span>Upload Document</span></button><button onclick="openOdometerPrompt()">⛽ <span>Log Odometer / Fuel</span></button><button onclick="window.print()">🖨️ <span>Generate A4 Report</span></button></div>';document.body.appendChild(f);
+ f.querySelector('.fab-main').onclick=()=>f.classList.toggle('open');
+}
+async function openOdometerPrompt(){
+ let v=prompt('Enter current odometer KM:',String(car?.current_km||''));
+ if(v===null)return;let km=Number(v);if(!Number.isFinite(km)||km<0)return toast('Invalid odometer value.','error');
+ if(km<Number(car.current_km||0))return toast('Odometer cannot be lower than the current vehicle KM.','error');
+ let r=await db.from('cars').update({current_km:km}).eq('id',car.id);
+ if(r.error)return toast('Failed to update odometer: '+r.error.message,'error');
+ car.current_km=km;dash();toast('Odometer updated for '+car.registration_no+'!');
+}
 function carsView(){$('carsList').innerHTML=cars.length?cars.map(c=>'<div class="card"><div class="toolbar"><div><h3>'+esc(c.registration_no)+'</h3><div class="muted">'+esc(c.make_model||'')+' • '+esc(c.model_year||'')+' • '+esc(c.fuel||'')+'</div></div><button class="primary" onclick="openCar(\''+c.id+'\')">Open Car</button></div></div>').join(''):'<div class="card">No cars yet.</div>'}
 function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
 renderServiceItems(); $('type').onchange=renderServiceItems;
