@@ -71,8 +71,9 @@ async function start(u){
    setAppLoadingStatus('Checking vehicle compliance...','Calculating Insurance & PUC status');
    if(car){dash();guard()}else{dash()}
    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+   $('app').classList.remove('hidden');
+   $('app').classList.add('app-ready');
    hideAppLoading();
-   setTimeout(()=>$('app').classList.add('app-ready'),40);
    ensureSecurityPassword();
  }catch(e){
    hideAppLoading();
