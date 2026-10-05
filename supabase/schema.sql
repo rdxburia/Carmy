@@ -1,0 +1,103 @@
+-- CarCare Cloud database
+create extension if not exists pgcrypto;
+
+create table if not exists public.cars (
+ id uuid primary key default gen_random_uuid(),
+ user_id uuid not null references auth.users(id) on delete cascade,
+ registration_no text not null,
+ owner_name text,
+ make_model text not null,
+ model_year int,
+ fuel text,
+ current_km numeric default 0,
+ vin text,
+ engine_no text,
+ insurance_company text,
+ insurance_expiry date,
+ puc_certificate_no text,
+ puc_expiry date,
+ created_at timestamptz not null default now(),
+ unique(user_id, registration_no)
+);
+
+create table if not exists public.records (
+ id uuid primary key default gen_random_uuid(),
+ user_id uuid not null references auth.users(id) on delete cascade,
+ car_id uuid not null references public.cars(id) on delete cascade,
+ service_date date not null,
+ odometer_km numeric not null,
+ record_type text not null,
+ description text,
+ parts_cost numeric default 0,
+ labour_cost numeric default 0,
+ other_cost numeric default 0,
+ total_cost numeric generated always as (coalesce(parts_cost,0)+coalesce(labour_cost,0)+coalesce(other_cost,0)) stored,
+ workshop text,
+ invoice_no text,
+ notes text,
+ created_at timestamptz not null default now()
+);
+
+create table if not exists public.record_items (
+ id uuid primary key default gen_random_uuid(),
+ record_id uuid not null references public.records(id) on delete cascade,
+ item_name text not null,
+ quantity numeric default 1,
+ brand text,
+ part_number text,
+ cost numeric default 0,
+ labour numeric default 0,
+ warranty text,
+ notes text,
+ created_at timestamptz not null default now()
+);
+
+create table if not exists public.documents (
+ id uuid primary key default gen_random_uuid(),
+ user_id uuid not null references auth.users(id) on delete cascade,
+ car_id uuid not null references public.cars(id) on delete cascade,
+ file_name text not null,
+ storage_path text not null unique,
+ mime_type text,
+ file_size bigint,
+ document_type text,
+ created_at timestamptz not null default now()
+);
+
+alter table public.cars enable row level security;
+alter table public.records enable row level security;
+alter table public.record_items enable row level security;
+alter table public.documents enable row level security;
+
+drop policy if exists "cars_owner_all" on public.cars;
+create policy "cars_owner_all" on public.cars for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+
+drop policy if exists "records_owner_all" on public.records;
+create policy "records_owner_all" on public.records for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+
+drop policy if exists "items_owner_via_record" on public.record_items;
+create policy "items_owner_via_record" on public.record_items for all
+using (exists(select 1 from public.records r where r.id=record_id and r.user_id=auth.uid()))
+with check (exists(select 1 from public.records r where r.id=record_id and r.user_id=auth.uid()));
+
+drop policy if exists "documents_owner_all" on public.documents;
+create policy "documents_owner_all" on public.documents for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+
+insert into storage.buckets (id,name,public) values ('car-documents','car-documents',false)
+on conflict (id) do nothing;
+
+drop policy if exists "storage_owner_select" on storage.objects;
+create policy "storage_owner_select" on storage.objects for select to authenticated
+using (bucket_id='car-documents' and (storage.foldername(name))[1]=auth.uid()::text);
+
+drop policy if exists "storage_owner_insert" on storage.objects;
+create policy "storage_owner_insert" on storage.objects for insert to authenticated
+with check (bucket_id='car-documents' and (storage.foldername(name))[1]=auth.uid()::text);
+
+drop policy if exists "storage_owner_update" on storage.objects;
+create policy "storage_owner_update" on storage.objects for update to authenticated
+using (bucket_id='car-documents' and (storage.foldername(name))[1]=auth.uid()::text);
+
+drop policy if exists "storage_owner_delete" on storage.objects;
+create policy "storage_owner_delete" on storage.objects for delete to authenticated
+using (bucket_id='car-documents' and (storage.foldername(name))[1]=auth.uid()::text);
