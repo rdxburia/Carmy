@@ -164,6 +164,7 @@ begin
 end; $$;
 
 revoke all on table public.user_profiles,public.insurance_history,public.puc_history,public.policy_renewals,public.sale_history from anon;
+grant select,insert,update,delete on public.user_profiles,public.insurance_history,public.puc_history,public.policy_renewals,public.sale_history to authenticated;
 revoke execute on function public.complete_vehicle_sale(uuid,text,text,text,int,text,text,date,text,uuid) from public,anon;
 grant execute on function public.complete_vehicle_sale(uuid,text,text,text,int,text,text,date,text,uuid) to authenticated;
 notify pgrst,'reload schema';
