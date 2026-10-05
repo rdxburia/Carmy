@@ -12,7 +12,7 @@
 <section id="report" class="view"><div class="toolbar no-print"><div><h2>A4 Year Report</h2><p class="muted">Use browser Print → Save as PDF.</p></div><button class="primary" onclick="window.print()">PRINT / SAVE PDF</button></div><div id="reportArea"></div></section>
 </main></div></div><div id="toast" class="toast"></div>
 <script>
-const U='https://hlrmuvzmaegnbgzvvfsn.supabase.co',K='sb_publishable_UxbDw0SkyCxXVrnEwmGDJQ_ec-mbl6q',db=supabase.createClient(U,K);
+const U='https://hlrmuvzmaegnbgzvvfsn.supabase.co',K='sb_publishable_UxbDw0SkyCxXVrnEwmGDJQ_ec-mbl6q';\nconst sb=window.supabase;\nif(!sb){document.body.innerHTML='<div style="font-family:system-ui;max-width:650px;margin:80px auto;padding:24px"><h2>CarCare Cloud</h2><p>Supabase client library load nahi hui. Internet/CDN connection check karke page refresh karein.</p><button onclick="location.reload()">Refresh</button></div>';throw new Error('Supabase client library not loaded');}\nconst db=sb.createClient(U,K);
 let user=null,cars=[],car=null,records=[],docs=[],signup=false;
 const items=['Engine Oil','Oil Filter','Air Filter','AC / Cabin Filter','Brake Oil / Brake Fluid','Coolant','Spark Plugs','Brake Pads','Front Brake Disc','Rear Drum Brake / Brake Shoes','Wheel Alignment','Wheel Balancing','Drive Belt','Battery Check','AC Service / AC Gas','Suspension Check','Steering Check','General Inspection','Other'];
 const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),money=x=>'₹'+Number(x||0).toLocaleString('en-IN');
