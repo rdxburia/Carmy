@@ -348,7 +348,7 @@ function formatDateNice(x){
 function openDocUploader(preselectedType=''){
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
- m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Insurance/PUC expiry is entered manually. RC expiry is calculated automatically from Issue Date + vehicle fuel type.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png"></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
+ m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. Insurance/PUC expiry is entered manually; RC expiry is calculated from Issue Date + vehicle fuel type.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
  document.body.appendChild(m);
  if(['rc','puc','insurance','other'].includes(preselectedType))$('docType').value=preselectedType;
  const updateFields=()=>{
@@ -368,32 +368,55 @@ function openDocUploader(preselectedType=''){
    let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null;
    let e=(t==='rc')?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');
    let f=$('docFile').files[0];
-   if(!f||!car){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload document. Select a file.','error')}
-   if(t==='other'&&!n){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload Other Document. Enter document name.','error')}
-   if((t==='rc'||t==='insurance'||t==='puc')&&!issue){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':'PUC Certificate')+'. Issue Date is required.','error')}
-   if((t==='insurance'||t==='puc')&&!e){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload '+(t==='insurance'?'Insurance Document':'PUC Certificate')+'. Expiry date is required.','error')}
+   const MAX_FILE_SIZE=10*1024*1024;
+   const ALLOWED_MIME=new Set(['application/pdf','image/jpeg','image/png']);
+   const ALLOWED_EXT=new Set(['pdf','jpg','jpeg','png']);
+   const fail=(msg)=>{btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';toast(msg,'error')};
+   if(!f||!car)return fail('Failed to upload document. Select a file.');
+   if(f.size<=0)return fail('Failed to upload document. The selected file is empty.');
+   if(f.size>MAX_FILE_SIZE)return fail('File is too large. Maximum allowed size is 10 MB.');
+   let ext=(f.name.split('.').pop()||'').toLowerCase();
+   if(!ALLOWED_MIME.has(f.type)||!ALLOWED_EXT.has(ext))return fail('Unsupported file. Only PDF, JPG, JPEG and PNG files are allowed.');
+   if(t==='other'&&!n)return fail('Failed to upload Other Document. Enter document name.');
+   if((t==='rc'||t==='insurance'||t==='puc')&&!issue)return fail('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':'PUC Certificate')+'. Issue Date is required.');
+   if((t==='insurance'||t==='puc')&&!e)return fail('Failed to upload '+(t==='insurance'?'Insurance Document':'PUC Certificate')+'. Expiry date is required.');
+   let oldDoc=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
+   let oldPatch=t==='insurance'?{insurance_expiry:car.insurance_expiry}:t==='puc'?{puc_expiry:car.puc_expiry}:null;
+   let path=user.id+'/'+car.id+'/active/'+t+'/'+crypto.randomUUID()+'-'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-180);
+   let storageUploaded=false,newDocId=null,archived=false,activated=false,complianceUpdated=false;
    try{
-     let old=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
-     let path=user.id+'/'+car.id+'/active/'+t+'/'+crypto.randomUUID()+'-'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-     let u=await db.storage.from('car-documents').upload(path,f);if(u.error)throw new Error(u.error.message);
-     let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:path,mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:true});
-     if(ins.error){await db.storage.from('car-documents').remove([path]);throw new Error(ins.error.message)}
-     if(old){
-       let folder=docTypeLabel(old)+'-'+fyLabel(old.document_expiry||old.created_at);
-       let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',old.id).eq('car_id',car.id);
-       if(au.error)throw new Error('New document saved, but old document could not be archived: '+au.error.message);
+     let u=await db.storage.from('car-documents').upload(path,f,{contentType:f.type,upsert:false});
+     if(u.error)throw new Error('Secure file upload failed: '+u.error.message);
+     storageUploaded=true;
+     // Insert as inactive first so Step 2's one-active-per-type index remains compatible.
+     let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:path,mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:false}).select('id').single();
+     if(ins.error)throw new Error('Document record save failed: '+ins.error.message);
+     newDocId=ins.data.id;
+     if(oldDoc){
+       let folder=docTypeLabel(oldDoc)+'-'+fyLabel(oldDoc.document_expiry||oldDoc.created_at);
+       let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id).is('archived_at',null);
+       if(au.error)throw new Error('Old document could not be archived: '+au.error.message);
+       archived=true;
      }
+     let activate=await db.from('documents').update({active:true,archived_at:null}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
+     if(activate.error)throw new Error('New document could not be activated: '+activate.error.message);
+     activated=true;
      if(t==='insurance'||t==='puc'){
        let patch=t==='insurance'?{insurance_expiry:e}:{puc_expiry:e};
        let cr=await db.from('cars').update(patch).eq('id',car.id).eq('user_id',user.id);
        if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);
-       Object.assign(car,patch);
+       Object.assign(car,patch);complianceUpdated=true;
      }
      m.remove();
      let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
      toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):name+' uploaded successfully!');
-     try{await loadData()}catch(refreshErr){toast('Document uploaded, but list refresh failed: '+(refreshErr?.message||'Please refresh the page.'),'error')}
+     await loadData();
    }catch(err){
+     // Best-effort rollback keeps a failed replacement from leaving a ghost file/record or wrong compliance date.
+     if(complianceUpdated&&oldPatch)await db.from('cars').update(oldPatch).eq('id',car.id).eq('user_id',user.id);
+     if(newDocId)await db.from('documents').delete().eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
+     if(archived&&oldDoc)await db.from('documents').update({archive_name:null,archived_at:null,active:true}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id);
+     if(storageUploaded)await db.storage.from('car-documents').remove([path]);
      toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
    }finally{
      if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}
