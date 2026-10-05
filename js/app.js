@@ -368,18 +368,22 @@ function openOwnerProfile(){
    ownerProfile=r.data;m.remove();toast('Owner profile saved successfully.');
  };
 }
-function openVehicleHistory(id=car?.id){
+async function openVehicleHistory(id=car?.id){
  const target=cars.find(x=>x.id===id)||car;if(!target)return;
- if(target.id!==car?.id){car=target;updateCarTab();}
- const ih=insuranceHistory,ph=pucHistory,rh=renewalHistory,sh=saleHistory;
+ const [ih,ph,rh,sh]=await Promise.all([
+   db.from('insurance_history').select('*').eq('car_id',target.id).order('created_at',{ascending:false}),
+   db.from('puc_history').select('*').eq('car_id',target.id).order('created_at',{ascending:false}),
+   db.from('policy_renewals').select('*').eq('car_id',target.id).order('renewal_date',{ascending:false}),
+   db.from('sale_history').select('*').eq('car_id',target.id).order('sale_date',{ascending:false})
+ ]);
+ const insuranceRows=ih.error?[]:(ih.data||[]),pucRows=ph.error?[]:(ph.data||[]),renewalRows=rh.error?[]:(rh.data||[]),saleRows=sh.error?[]:(sh.data||[]);
  let old=document.getElementById('vehicleHistoryModal');if(old)old.remove();
- let rows=(arr,cols)=>arr.length?arr.map(x=>'<tr>'+cols(x).map(v=>'<td>'+esc(v??'—')+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+cols({}).length+'">No history recorded yet.</td></tr>';
  let m=document.createElement('div');m.id='vehicleHistoryModal';
  m.innerHTML='<div class="step5-modal-card history-modal"><div class="toolbar"><div><h3>'+esc(target.registration_no)+' • Compliance History</h3><p class="muted">Server-side historical snapshots remain linked to this vehicle.</p></div><button class="ghost" id="vhClose">✕</button></div>'+
- '<div class="history-section"><h4>Insurance History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Company</th><th>Policy</th><th>Expiry</th><th>Event</th></tr></thead><tbody>'+rows(ih,()=>[]).replace('<tr><td colspan="0">No history recorded yet.</td></tr>','')+(ih.length?ih.map(x=>'<tr><td>'+esc(x.created_at?.slice(0,10))+'</td><td>'+esc(x.insurance_company)+'</td><td>'+esc(x.policy_number)+'</td><td>'+esc(x.expiry_date)+'</td><td>'+esc(x.event_type)+'</td></tr>').join(''):'<tr><td colspan="5">No history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
- '<div class="history-section"><h4>PUC History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Certificate</th><th>State</th><th>Expiry</th><th>Event</th></tr></thead><tbody>'+(ph.length?ph.map(x=>'<tr><td>'+esc(x.created_at?.slice(0,10))+'</td><td>'+esc(x.certificate_number)+'</td><td>'+esc(x.state)+'</td><td>'+esc(x.expiry_date)+'</td><td>'+esc(x.event_type)+'</td></tr>').join(''):'<tr><td colspan="5">No history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
- '<div class="history-section"><h4>Policy Renewal History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Type</th><th>Old Expiry</th><th>New Expiry</th><th>Source</th></tr></thead><tbody>'+(rh.length?rh.map(x=>'<tr><td>'+esc(x.renewal_date)+'</td><td>'+esc(x.policy_type?.toUpperCase())+'</td><td>'+esc(x.old_expiry)+'</td><td>'+esc(x.new_expiry)+'</td><td>'+esc(x.source)+'</td></tr>').join(''):'<tr><td colspan="5">No renewal history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
- '<div class="history-section"><h4>Sale History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Sale Date</th><th>Buyer</th><th>RTO</th><th>Financier</th><th>Status</th></tr></thead><tbody>'+(sh.length?sh.map(x=>'<tr><td>'+esc(x.sale_date)+'</td><td>'+esc(x.buyer_name)+'</td><td>'+esc(x.buyer_rto)+'</td><td>'+esc(x.financier)+'</td><td>'+esc(x.status)+'</td></tr>').join(''):'<tr><td colspan="5">No sale history — vehicle is '+(target.vehicle_status==='sold'?'marked SOLD':'active')+'.</td></tr>')+'</tbody></table></div></div></div>';
+ '<div class="history-section"><h4>Insurance History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Company</th><th>Policy</th><th>Expiry</th><th>Event</th></tr></thead><tbody>'+(insuranceRows.length?insuranceRows.map(x=>'<tr><td>'+esc(x.created_at?.slice(0,10))+'</td><td>'+esc(x.insurance_company)+'</td><td>'+esc(x.policy_number)+'</td><td>'+esc(x.expiry_date)+'</td><td>'+esc(x.event_type)+'</td></tr>').join(''):'<tr><td colspan="5">No history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="history-section"><h4>PUC History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Certificate</th><th>State</th><th>Expiry</th><th>Event</th></tr></thead><tbody>'+(pucRows.length?pucRows.map(x=>'<tr><td>'+esc(x.created_at?.slice(0,10))+'</td><td>'+esc(x.certificate_number)+'</td><td>'+esc(x.state)+'</td><td>'+esc(x.expiry_date)+'</td><td>'+esc(x.event_type)+'</td></tr>').join(''):'<tr><td colspan="5">No history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="history-section"><h4>Policy Renewal History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Type</th><th>Old Expiry</th><th>New Expiry</th><th>Source</th></tr></thead><tbody>'+(renewalRows.length?renewalRows.map(x=>'<tr><td>'+esc(x.renewal_date)+'</td><td>'+esc(x.policy_type?.toUpperCase())+'</td><td>'+esc(x.old_expiry)+'</td><td>'+esc(x.new_expiry)+'</td><td>'+esc(x.source)+'</td></tr>').join(''):'<tr><td colspan="5">No renewal history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="history-section"><h4>Sale History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Sale Date</th><th>Buyer</th><th>RTO</th><th>Financier</th><th>Status</th></tr></thead><tbody>'+(saleRows.length?saleRows.map(x=>'<tr><td>'+esc(x.sale_date)+'</td><td>'+esc(x.buyer_name)+'</td><td>'+esc(x.buyer_rto)+'</td><td>'+esc(x.financier)+'</td><td>'+esc(x.status)+'</td></tr>').join(''):'<tr><td colspan="5">No sale history — vehicle is '+(target.vehicle_status==='sold'?'marked SOLD':'active')+'.</td></tr>')+'</tbody></table></div></div></div>';
  document.body.appendChild(m);$('vhClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
 }
 function carsView(){
