@@ -87,7 +87,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSideMenu()});
 
 $('toggleAuth').onclick=()=>{signup=!signup;$('authTitle').textContent=signup?'Create account':'Private Car Manager';$('authBtn').textContent=signup?'Create account':'Login';$('toggleAuth').textContent=signup?'Back to login':'Create account'};
 $('authBtn').onclick=async ev=>{ev.preventDefault();if(!db)return toast('Connecting to secure login...');let e=$('email').value.trim(),p=$('password').value;if(!e||!p)return toast('Enter email and password');let r=signup?await db.auth.signUp({email:e,password:p}):await db.auth.signInWithPassword({email:e,password:p});if(r.error)return toast(r.error.message);if(signup)toast('Account created. Check email if confirmation is enabled.')};
-$('logout').onclick=()=>db.auth.signOut();
+const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.signOut();
 async function boot(){let s=await db.auth.getSession();if(s.data.session)start(s.data.session.user);else showLogin();db.auth.onAuthStateChange((_e,s)=>{if(s)start(s.user);else{startedUserId=null;showLogin()}})}
 function showLogin(){let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}let ps=$('policeLogoutStyle');if(ps)ps.remove();$('auth').classList.remove('hidden');$('app').classList.add('hidden');let fab=document.getElementById('dashboardFab');if(fab)fab.remove();let mn=document.getElementById('mobileNav');if(mn)mn.classList.add('auth-hidden');const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}}
 function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car';updateDrawerContext()}
