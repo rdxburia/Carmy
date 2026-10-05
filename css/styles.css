@@ -312,3 +312,75 @@ button,input,select,textarea{min-width:0;max-width:100%}
  .mobile-nav{bottom:calc(7px + env(safe-area-inset-bottom));}
  #dashboardFab{bottom:calc(88px + env(safe-area-inset-bottom))}
 }
+
+/* ===== FINAL iPHONE BOTTOM NAV REBUILD ===== */
+@media(max-width:760px){
+ html,body{width:100%;max-width:100%;overflow-x:hidden}
+ body{padding-bottom:0!important}
+ .main{padding-bottom:105px!important}
+ .mobile-nav{
+   position:fixed!important;
+   left:12px!important;
+   right:12px!important;
+   bottom:max(8px,env(safe-area-inset-bottom))!important;
+   width:auto!important;
+   height:64px!important;
+   min-height:64px!important;
+   max-height:64px!important;
+   display:grid!important;
+   grid-template-columns:repeat(5,minmax(0,1fr))!important;
+   align-items:stretch!important;
+   gap:3px!important;
+   padding:4px!important;
+   margin:0!important;
+   box-sizing:border-box!important;
+   overflow:hidden!important;
+   border-radius:20px!important;
+   background:rgba(15,23,42,.97)!important;
+   border:1px solid rgba(255,255,255,.12)!important;
+   box-shadow:0 12px 35px rgba(15,23,42,.30),0 0 0 1px rgba(255,255,255,.04)!important;
+   backdrop-filter:blur(20px)!important;
+   -webkit-backdrop-filter:blur(20px)!important;
+ }
+ .mobile-nav .mobile-car-tab{display:none!important}
+ .mobile-nav button{
+   width:100%!important;
+   min-width:0!important;
+   height:54px!important;
+   min-height:54px!important;
+   max-height:54px!important;
+   margin:0!important;
+   padding:5px 2px!important;
+   display:flex!important;
+   flex-direction:column!important;
+   align-items:center!important;
+   justify-content:center!important;
+   gap:1px!important;
+   border:0!important;
+   border-radius:15px!important;
+   background:transparent!important;
+   color:#aeb9cc!important;
+   font-size:10px!important;
+   line-height:1.05!important;
+   font-weight:800!important;
+   white-space:nowrap!important;
+   transform:none!important;
+ }
+ .mobile-nav button br{display:none!important}
+ .mobile-nav button::first-line{font-size:15px}
+ .mobile-nav button.active{
+   background:linear-gradient(135deg,#2563eb,#315ee8)!important;
+   color:#fff!important;
+   box-shadow:0 5px 14px rgba(37,99,235,.32)!important;
+ }
+ #dashboardFab{
+   right:15px!important;
+   bottom:calc(82px + env(safe-area-inset-bottom))!important;
+   z-index:9999!important;
+ }
+}
+@media(max-width:390px){
+ .mobile-nav{left:9px!important;right:9px!important;height:62px!important;min-height:62px!important;max-height:62px!important}
+ .mobile-nav button{height:52px!important;min-height:52px!important;max-height:52px!important;font-size:9px!important}
+ .main{padding-bottom:100px!important}
+}
