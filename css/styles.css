@@ -84,3 +84,21 @@
 @media(max-width:650px){.garage-hero{grid-template-columns:1fr;min-height:0;padding:22px}.garage-hero-info{text-align:center}.garage-hero-info small{margin-top:7px}.garage-avatar{order:2}.digital-cluster{order:3;justify-self:stretch;text-align:center}.dashboard-stats,.dashboard-doc-grid,.dashboard-bottom-grid,.doc-flip-grid{grid-template-columns:1fr}.timeline-event{grid-template-columns:24px 75px 1fr auto}.timeline-chevron{display:none}.timeline-detail{grid-column:2/5}.glass-stat,.glass-panel{padding:16px}#dashboardFab{right:16px;bottom:78px}.fab-menu{width:195px}.main{padding-bottom:110px}}
 
 .rc-auto-box{padding:11px 13px;border:1px solid rgba(37,99,235,.18);border-radius:12px;background:rgba(37,99,235,.06);color:#475569;font-size:12px}.rc-auto-box b{color:#1d4ed8}
+/* Secure document preview */
+#documentPreviewModal{
+ position:fixed;inset:0;z-index:2147483645;display:grid;place-items:center;
+ padding:18px;background:rgba(2,8,23,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
+}
+.document-preview-card{
+ width:min(1000px,96vw);height:min(88vh,850px);display:flex;flex-direction:column;
+ background:rgba(12,20,34,.96);color:#fff;border:1px solid rgba(255,255,255,.12);
+ border-radius:20px;overflow:hidden;box-shadow:0 35px 100px rgba(0,0,0,.5)
+}
+.document-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
+.document-preview-head b{display:block;font-size:14px;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.document-preview-head small{display:block;color:#94a3b8;margin-top:3px;font-size:10px}
+.document-preview-body{flex:1;min-height:0;display:grid;place-items:center;padding:12px;overflow:auto;background:#070d17}
+.document-preview-frame{width:100%;height:100%;min-height:500px;border:0;background:#fff;border-radius:8px}
+.document-preview-image{display:block;max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 15px 45px rgba(0,0,0,.3)}
+.document-preview-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.1)}
+@media(max-width:650px){#documentPreviewModal{padding:8px}.document-preview-card{width:100%;height:92vh;border-radius:14px}.document-preview-frame{min-height:350px}}
