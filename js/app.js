@@ -342,24 +342,36 @@ function openDocUploader(preselectedType=''){
  const updateFields=()=>{
    let t=$('docType').value,rc=t==='rc',expiry=t==='insurance'||t==='puc';
    $('docNameWrap').style.display=t==='other'?'block':'none';
-   $('docExpiryWrap').style.display=expiry?'block':'none';$('renewInsuranceFields').style.display=t==='insurance'?'block':'none';$('renewPucFields').style.display=t==='puc'?'block':'none';if(t==='insurance'){if($('renewInsCompany'))$('renewInsCompany').value=car?.insurance_company||'';if($('renewInsNo'))$('renewInsNo').value=car?.insurance_number||''}if(t==='puc'){if($('renewPucNo'))$('renewPucNo').value=car?.puc_certificate_no||'';if($('renewPucState'))$('renewPucState').value=car?.puc_state||'';if($('renewPucValidity'))$('renewPucValidity').value=car?.puc_validity_months?String(car.puc_validity_months):''}
+   $('docExpiryWrap').style.display=expiry?'block':'none';
+   $('renewInsuranceFields').style.display=t==='insurance'?'block':'none';
+   $('renewPucFields').style.display=t==='puc'?'block':'none';
+   if(t==='insurance'){$('renewInsCompany').value=car?.insurance_company||'';$('renewInsNo').value=car?.insurance_number||''}
+   if(t==='puc'){$('renewPucNo').value=car?.puc_certificate_no||'';$('renewPucState').value=car?.puc_state||'';$('renewPucValidity').value=car?.puc_validity_months?String(car.puc_validity_months):''}
    $('docIssueReq').textContent=(rc||t==='insurance'||t==='puc')?'*':'';
    $('rcValidityInfo').style.display=rc?'block':'none';
    if(rc){$('rcValidityYears').textContent=rcValidityYears(car?.fuel);let x=calculateRcExpiry($('docIssue').value,car?.fuel);$('rcCalculatedExpiry').textContent=x?formatDateNice(x):'—'}
  };
- $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();if(preselectedType){$('docUploadTitle').textContent=preselectedType==='insurance'?'Renew Insurance':preselectedType==='puc'?'Renew PUC':preselectedType==='rc'?'Replace Registration Certificate':'Upload Vehicle Document';}
+ $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();
+ if(preselectedType)$('docUploadTitle').textContent=preselectedType==='insurance'?'Renew Insurance':preselectedType==='puc'?'Renew PUC':preselectedType==='rc'?'Replace Registration Certificate':'Upload Vehicle Document';
  $('docUploadClose').onclick=()=>m.remove();
  m.onclick=e=>{if(e.target===m&&$('docUploadBtn')&&!$('docUploadBtn').disabled)m.remove()};
  $('docUploadBtn').onclick=async()=>{
    let btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
    btn.disabled=true;btn.classList.add('is-uploading');label.innerHTML='<span class="inline-spinner"></span> UPLOADING...';
    let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null;
-   let e=(t==='rc')?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');let renewInsCompany=t==='insurance'?$('renewInsCompany').value.trim():'';let renewInsNo=t==='insurance'?$('renewInsNo').value.trim():'';let renewPucNo=t==='puc'?$('renewPucNo').value.trim():'';let renewPucState=t==='puc'?$('renewPucState').value:'';let renewPucValidity=t==='puc'?$('renewPucValidity').value:'';
+   let e=t==='rc'?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');
+   let renewInsCompany=t==='insurance'?$('renewInsCompany').value.trim():'';
+   let renewInsNo=t==='insurance'?$('renewInsNo').value.trim():'';
+   let renewPucNo=t==='puc'?$('renewPucNo').value.trim():'';
+   let renewPucState=t==='puc'?$('renewPucState').value:'';
+   let renewPucValidity=t==='puc'?$('renewPucValidity').value:'';
    let f=$('docFile').files[0];
-   if(!f||!car){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload document. Select a file.','error')}
-   if(t==='other'&&!n){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload Other Document. Enter document name.','error')}
-   if((t==='rc'||t==='insurance'||t==='puc')&&!issue){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':'PUC Certificate')+'. Issue Date is required.','error')}
-   if(t==='insurance'&&(!e||!renewInsCompany||!renewInsNo)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to renew Insurance. Company, policy number and expiry are required.','error')}if(t==='puc'&&(!e||!renewPucNo||!renewPucState||!renewPucValidity)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return toast('Failed to renew PUC. Number, state, validity and expiry are required.','error')}
+   const reset=()=>{btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'};
+   if(!f||!car){reset();return toast('Failed to upload document. Select a file.','error')}
+   if(t==='other'&&!n){reset();return toast('Failed to upload Other Document. Enter document name.','error')}
+   if((t==='rc'||t==='insurance'||t==='puc')&&!issue){reset();return toast('Issue Date is required.','error')}
+   if(t==='insurance'&&(!e||!renewInsCompany||!renewInsNo)){reset();return toast('Insurance company, policy number and expiry are required.','error')}
+   if(t==='puc'&&(!e||!renewPucNo||!renewPucState||!renewPucValidity)){reset();return toast('PUC number, state, validity and expiry are required.','error')}
    try{
      let old=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
      let path=user.id+'/'+car.id+'/active/'+t+'/'+crypto.randomUUID()+'-'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_');
@@ -374,21 +386,18 @@ function openDocUploader(preselectedType=''){
      if(t==='insurance'||t==='puc'){
        let patch=t==='insurance'?{insurance_expiry:e,insurance_company:renewInsCompany,insurance_number:renewInsNo}:{puc_expiry:e,puc_certificate_no:renewPucNo,puc_state:renewPucState,puc_validity_months:+renewPucValidity};
        let cr=await db.from('cars').update(patch).eq('id',car.id).eq('user_id',user.id);
-       if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);
+       if(cr.error)throw new Error('Document saved, but vehicle compliance data could not be synced: '+cr.error.message);
        Object.assign(car,patch);
      }
      m.remove();
-     let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
-     toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):name+' uploaded successfully!');
-     try{await loadData()}catch(refreshErr){toast('Document uploaded, but list refresh failed: '+(refreshErr?.message||'Please refresh the page.'),'error')}
-   }catch(err){
-     toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
-   }finally{
-     if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}
-   }
+     toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):(t==='insurance'?'Insurance renewed successfully!':'PUC renewed successfully!'));
+     try{await loadData()}catch(refreshErr){toast('Document saved, but list refresh failed: '+(refreshErr?.message||'Please refresh the page.'),'error')}
+   }catch(err){toast('Failed to save document. '+(err?.message||'Please try again.'),'error')}
+   finally{if(document.body.contains(btn))reset()}
  };
 }
 window.openDocUploader=openDocUploader;
+
 async function openDocumentPreview(path,fileName='Document'){
  let existing=document.getElementById('documentPreviewModal');if(existing)existing.remove();
  let r=await db.storage.from('car-documents').createSignedUrl(path,300);
