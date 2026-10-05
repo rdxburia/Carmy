@@ -454,3 +454,19 @@ button,input,select,textarea{min-width:0;max-width:100%}
  }
  #saleGeneratedModal{display:none!important}
 }
+
+/* ===== STEP 4 service record details ===== */
+.service-item-row{border:1px solid #e5e7eb;border-radius:14px;padding:10px;background:#fff;margin-bottom:8px}
+.service-item-row>.item{display:flex;align-items:center;gap:8px;font-weight:750;cursor:pointer}
+.service-item-detail{display:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:9px;padding-top:9px;border-top:1px dashed #dbe3ef}
+.service-item-detail.show{display:grid}
+.service-item-detail input{width:100%;min-width:0;padding:9px 10px;border:1px solid #dbe3ef;border-radius:9px;font:inherit}
+.service-item-detail input:focus{outline:none;border-color:#7aa2ff;box-shadow:0 0 0 3px #dbeafe}
+.is-saving{opacity:.7;cursor:wait}
+.glass-stat .danger{color:#b91c1c}.glass-stat .warn{color:#b45309}.glass-stat .ok{color:#15803d}.glass-stat .neutral{color:#64748b}
+.table-scroll{overflow-x:auto}
+.table-scroll .table{min-width:760px}
+#editServiceRecordModal{position:fixed;inset:0;z-index:9995;background:rgba(15,23,42,.52);backdrop-filter:blur(7px);display:grid;place-items:center;padding:14px;overflow:auto}
+#editServiceRecordModal .edit-modal-card{width:min(900px,calc(100vw - 28px));max-height:92vh;overflow:auto;background:#fff;border-radius:22px;padding:22px;box-shadow:0 30px 90px rgba(15,23,42,.28)}
+@media(max-width:760px){.service-item-detail.show{grid-template-columns:1fr 1fr}.table-scroll .table{min-width:700px}}
+@media(max-width:480px){.service-item-detail.show{grid-template-columns:1fr}}
