@@ -5,6 +5,7 @@ function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
 let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
+let ownerProfile=null,insuranceHistory=[],pucHistory=[],renewalHistory=[],saleHistory=[];
 const serviceItems={
 'Regular Service':['Engine Oil','Oil Filter','Air Filter','AC / Cabin Filter','Brake Oil / Brake Fluid','Coolant','Spark Plugs','Brake Pads','Front Brake Disc','Rear Drum Brake / Brake Shoes','Wheel Alignment','Wheel Balancing','Drive Belt','Battery Check','AC Service / AC Gas','Suspension Check','Steering Check','General Inspection'],
 'Engine Service':['Engine Oil','Oil Filter','Air Filter','Spark Plugs','Drive Belt','Timing Belt / Timing Chain','Clutch Work','Flywheel / Pressure Plate','Engine Mount','Valve / Head Work','Engine Overhaul','Turbocharger Work','Injector / Fuel System','Coolant System','Other Engine Work'],
@@ -73,7 +74,7 @@ function setAppLoadingStatus(title,sub){if($('appLoadingTitle'))$('appLoadingTit
 function hideAppLoading(){let o=document.getElementById('appLoadingOverlay');if(o){o.classList.add('loading-out');setTimeout(()=>o.remove(),380)}}
 function dateOnlyEnd(x){if(!x)return null;let p=String(x).split('-').map(Number);if(p.length!==3||p.some(Number.isNaN))return null;return new Date(p[0],p[1]-1,p[2],23,59,59,999)}
 function st(x){if(!x)return['MISSING','bad'];let d=dateOnlyEnd(x);if(!d)return['MISSING','bad'];let days=(d-Date.now())/86400000;return days<0?['EXPIRED','bad']:days<=30?['EXPIRING SOON','warn']:['VALID','ok']}
-async function nav(v){if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='add')prefillRecordForm();if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')history();if(v==='docs')docsView();if(v==='report')report()}
+async function nav(v){if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='add')prefillRecordForm();if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')history();if(v==='docs')docsView();if(v==='report')report()}
 document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.onclick=()=>nav(x.dataset.view));
 $('toggleAuth').onclick=()=>{signup=!signup;$('authTitle').textContent=signup?'Create account':'Private Car Manager';$('authBtn').textContent=signup?'Create account':'Login';$('toggleAuth').textContent=signup?'Back to login':'Create account'};
 $('authBtn').onclick=async ev=>{ev.preventDefault();if(!db)return toast('Connecting to secure login...');let e=$('email').value.trim(),p=$('password').value;if(!e||!p)return toast('Enter email and password');let r=signup?await db.auth.signUp({email:e,password:p}):await db.auth.signInWithPassword({email:e,password:p});if(r.error)return toast(r.error.message);if(signup)toast('Account created. Check email if confirmation is enabled.')};
@@ -116,14 +117,32 @@ async function loadCars(){
  if(r.error)throw new Error('Vehicle profiles could not be loaded: '+r.error.message);
  cars=r.data||[];
 }
+async function loadStep5Data(){
+ ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
+ if(!user)return;
+ const profile=await db.from('user_profiles').select('*').eq('user_id',user.id).maybeSingle();
+ if(!profile.error)ownerProfile=profile.data||null;
+ if(!car)return;
+ const [ih,ph,rh,sh]=await Promise.all([
+   db.from('insurance_history').select('*').eq('car_id',car.id).order('created_at',{ascending:false}),
+   db.from('puc_history').select('*').eq('car_id',car.id).order('created_at',{ascending:false}),
+   db.from('policy_renewals').select('*').eq('car_id',car.id).order('renewal_date',{ascending:false}),
+   db.from('sale_history').select('*').eq('car_id',car.id).order('sale_date',{ascending:false})
+ ]);
+ if(!ih.error)insuranceHistory=ih.data||[];
+ if(!ph.error)pucHistory=ph.data||[];
+ if(!rh.error)renewalHistory=rh.data||[];
+ if(!sh.error)saleHistory=sh.data||[];
+}
 async function loadData(){
- if(!car){records=[];docs=[];dash();history();report();guard();return}
+ if(!car){records=[];docs=[];await loadStep5Data();dash();history();report();guard();return}
  let r=await db.from('records').select('*,record_items(*)').eq('car_id',car.id).order('service_date',{ascending:false});
  if(r.error)throw new Error('Service history could not be loaded: '+r.error.message);
  records=r.data||[];
  let d=await db.from('documents').select('*').eq('car_id',car.id).order('created_at',{ascending:false});
  if(d.error)throw new Error('Vehicle documents could not be loaded: '+d.error.message);
  docs=d.data||[];
+ await loadStep5Data();
  dash();history();await docsView();report();guard()
 }
 const insuranceTypes=['Third Party','Comprehensive','Zero Depreciation','Own Damage','Standalone Own Damage'];
@@ -257,7 +276,7 @@ function dash(){
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
  const docsActive=docs.filter(d=>!d.archived_at).filter(d=>['rc','insurance','puc'].includes(d.document_type)).slice(0,6);
  $('dash').innerHTML=
- '<section class="garage-hero"><div class="garage-hero-info"><div class="eyebrow">YOUR VEHICLE GARAGE</div><h2>'+esc(car.registration_no)+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><div class="health-badge '+health[1]+'"><i></i>'+health[0]+'</div><small>'+esc(health[2])+'</small></div>'+
+ '<section class="garage-hero"><div class="garage-hero-info"><div class="eyebrow">YOUR VEHICLE GARAGE</div><h2>'+esc(car.registration_no)+(car.vehicle_status==='sold'?' <span class="sold-badge">SOLD</span>':'')+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><div class="health-badge '+(car.vehicle_status==='sold'?'neutral':health[1])+'"><i></i>'+(car.vehicle_status==='sold'?'VEHICLE SOLD':health[0])+'</div><small>'+esc(car.vehicle_status==='sold'?'Ownership lifecycle closed. Historical service and compliance records are preserved.':health[2])+'</small></div>'+
  vehicleAvatar(body,car.fuel)+
  '<div class="digital-cluster"><span>CURRENT ODOMETER</span><strong>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+'</strong><em>KM</em></div></section>'+
  '<div class="dashboard-grid dashboard-stats"><div class="glass-stat"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>All recorded maintenance</small></div><div class="glass-stat"><span>SERVICE SCHEDULE</span><b class="${service.cls}">${service.state}</b><small>${esc(service.text)}</small></div><div class="glass-stat"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry||'Missing')+'</small></div><div class="glass-stat"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry||'Missing')+'</small></div></div>'+
@@ -305,6 +324,9 @@ async function generateSaleForms(){
    if(up.error)throw new Error('Archive upload failed: '+up.error.message);
    const ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:pdfName,storage_path:path,mime_type:'application/pdf',file_size:blob.size,document_type:'other',document_name:'Form 29 & 30 (Sale Document)',archive_name:'Form 29 & 30',archived_at:new Date().toISOString(),active:false});
    if(ins.error){await db.storage.from('car-documents').remove([path]);throw new Error('Archive record save failed: '+ins.error.message)}
+   const saleRpc=await db.rpc('complete_vehicle_sale',{p_car_id:car.id,p_buyer_name:buyerName,p_buyer_relation:relation,p_buyer_relation_name:relationName,p_buyer_age:age,p_buyer_address:address,p_buyer_rto:rto,p_sale_date:saleDate,p_financier:financier,p_form_document_id:ins.data.id});
+   if(saleRpc.error){await db.from('documents').delete().eq('id',ins.data.id).eq('car_id',car.id).eq('user_id',user.id);await db.storage.from('car-documents').remove([path]);throw new Error('Vehicle sale could not be completed. Run Step 5 SQL first. '+saleRpc.error.message)}
+   car.vehicle_status='sold';car.sold_at=new Date().toISOString();car.sold_to_name=buyerName;car.sale_history_id=saleRpc.data;
    const previewUrl=URL.createObjectURL(blob);
    const pv=document.createElement('div');pv.id='saleGeneratedModal';pv.innerHTML='<div class="sale-generated-card"><div class="toolbar"><div><h3>Form 29 &amp; 30 Ready</h3><p class="muted">Saved securely to vehicle archives.</p></div><button class="ghost" id="saleGeneratedClose">✕</button></div><iframe src="'+previewUrl+'" title="Form 29 and Form 30 preview"></iframe><div class="sale-generated-actions"><button class="ghost" onclick="window.open(\''+previewUrl+'\',\'_blank\')">Open PDF</button><button class="primary" onclick="window.print()">Print</button></div></div>';
    document.body.appendChild(pv);$('saleGeneratedClose').onclick=()=>{pv.remove();URL.revokeObjectURL(previewUrl)};mClose('saleFormsModal');await loadData();toast('Form 29 & 30 generated and saved to Archives for '+car.registration_no+'!');
@@ -329,13 +351,48 @@ async function openOdometerPrompt(){
  if(r.error)return toast('Failed to update odometer: '+r.error.message,'error');
  car.current_km=km;dash();toast('Odometer updated for '+car.registration_no+'!');
 }
-function carsView(){$('carsList').innerHTML=cars.length?cars.map(c=>'<div class="card"><div class="toolbar"><div><h3>'+esc(c.registration_no)+'</h3><div class="muted">'+esc(c.make_model||'')+' • '+esc(c.model_year||'')+' • '+esc(c.fuel||'')+'</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" onclick="openCar(\''+c.id+'\')">Open Car</button><button class="primary" onclick="editSpecificCar(\''+c.id+'\')">Edit</button></div></div></div>').join(''):'<div class="card">No cars yet.</div>'}
-window.editSpecificCar=async id=>{let previous=car;car=cars.find(x=>x.id===id)||previous;updateCarTab();await window.editCar();await loadCars();let fresh=cars.find(x=>x.id===car?.id);if(fresh)car=fresh;updateCarTab();await loadData();carsView()};
-function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
+function openOwnerProfile(){
+ let old=document.getElementById('ownerProfileModal');if(old)old.remove();
+ const p=ownerProfile||{},meta=user?.user_metadata||{};
+ let m=document.createElement('div');m.id='ownerProfileModal';
+ m.innerHTML='<div class="step5-modal-card"><div class="toolbar"><div><h3>Owner Profile</h3><p class="muted">Saved once and reused for vehicle reports and ownership documents.</p></div><button class="ghost" id="ownerProfileClose">✕</button></div><div class="form"><div class="field"><label>Full Name *</label><input id="opName" value="'+esc(p.full_name||meta.full_name||'')+'"></div><div class="field"><label>Phone</label><input id="opPhone" inputmode="tel" value="'+esc(p.phone||meta.phone||'')+'"></div><div class="field full"><label>Address</label><textarea id="opAddress">'+esc(p.address||meta.address||meta.full_address||'')+'</textarea></div><div class="field"><label>City</label><input id="opCity" value="'+esc(p.city||'')+'"></div><div class="field"><label>State</label><input id="opState" value="'+esc(p.state||'')+'"></div><div class="field"><label>Pincode</label><input id="opPincode" inputmode="numeric" value="'+esc(p.pincode||'')+'"></div><div class="full"><button class="primary" id="opSave">SAVE PROFILE</button></div></div></div>';
+ document.body.appendChild(m);$('ownerProfileClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
+ $('opSave').onclick=async()=>{
+   const btn=$('opSave');if(btn.disabled)return;
+   const payload={user_id:user.id,full_name:$('opName').value.trim(),phone:$('opPhone').value.trim()||null,address:$('opAddress').value.trim()||null,city:$('opCity').value.trim()||null,state:$('opState').value.trim()||null,pincode:$('opPincode').value.trim()||null,updated_at:new Date().toISOString()};
+   if(!payload.full_name)return toast('Full Name is required.','error');
+   btn.disabled=true;btn.textContent='SAVING...';
+   const r=await db.from('user_profiles').upsert(payload,{onConflict:'user_id'}).select().single();
+   btn.disabled=false;btn.textContent='SAVE PROFILE';
+   if(r.error)return toast('Profile save failed. Please run Step 5 SQL first. '+r.error.message,'error');
+   ownerProfile=r.data;m.remove();toast('Owner profile saved successfully.');
+ };
+}
+function openVehicleHistory(id=car?.id){
+ const target=cars.find(x=>x.id===id)||car;if(!target)return;
+ if(target.id!==car?.id){car=target;updateCarTab();}
+ const ih=insuranceHistory,ph=pucHistory,rh=renewalHistory,sh=saleHistory;
+ let old=document.getElementById('vehicleHistoryModal');if(old)old.remove();
+ let rows=(arr,cols)=>arr.length?arr.map(x=>'<tr>'+cols(x).map(v=>'<td>'+esc(v??'—')+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+cols({}).length+'">No history recorded yet.</td></tr>';
+ let m=document.createElement('div');m.id='vehicleHistoryModal';
+ m.innerHTML='<div class="step5-modal-card history-modal"><div class="toolbar"><div><h3>'+esc(target.registration_no)+' • Compliance History</h3><p class="muted">Server-side historical snapshots remain linked to this vehicle.</p></div><button class="ghost" id="vhClose">✕</button></div>'+
+ '<div class="history-section"><h4>Insurance History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Company</th><th>Policy</th><th>Expiry</th><th>Event</th></tr></thead><tbody>'+rows(ih,()=>[]).replace('<tr><td colspan="0">No history recorded yet.</td></tr>','')+(ih.length?ih.map(x=>'<tr><td>'+esc(x.created_at?.slice(0,10))+'</td><td>'+esc(x.insurance_company)+'</td><td>'+esc(x.policy_number)+'</td><td>'+esc(x.expiry_date)+'</td><td>'+esc(x.event_type)+'</td></tr>').join(''):'<tr><td colspan="5">No history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="history-section"><h4>PUC History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Certificate</th><th>State</th><th>Expiry</th><th>Event</th></tr></thead><tbody>'+(ph.length?ph.map(x=>'<tr><td>'+esc(x.created_at?.slice(0,10))+'</td><td>'+esc(x.certificate_number)+'</td><td>'+esc(x.state)+'</td><td>'+esc(x.expiry_date)+'</td><td>'+esc(x.event_type)+'</td></tr>').join(''):'<tr><td colspan="5">No history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="history-section"><h4>Policy Renewal History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Type</th><th>Old Expiry</th><th>New Expiry</th><th>Source</th></tr></thead><tbody>'+(rh.length?rh.map(x=>'<tr><td>'+esc(x.renewal_date)+'</td><td>'+esc(x.policy_type?.toUpperCase())+'</td><td>'+esc(x.old_expiry)+'</td><td>'+esc(x.new_expiry)+'</td><td>'+esc(x.source)+'</td></tr>').join(''):'<tr><td colspan="5">No renewal history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
+ '<div class="history-section"><h4>Sale History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Sale Date</th><th>Buyer</th><th>RTO</th><th>Financier</th><th>Status</th></tr></thead><tbody>'+(sh.length?sh.map(x=>'<tr><td>'+esc(x.sale_date)+'</td><td>'+esc(x.buyer_name)+'</td><td>'+esc(x.buyer_rto)+'</td><td>'+esc(x.financier)+'</td><td>'+esc(x.status)+'</td></tr>').join(''):'<tr><td colspan="5">No sale history — vehicle is '+(target.vehicle_status==='sold'?'marked SOLD':'active')+'.</td></tr>')+'</tbody></table></div></div></div>';
+ document.body.appendChild(m);$('vhClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
+}
+function carsView(){
+ $('carsList').innerHTML='<div class="step5-toolbar"><div><b>Owner & Vehicle Records</b><span class="muted">Profile, compliance history and sold lifecycle are stored in the cloud.</span></div><button class="ghost" onclick="openOwnerProfile()">👤 Owner Profile</button></div>'+
+ (cars.length?cars.map(c=>'<div class="card '+(c.vehicle_status==='sold'?'vehicle-sold-card':'')+'"><div class="toolbar"><div><h3>'+esc(c.registration_no)+' '+(c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':'')+'</h3><div class="muted">'+esc(c.make_model||'')+' • '+esc(c.model_year||'')+' • '+esc(c.fuel||'')+'</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" onclick="openCar(\''+c.id+'\')">Open Car</button><button class="ghost" onclick="openVehicleHistory(\''+c.id+'\')">History</button>'+(c.vehicle_status==='sold'?'':'<button class="primary" onclick="editSpecificCar(\''+c.id+'\')">Edit</button>')+'</div></div></div>').join(''):'<div class="card">No cars yet.</div>');
+}
+window.editSpecificCar=async id=>{let previous=car;car=cars.find(x=>x.id===id)||previous;if(car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Open History to view its complete lifecycle.','error');car=previous;return}updateCarTab();await window.editCar();await loadCars();let fresh=cars.find(x=>x.id===car?.id);if(fresh)car=fresh;updateCarTab();await loadData();carsView()};
+function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(car.vehicle_status==='sold'){$('guard').innerHTML='<div class="dangerbox"><b>VEHICLE SOLD</b> — Service entries are locked. Historical records and documents remain available.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
 renderServiceItems(); $('type').onchange=renderServiceItems;
 ['parts','labour','other'].forEach(id=>$(id).oninput=()=>{$('total').value=Number($('parts').value||0)+Number($('labour').value||0)+Number($('other').value||0)});
 $('save').onclick=async()=>{
  if(!car)return;
+ if(car.vehicle_status==='sold')return toast('Sold vehicle is read-only. Service logging is locked.','error');
  if(!car.insurance_expiry||!car.puc_expiry)return toast('Insurance and PUC are required','error');
  if(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')if(!confirm('WARNING — Insurance/PUC is expired. Continue?'))return;
  const btn=$('save');if(btn.disabled)return;
