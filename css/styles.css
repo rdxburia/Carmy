@@ -415,3 +415,42 @@ button,input,select,textarea{min-width:0;max-width:100%}
  .sale-pdf-sheet{width:210mm}
  .sale-pdf-sheet .form-page{break-after:page}
 }
+
+/* ===== Form 29/30: never render the PDF canvas in normal app flow ===== */
+#salePdfPreview{
+ position:fixed!important;
+ left:-100000px!important;
+ top:0!important;
+ width:210mm!important;
+ height:auto!important;
+ margin:0!important;
+ padding:0!important;
+ overflow:hidden!important;
+ visibility:hidden!important;
+ pointer-events:none!important;
+ z-index:-1!important;
+}
+#salePdfPreview .sale-pdf-sheet{display:block!important;visibility:visible!important}
+#saleGeneratedModal{
+ position:fixed!important;
+ inset:0!important;
+ z-index:2147483646!important;
+ display:grid!important;
+ place-items:center!important;
+}
+#saleGeneratedModal .sale-generated-card{
+ position:relative!important;
+ z-index:1!important;
+}
+@media print{
+ #salePdfPreview{
+   position:static!important;
+   left:auto!important;
+   top:auto!important;
+   visibility:visible!important;
+   z-index:auto!important;
+   width:210mm!important;
+   overflow:visible!important;
+ }
+ #saleGeneratedModal{display:none!important}
+}
