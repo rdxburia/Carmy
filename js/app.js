@@ -14,12 +14,38 @@ const serviceItems={
 'Accident / Repair':['Body Repair','Bumper Repair / Replacement','Bonnet / Fender / Door Repair','Headlight / Taillight','Windshield / Glass','Paint Work','Dent Removal','AC / Cooling Damage','Suspension Damage','Steering Damage','Electrical Repair','Insurance Claim Repair','Towing / Recovery','Other Accident Repair'],
 'Other':['Inspection / Diagnosis','Electrical Work','AC / Cooling Work','Suspension Work','Steering Work','Exhaust Work','General Repair','Other']
 };
-function renderServiceItems(){
- const type=$('type').value;
+function renderServiceItems(existing=[]){
+ const type=$('type')?.value;
  const list=serviceItems[type]||[];
+ const byName=new Map((existing||[]).map(x=>[x.item_name,x]));
  $('serviceItemsTitle').textContent=type+' Items';
- $('items').innerHTML=list.length?list.map(x=>'<label class="item"><input type="checkbox" value="'+esc(x)+'"> '+esc(x)+'</label>').join(''):'<div class="muted">No predefined items for this type.</div>';
+ $('items').innerHTML=list.length?list.map((x,i)=>{
+   const v=byName.get(x)||{};
+   const key='si'+i;
+   return '<div class="service-item-row"><label class="item"><input type="checkbox" class="service-item-check" data-name="'+esc(x)+'" '+(v.item_name?'checked':'')+'> '+esc(x)+'</label><div class="service-item-detail '+(v.item_name?'show':'')+'"><input class="si-qty" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(v.quantity??1)+'"><input class="si-brand" placeholder="Brand / Make" value="'+esc(v.brand||'')+'"><input class="si-part" placeholder="Part No." value="'+esc(v.part_number||'')+'"><input class="si-cost" type="number" min="0" step="0.01" placeholder="Part Cost" value="'+esc(v.cost??0)+'"><input class="si-labour" type="number" min="0" step="0.01" placeholder="Item Labour" value="'+esc(v.labour??0)+'"><input class="si-warranty" placeholder="Warranty" value="'+esc(v.warranty||'')+'"><input class="si-notes" placeholder="Item Notes" value="'+esc(v.notes||'')+'"></div></div>';
+ }).join(''):'<div class="muted">No predefined items for this type.</div>';
  $('serviceItemsBlock').style.display=list.length?'block':'none';
+ document.querySelectorAll('#items .service-item-check').forEach(ch=>{
+   ch.onchange=()=>ch.closest('.service-item-row')?.querySelector('.service-item-detail')?.classList.toggle('show',ch.checked);
+ });
+}
+function collectServiceItems(){
+ return [...document.querySelectorAll('#items .service-item-check:checked')].map(ch=>{
+   const row=ch.closest('.service-item-row'),name=ch.dataset.name;
+   const val=sel=>row.querySelector(sel)?.value??'';
+   return {item_name:name,quantity:Number(val('.si-qty')||1),brand:val('.si-brand').trim()||null,part_number:val('.si-part').trim()||null,cost:Number(val('.si-cost')||0),labour:Number(val('.si-labour')||0),warranty:val('.si-warranty').trim()||null,notes:val('.si-notes').trim()||null};
+ }).filter(x=>x.quantity>=0&&x.cost>=0&&x.labour>=0);
+}
+function resetRecordForm(){
+ ['description','workshop','invoice','notes'].forEach(id=>{$(id).value=''});
+ $('parts').value='0';$('labour').value='0';$('other').value='0';$('total').value='0';
+ $('date').value=new Date().toISOString().slice(0,10);
+ $('km').value=Number(car?.current_km||0);
+ $('type').value='Regular Service';renderServiceItems();
+}
+function prefillRecordForm(){
+ if(!$('date').value)$('date').value=new Date().toISOString().slice(0,10);
+ if(car&&(!$('km').value||Number($('km').value)===0))$('km').value=Number(car.current_km||0);
 }
 const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),money=x=>'₹'+Number(x||0).toLocaleString('en-IN');
 let toastTimer=null;
@@ -298,9 +324,80 @@ window.editSpecificCar=async id=>{let previous=car;car=cars.find(x=>x.id===id)||
 function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
 renderServiceItems(); $('type').onchange=renderServiceItems;
 ['parts','labour','other'].forEach(id=>$(id).oninput=()=>{$('total').value=Number($('parts').value||0)+Number($('labour').value||0)+Number($('other').value||0)});
-$('save').onclick=async()=>{if(!car)return;if(!car.insurance_expiry||!car.puc_expiry)return toast('Insurance and PUC are required');if(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')if(!confirm('WARNING — Insurance/PUC is expired. Continue?'))return;let row={user_id:user.id,car_id:car.id,service_date:$('date').value||new Date().toISOString().slice(0,10),odometer_km:+($('km').value||0),record_type:$('type').value,description:$('description').value,parts_cost:+($('parts').value||0),labour_cost:+($('labour').value||0),other_cost:+($('other').value||0),workshop:$('workshop').value,invoice_no:$('invoice').value,notes:$('notes').value};let r=await db.from('records').insert(row).select().single();if(r.error)return toast('Failed to save Regular Service Record: '+r.error.message,'error');let chosen=[...document.querySelectorAll('#items input:checked')].map(x=>({record_id:r.data.id,item_name:x.value}));if(chosen.length){let q=await db.from('record_items').insert(chosen);if(q.error)return toast('Failed to save Regular Service items: '+q.error.message,'error')}if(row.odometer_km>Number(car.current_km||0)){await db.from('cars').update({current_km:row.odometer_km}).eq('id',car.id);car.current_km=row.odometer_km}toast(row.record_type+' Record saved successfully!');await loadData();nav('history')};
-function history(){if(!car)return;let current=$('year').value||'all';let ys=[...new Set(records.map(r=>new Date(r.service_date).getFullYear()))];ys.sort((a,b)=>b-a);$('year').innerHTML='<option value="all">All</option>'+ys.map(y=>'<option value="'+y+'">'+y+'</option>').join('');if(!['all',...ys.map(String)].includes(current))current='all';$('year').value=current;let rs=current==='all'?records:records.filter(r=>new Date(r.service_date).getFullYear()===+current);$('historyTable').innerHTML='<table class="table"><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th></tr>'+rs.map(r=>'<tr><td>'+esc(r.service_date)+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+'<br><small class="muted">'+esc((r.record_items||[]).map(x=>x.item_name).join(', '))+'</small></td><td>'+money(r.total_cost)+'</td></tr>').join('')+'</table><p><b>Year Total: '+money(rs.reduce((s,r)=>s+Number(r.total_cost||0),0))+'</b></p>'}
+$('save').onclick=async()=>{
+ if(!car)return;
+ if(!car.insurance_expiry||!car.puc_expiry)return toast('Insurance and PUC are required','error');
+ if(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')if(!confirm('WARNING — Insurance/PUC is expired. Continue?'))return;
+ const btn=$('save');if(btn.disabled)return;
+ const km=Number($('km').value||0),parts=Number($('parts').value||0),labour=Number($('labour').value||0),other=Number($('other').value||0);
+ if(!Number.isFinite(km)||km<0||!Number.isFinite(parts)||parts<0||!Number.isFinite(labour)||labour<0||!Number.isFinite(other)||other<0)return toast('Enter valid KM and cost values.','error');
+ const chosen=collectServiceItems();
+ btn.disabled=true;btn.classList.add('is-saving');const oldText=btn.textContent;btn.textContent='SAVING...';
+ const overlay=showOperationOverlay('Saving service record','Saving service + item details together');
+ try{
+   const {data,error}=await db.rpc('save_service_record',{
+     p_car_id:car.id,p_service_date:$('date').value||new Date().toISOString().slice(0,10),p_odometer_km:km,p_record_type:$('type').value,
+     p_description:$('description').value.trim()||null,p_parts_cost:parts,p_labour_cost:labour,p_other_cost:other,
+     p_workshop:$('workshop').value.trim()||null,p_invoice_no:$('invoice').value.trim()||null,p_notes:$('notes').value.trim()||null,p_items:chosen
+   });
+   if(error)throw error;
+   if(!data)throw new Error('No record ID returned by server.');
+   if(km>Number(car.current_km||0))car.current_km=km;
+   resetRecordForm();
+   toast($('type').value+' Record saved successfully!');
+   await loadData();nav('history');
+ }catch(err){
+   toast('Failed to save service record: '+(err?.message||'Please run the Step 4 SQL migration first.'),'error');
+ }finally{
+   hideOperationOverlay();btn.disabled=false;btn.classList.remove('is-saving');btn.textContent=oldText;
+ }
+};
+function history(){
+ if(!car)return;
+ let current=$('year').value||'all',ys=[...new Set(records.map(r=>new Date(r.service_date).getFullYear()))].sort((a,b)=>b-a);
+ $('year').innerHTML='<option value="all">All</option>'+ys.map(y=>'<option value="'+y+'">'+y+'</option>').join('');
+ if(!['all',...ys.map(String)].includes(current))current='all';$('year').value=current;
+ let rs=current==='all'?records:records.filter(r=>new Date(r.service_date).getFullYear()===+current);
+ const rows=rs.map(r=>{
+   const items=(r.record_items||[]).map(x=>x.item_name).join(', ');
+   return '<tr><td>'+esc(r.service_date)+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+'<br><small class="muted">'+esc(items)+'</small></td><td>'+money(r.total_cost)+'</td><td><button class="ghost" onclick="editServiceRecord(\''+r.id+'\')">Edit</button> <button class="danger" onclick="deleteServiceRecord(\''+r.id+'\')">Delete</button></td></tr>';
+ }).join('');
+ $('historyTable').innerHTML='<div class="table-scroll"><table class="table"><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th><th>Actions</th></tr>'+rows+'</table></div><p><b>Year Total: '+money(rs.reduce((s,r)=>s+Number(r.total_cost||0),0))+'</b></p>';
+}
+
 $('year').onchange=history;
+async function editServiceRecord(id){
+ const r=records.find(x=>x.id===id);if(!r||!car)return;
+ let old=document.getElementById('editServiceRecordModal');if(old)old.remove();
+ let m=document.createElement('div');m.id='editServiceRecordModal';
+ m.innerHTML='<div class="edit-modal-card"><div class="toolbar"><div><h2>Edit Service Record</h2><p class="muted">Update the complete service entry and item details.</p></div><button class="ghost" id="esrClose">Cancel</button></div><div class="form"><div class="field"><label>Date</label><input id="esrDate" type="date" value="'+esc(r.service_date||'')+'"></div><div class="field"><label>Odometer / KM</label><input id="esrKm" type="number" value="'+esc(r.odometer_km||0)+'"></div><div class="field"><label>Record Type</label><select id="esrType">'+Object.keys(serviceItems).map(x=>'<option>'+esc(x)+'</option>').join('')+'</select></div><div class="field"><label>Workshop</label><input id="esrWorkshop" value="'+esc(r.workshop||'')+'"></div><div class="field full"><label>Description</label><textarea id="esrDescription">'+esc(r.description||'')+'</textarea></div><div class="field"><label>Parts Cost</label><input id="esrParts" type="number" min="0" value="'+esc(r.parts_cost||0)+'"></div><div class="field"><label>Labour</label><input id="esrLabour" type="number" min="0" value="'+esc(r.labour_cost||0)+'"></div><div class="field"><label>Other</label><input id="esrOther" type="number" min="0" value="'+esc(r.other_cost||0)+'"></div><div class="field"><label>Invoice No.</label><input id="esrInvoice" value="'+esc(r.invoice_no||'')+'"></div><div class="field"><label>Notes</label><input id="esrNotes" value="'+esc(r.notes||'')+'"></div><div class="full"><b id="esrItemsTitle">Service Items</b><div id="esrItems" class="itemgrid" style="margin-top:8px"></div></div><div class="full"><button class="primary" id="esrSave">SAVE CHANGES</button></div></div></div>';
+ document.body.appendChild(m);
+ $('esrType').value=r.record_type||'Other';
+ const renderEditItems=()=>{
+   const list=serviceItems[$('esrType').value]||[],existing=new Map((r.record_items||[]).map(x=>[x.item_name,x]));
+   $('esrItemsTitle').textContent=$('esrType').value+' Items';
+   $('esrItems').innerHTML=list.map((x,i)=>{const v=existing.get(x)||{};return '<div class="service-item-row"><label class="item"><input type="checkbox" class="esr-check" data-name="'+esc(x)+'" '+(v.item_name?'checked':'')+'> '+esc(x)+'</label><div class="service-item-detail '+(v.item_name?'show':'')+'"><input class="esr-qty" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(v.quantity??1)+'"><input class="esr-brand" placeholder="Brand / Make" value="'+esc(v.brand||'')+'"><input class="esr-part" placeholder="Part No." value="'+esc(v.part_number||'')+'"><input class="esr-cost" type="number" min="0" step="0.01" placeholder="Part Cost" value="'+esc(v.cost??0)+'"><input class="esr-labour" type="number" min="0" step="0.01" placeholder="Item Labour" value="'+esc(v.labour??0)+'"><input class="esr-warranty" placeholder="Warranty" value="'+esc(v.warranty||'')+'"><input class="esr-notes" placeholder="Item Notes" value="'+esc(v.notes||'')+'"></div></div>'}).join('');
+   document.querySelectorAll('#esrItems .esr-check').forEach(ch=>ch.onchange=()=>ch.closest('.service-item-row')?.querySelector('.service-item-detail')?.classList.toggle('show',ch.checked));
+ };
+ $('esrType').onchange=renderEditItems;renderEditItems();$('esrClose').onclick=()=>m.remove();
+ $('esrSave').onclick=async()=>{
+   const btn=$('esrSave');if(btn.disabled)return;btn.disabled=true;btn.textContent='SAVING...';
+   const items=[...document.querySelectorAll('#esrItems .esr-check:checked')].map(ch=>{const row=ch.closest('.service-item-row'),v=s=>row.querySelector(s)?.value??'';return {item_name:ch.dataset.name,quantity:Number(v('.esr-qty')||1),brand:v('.esr-brand').trim()||null,part_number:v('.esr-part').trim()||null,cost:Number(v('.esr-cost')||0),labour:Number(v('.esr-labour')||0),warranty:v('.esr-warranty').trim()||null,notes:v('.esr-notes').trim()||null}});
+   try{
+     const {data,error}=await db.rpc('update_service_record',{p_record_id:id,p_car_id:car.id,p_service_date:$('esrDate').value,p_odometer_km:Number($('esrKm').value||0),p_record_type:$('esrType').value,p_description:$('esrDescription').value.trim()||null,p_parts_cost:Number($('esrParts').value||0),p_labour_cost:Number($('esrLabour').value||0),p_other_cost:Number($('esrOther').value||0),p_workshop:$('esrWorkshop').value.trim()||null,p_invoice_no:$('esrInvoice').value.trim()||null,p_notes:$('esrNotes').value.trim()||null,p_items:items});
+     if(error)throw error;m.remove();toast('Service record updated successfully!');await loadData();history();
+   }catch(err){toast('Failed to update service record: '+(err?.message||'Run Step 4 SQL migration first.'),'error')}finally{btn.disabled=false;btn.textContent='SAVE CHANGES'}
+ };
+}
+async function deleteServiceRecord(id){
+ const r=records.find(x=>x.id===id);if(!r||!car)return;
+ if(!confirm('Delete this service record permanently? Its service-item details will also be deleted.'))return;
+ const btns=[...document.querySelectorAll('.table button')];btns.forEach(b=>b.disabled=true);
+ try{
+   const {error}=await db.rpc('delete_service_record',{p_record_id:id,p_car_id:car.id});
+   if(error)throw error;toast('Service record deleted permanently!');await loadData();history();
+ }catch(err){toast('Failed to delete service record: '+(err?.message||'Run Step 4 SQL migration first.'),'error')}finally{btns.forEach(b=>b.disabled=false)}
+}
 function fyLabel(date){let d=new Date(date);let y=d.getFullYear();let start=y-(d.getMonth()<3?1:0);return start+'-'+String(start+1).slice(-2)}
 function docTypeLabel(d){return d.document_type==='other'?(d.document_name||'Other'):d.document_type==='rc'?'Registration Certificate':d.document_type==='puc'?'PUC':'Insurance'}
 function docExpired(d){return (d.document_type==='insurance'||d.document_type==='puc'||d.document_type==='rc')&&!!d.document_expiry&&!!dateOnlyEnd(d.document_expiry)&&dateOnlyEnd(d.document_expiry)<new Date()}
