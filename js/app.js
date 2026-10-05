@@ -73,7 +73,7 @@ function setAppLoadingStatus(title,sub){if($('appLoadingTitle'))$('appLoadingTit
 function hideAppLoading(){let o=document.getElementById('appLoadingOverlay');if(o){o.classList.add('loading-out');setTimeout(()=>o.remove(),380)}}
 function dateOnlyEnd(x){if(!x)return null;let p=String(x).split('-').map(Number);if(p.length!==3||p.some(Number.isNaN))return null;return new Date(p[0],p[1]-1,p[2],23,59,59,999)}
 function st(x){if(!x)return['MISSING','bad'];let d=dateOnlyEnd(x);if(!d)return['MISSING','bad'];let days=(d-Date.now())/86400000;return days<0?['EXPIRED','bad']:days<=30?['EXPIRING SOON','warn']:['VALID','ok']}
-async function nav(v){if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')history();if(v==='docs')docsView();if(v==='report')report()}
+async function nav(v){if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='add')prefillRecordForm();if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')history();if(v==='docs')docsView();if(v==='report')report()}
 document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.onclick=()=>nav(x.dataset.view));
 $('toggleAuth').onclick=()=>{signup=!signup;$('authTitle').textContent=signup?'Create account':'Private Car Manager';$('authBtn').textContent=signup?'Create account':'Login';$('toggleAuth').textContent=signup?'Back to login':'Create account'};
 $('authBtn').onclick=async ev=>{ev.preventDefault();if(!db)return toast('Connecting to secure login...');let e=$('email').value.trim(),p=$('password').value;if(!e||!p)return toast('Enter email and password');let r=signup?await db.auth.signUp({email:e,password:p}):await db.auth.signInWithPassword({email:e,password:p});if(r.error)return toast(r.error.message);if(signup)toast('Account created. Check email if confirmation is enabled.')};
@@ -200,20 +200,30 @@ function vehicleAvatar(type,fuel){
  const icon=type==='SUV'?'🚙':type==='SEDAN'?'🚘':type==='EV'?'⚡':'🚗';
  return '<div class="garage-avatar '+type.toLowerCase()+'"><div class="avatar-glow"></div><div class="avatar-car">'+icon+'</div><span>'+esc(type)+' • '+esc(fuel||'—')+'</span></div>';
 }
-function dashboardHealth(){
- const ins=st(car.insurance_expiry),puc=st(car.puc_expiry);
- const hasRecords=records.length>0;
- const last=records[0];
- let serviceDue=false;
- if(last?.service_date){
-   const days=(Date.now()-new Date(last.service_date+'T23:59:59'))/86400000;
-   serviceDue=days>=150;
- }
- if(ins[0]==='EXPIRED'||puc[0]==='EXPIRED'||ins[0]==='MISSING'||puc[0]==='MISSING')return ['ACTION REQUIRED','danger','Insurance / PUC needs attention'];
- if(serviceDue)return ['SERVICE DUE SOON','warn','Your maintenance history suggests a service check'];
- if(!hasRecords)return ['ALL SYSTEMS GREEN','ok','Vehicle compliance is currently valid'];
- return ['ALL SYSTEMS GREEN','ok','Insurance, PUC and service history look healthy'];
+function serviceIntervalFor(type){
+ const map={'Regular Service':{km:10000,months:6},'Engine Service':{km:15000,months:12},'Brake Work':{km:10000,months:6},'Tyre Work':{km:10000,months:6},'Battery':{km:20000,months:12},'Accident / Repair':{km:10000,months:6},'Other':{km:10000,months:6}};
+ return map[type]||map['Regular Service'];
 }
+function serviceDueStatus(){
+ if(!records.length)return {state:'NO HISTORY',cls:'neutral',text:'Add the first service record to start KM + time tracking.'};
+ const last=records[0],iv=serviceIntervalFor(last.record_type),currentKm=Number(car.current_km||0),lastKm=Number(last.odometer_km||0);
+ const kmSince=Math.max(0,currentKm-lastKm),lastDate=dateOnlyEnd(last.service_date),now=Date.now();
+ const days=lastDate?Math.max(0,(now-lastDate)/86400000):0,monthsSince=days/30.4375;
+ const kmDue=kmSince>=iv.km,timeDue=monthsSince>=iv.months;
+ if(kmDue||timeDue)return {state:'SERVICE DUE',cls:'danger',text:(kmDue?'KM interval reached ('+Math.round(kmSince).toLocaleString('en-IN')+' km since last service).':'Time interval reached ('+monthsSince.toFixed(1)+' months since last service).')};
+ const kmLeft=Math.max(0,iv.km-kmSince),daysLeft=Math.max(0,iv.months*30.4375-days);
+ if(kmLeft<=1000||daysLeft<=30)return {state:'SERVICE DUE SOON',cls:'warn',text:Math.round(kmLeft).toLocaleString('en-IN')+' km / '+Math.ceil(daysLeft)+' days remaining'};
+ return {state:'SERVICE OK',cls:'ok',text:Math.round(kmLeft).toLocaleString('en-IN')+' km or '+Math.floor(daysLeft/30)+' months remaining'};
+}
+function dashboardHealth(){
+ const ins=st(car.insurance_expiry),puc=st(car.puc_expiry),service=serviceDueStatus();
+ if(ins[0]==='EXPIRED'||puc[0]==='EXPIRED'||ins[0]==='MISSING'||puc[0]==='MISSING')return ['ACTION REQUIRED','danger','Insurance / PUC needs attention'];
+ if(service.state==='SERVICE DUE')return ['SERVICE DUE','danger',service.text];
+ if(service.state==='SERVICE DUE SOON')return ['SERVICE DUE SOON','warn',service.text];
+ if(!records.length)return ['ALL SYSTEMS GREEN','ok','Vehicle compliance is currently valid'];
+ return ['ALL SYSTEMS GREEN','ok','Insurance, PUC and service schedule look healthy'];
+}
+
 function maintenanceCostPerKm(){
  const km=Number(car.current_km||0),cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0);
  return km>0?cost/km:null;
@@ -242,7 +252,7 @@ function dashTimeline(){
 function toggleTimelineEvent(id){const e=document.getElementById('timeline-'+id);if(e)e.classList.toggle('open')}
 function dash(){
  if(!car){$('dash').innerHTML='<div class="card">Add your first car.</div>';return}
- const body=vehicleBodyType(car.make_model), health=dashboardHealth(), cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry),cpk=maintenanceCostPerKm(),spend=yearlySpendData(),max=Math.max(spend.total,1);
+ const body=vehicleBodyType(car.make_model), health=dashboardHealth(), service=serviceDueStatus(), cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry),cpk=maintenanceCostPerKm(),spend=yearlySpendData(),max=Math.max(spend.total,1);
  $('dashTitle').textContent=car.registration_no;
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
  const docsActive=docs.filter(d=>!d.archived_at).filter(d=>['rc','insurance','puc'].includes(d.document_type)).slice(0,6);
@@ -250,7 +260,7 @@ function dash(){
  '<section class="garage-hero"><div class="garage-hero-info"><div class="eyebrow">YOUR VEHICLE GARAGE</div><h2>'+esc(car.registration_no)+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><div class="health-badge '+health[1]+'"><i></i>'+health[0]+'</div><small>'+esc(health[2])+'</small></div>'+
  vehicleAvatar(body,car.fuel)+
  '<div class="digital-cluster"><span>CURRENT ODOMETER</span><strong>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+'</strong><em>KM</em></div></section>'+
- '<div class="dashboard-grid dashboard-stats"><div class="glass-stat"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>All recorded maintenance</small></div><div class="glass-stat"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry||'Missing')+'</small></div><div class="glass-stat"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry||'Missing')+'</small></div></div>'+
+ '<div class="dashboard-grid dashboard-stats"><div class="glass-stat"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>All recorded maintenance</small></div><div class="glass-stat"><span>SERVICE SCHEDULE</span><b class="${service.cls}">${service.state}</b><small>${esc(service.text)}</small></div><div class="glass-stat"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry||'Missing')+'</small></div><div class="glass-stat"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry||'Missing')+'</small></div></div>'+
  '<div class="dashboard-grid dashboard-analytics"><div class="glass-panel"><div class="panel-heading"><div><span class="panel-kicker">MAINTENANCE EFFICIENCY</span><h3>Cost per KM</h3></div><span class="gauge-value">'+(cpk!==null?'₹'+cpk.toFixed(2):'—')+'<small>/ KM</small></span></div><div class="radial-gauge" style="--gauge:'+Math.min((cpk||0)/10*100,100)+'%"><div><b>'+(cpk!==null?Math.round(Math.max(0,100-Math.min(cpk/10*100,100))):'—')+'</b><span>efficiency</span></div></div><p class="muted">Based on recorded maintenance cost and current odometer.</p></div>'+
  '<div class="glass-panel"><div class="panel-heading"><div><span class="panel-kicker">YEAR '+spend.year+'</span><h3>Spend Breakdown</h3></div><b>'+money(spend.total)+'</b></div><div class="spend-bars"><div><span>Regular Service</span><b>'+money(spend.regular)+'</b><i style="width:'+(spend.regular/max*100)+'%"></i></div><div><span>Major Repairs</span><b>'+money(spend.major)+'</b><i style="width:'+(spend.major/max*100)+'%"></i></div><div><span>Other</span><b>'+money(spend.other)+'</b><i style="width:'+(spend.other/max*100)+'%"></i></div></div><small class="muted">Insurance premium is not included because no premium amount is currently stored.</small></div></div>'+
  '<div class="glass-panel timeline-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE HISTORY</span><h3>Maintenance Timeline</h3></div><button class="ghost" onclick="nav(\'history\')">View all</button></div>'+dashTimeline()+'</div>'+
