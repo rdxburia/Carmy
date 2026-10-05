@@ -9,3 +9,54 @@
 .doc-toolbar-actions{display:flex;gap:8px;flex-wrap:wrap}.doc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.doc-col{background:#f8fafc;border:1px solid #e5e7eb;border-radius:18px;padding:12px}.doc-col-head{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 12px}.doc-col-head>div{display:flex;align-items:center;gap:9px}.doc-col-head>span{font-size:12px;font-weight:800;background:#e5e7eb;padding:4px 8px;border-radius:999px}.doc-col-icon{font-size:22px}.doc-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e8edf4;border-radius:14px;padding:12px;margin-top:8px}.doc-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#eef4ff;font-size:21px;flex:none}.doc-main{min-width:0;flex:1;display:grid;gap:2px}.doc-main>b{font-size:14px}.doc-main>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.doc-main small{color:#7b8798}.doc-main em{font-style:normal;font-size:11px;color:#7c3aed}.doc-expiry{font-size:11px;font-weight:800;color:#15803d}.doc-expiry.expired{color:#b91c1c}.doc-archived{opacity:.82}.doc-actions{display:flex;gap:6px}.doc-actions button{padding:8px 10px}.doc-archive{margin-top:16px;border:1px solid #e5e7eb;border-radius:18px;background:#fff;padding:14px}.doc-archive-head{font-weight:900;font-size:15px;margin-bottom:8px}.doc-archive details{border-top:1px solid #eef2f7;padding:10px 0}.doc-archive summary{cursor:pointer;font-weight:800;list-style:none}.doc-archive summary span{float:right;background:#eef2ff;padding:3px 8px;border-radius:999px;font-size:11px}.doc-popup,.doc-upload-card{background:#fff;border-radius:22px;padding:24px;width:min(560px,calc(100% - 28px));box-shadow:0 30px 90px rgba(15,23,42,.28);border:1px solid #e5e7eb}.doc-popup{text-align:center}.doc-popup-icon{font-size:44px}.doc-popup p{color:#64748b;line-height:1.55}.doc-popup button{margin:5px}#docExpiryPopup,#docUploadModal{position:fixed;inset:0;z-index:9990;background:rgba(15,23,42,.52);backdrop-filter:blur(7px);display:grid;place-items:center;padding:14px}.doc-upload-card .toolbar{margin-bottom:18px}.doc-empty{padding:14px;color:#94a3b8;text-align:center;border:1px dashed #dbe3ef;border-radius:12px}@media(max-width:760px){.doc-grid{grid-template-columns:1fr}.doc-toolbar-actions{width:100%}.doc-toolbar-actions button{flex:1}.doc-row{align-items:flex-start}.doc-actions{flex-direction:column}.doc-popup,.doc-upload-card{padding:20px}}
 
 .doc-row.active{border-color:#bbf7d0;background:#f0fdf4}.doc-row.soon{border-color:#fde68a;background:#fffbeb;animation:docPulse 1.8s ease-in-out infinite}.doc-row.expired{border-color:#fecaca;background:#fff1f2}.doc-badge{display:inline-block;width:max-content;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:900}.doc-badge.active{background:#dcfce7;color:#166534}.doc-badge.soon{background:#fef3c7;color:#92400e}.doc-badge.expired{background:#fee2e2;color:#991b1b}.doc-badge.archived{background:#ede9fe;color:#6d28d9}.doc-security-notice{margin-top:14px;padding:12px 14px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;border-radius:12px;font-weight:700}@keyframes docPulse{50%{box-shadow:0 0 0 4px rgba(245,158,11,.08)}}.doc-actions button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ===== Global UX feedback / upload / post-login loading ===== */
+.toast{
+ position:fixed!important;top:18px!important;left:50%!important;right:auto!important;bottom:auto!important;
+ transform:translateX(-50%)!important;z-index:2147483647!important;display:none;align-items:center;gap:10px;
+ min-width:280px;max-width:min(560px,calc(100vw - 28px));padding:13px 18px;border-radius:14px;color:#fff;
+ font-weight:800;box-shadow:0 18px 55px rgba(15,23,42,.28);animation:toastDrop .28s ease both;
+}
+.toast-success{background:linear-gradient(135deg,#166534,#15803d)}
+.toast-error{background:linear-gradient(135deg,#991b1b,#dc2626)}
+.toast-icon{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.18);font-weight:950;flex:none}
+@keyframes toastDrop{from{opacity:0;transform:translate(-50%,-16px)!important}to{opacity:1;transform:translate(-50%,0)!important}}
+.doc-upload-card{position:relative;z-index:1}
+#docUploadModal{z-index:2147483000!important;background:rgba(3,8,20,.62)!important;backdrop-filter:blur(9px)!important;-webkit-backdrop-filter:blur(9px)!important}
+#docUploadModal .doc-upload-card{animation:modalIn .25s ease both}
+@keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+#docUploadBtn.is-uploading{cursor:wait;opacity:.86}
+#docUploadBtn:disabled{cursor:not-allowed}
+.inline-spinner{display:inline-block;width:14px;height:14px;margin-right:7px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;vertical-align:-2px;animation:spin .7s linear infinite}
+#appLoadingOverlay{
+ position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;
+ background:radial-gradient(circle at 50% 25%,rgba(37,99,235,.22),transparent 34%),#050a16;
+ transition:opacity .36s ease,visibility .36s ease;
+}
+#appLoadingOverlay.loading-out{opacity:0;visibility:hidden;pointer-events:none}
+.app-loading-panel{
+ width:min(510px,calc(100% - 30px));padding:38px 28px;text-align:center;color:#fff;
+ border:1px solid rgba(255,255,255,.11);border-radius:28px;background:rgba(9,16,32,.72);
+ box-shadow:0 35px 110px rgba(0,0,0,.5);backdrop-filter:blur(18px);
+}
+.app-loading-brand{font-size:25px;font-weight:950;letter-spacing:1.5px}.app-loading-brand span{color:#60a5fa}
+.app-loading-visual{position:relative;height:132px;margin:18px 0 8px;overflow:hidden}
+.loading-car-svg{position:absolute;width:245px;left:-260px;bottom:23px;animation:driveCar 2.7s cubic-bezier(.45,0,.55,1) infinite}
+.loading-car-svg .car-body{fill:#2563eb}.loading-car-svg .car-roof{fill:#3b82f6}.loading-car-svg .car-window{fill:#dbeafe}
+.loading-car-svg .car-wheel{fill:#111827;animation:wheelSpin .45s linear infinite;transform-box:fill-box;transform-origin:center}
+.loading-car-svg .car-hub{fill:#94a3b8}
+.app-loading-glow{position:absolute;width:150px;height:80px;left:50%;bottom:30px;transform:translateX(-50%);background:rgba(37,99,235,.22);filter:blur(28px);border-radius:50%}
+.road-line{position:absolute;left:0;right:0;bottom:20px;height:2px;background:repeating-linear-gradient(90deg,rgba(148,163,184,.6) 0 28px,transparent 28px 52px);animation:roadMove .8s linear infinite}
+.app-loading-title{font-size:19px;font-weight:900;min-height:24px}.app-loading-sub{margin-top:8px;color:#9aa9c0;font-size:13px;min-height:20px}
+.app-loading-dots{display:flex;justify-content:center;gap:5px;margin-top:17px}.app-loading-dots span{width:6px;height:6px;border-radius:50%;background:#60a5fa;animation:dotPulse 1s ease-in-out infinite}.app-loading-dots span:nth-child(2){animation-delay:.15s}.app-loading-dots span:nth-child(3){animation-delay:.3s}
+#app.app-ready{animation:dashboardIn .42s ease both}
+@keyframes driveCar{0%{left:-260px;opacity:0}12%{opacity:1}50%{left:calc(50% - 122px)}88%{opacity:1}100%{left:calc(100% + 20px);opacity:0}}
+@keyframes wheelSpin{to{transform:rotate(360deg)}}
+@keyframes roadMove{to{background-position:-52px 0}}
+@keyframes dotPulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes dashboardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:650px){
+ .toast{top:12px!important;min-width:0;width:calc(100% - 24px);justify-content:center;text-align:center}
+ .app-loading-panel{padding:30px 20px}.app-loading-brand{font-size:21px}
+}
