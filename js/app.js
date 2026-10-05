@@ -74,14 +74,23 @@ function setAppLoadingStatus(title,sub){if($('appLoadingTitle'))$('appLoadingTit
 function hideAppLoading(){let o=document.getElementById('appLoadingOverlay');if(o){o.classList.add('loading-out');setTimeout(()=>o.remove(),380)}}
 function dateOnlyEnd(x){if(!x)return null;let p=String(x).split('-').map(Number);if(p.length!==3||p.some(Number.isNaN))return null;return new Date(p[0],p[1]-1,p[2],23,59,59,999)}
 function st(x){if(!x)return['MISSING','bad'];let d=dateOnlyEnd(x);if(!d)return['MISSING','bad'];let days=(d-Date.now())/86400000;return days<0?['EXPIRED','bad']:days<=30?['EXPIRING SOON','warn']:['VALID','ok']}
-async function nav(v){if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='add')prefillRecordForm();if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')history();if(v==='docs')docsView();if(v==='report')report()}
-document.querySelectorAll('aside button,.mobile-nav button').forEach(x=>x.onclick=()=>nav(x.dataset.view));
+function closeSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');$('menuToggle')?.setAttribute('aria-expanded','false');document.body.classList.remove('menu-open')}
+function openSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.add('open');m.setAttribute('aria-hidden','false');$('menuToggle')?.setAttribute('aria-expanded','true');document.body.classList.add('menu-open');updateDrawerContext()}
+function updateDrawerContext(){let reg=$('drawerCarReg'),model=$('drawerCarModel'),u=$('drawerUser');if(reg)reg.textContent=car?.registration_no||'No Vehicle';if(model)model.textContent=car?(car.make_model||'Vehicle')+' • '+(car.fuel||''):'Select a vehicle';if(u)u.textContent=user?.email||'Secure Garage'}
+async function nav(v){if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button,.drawer-link').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='add')prefillRecordForm();if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')history();if(v==='docs')docsView();if(v==='report')report();closeSideMenu()}
+document.querySelectorAll('aside button,.mobile-nav button,.drawer-link').forEach(x=>x.onclick=()=>nav(x.dataset.view));
+$('menuToggle')?.addEventListener('click',openSideMenu);
+$('menuClose')?.addEventListener('click',closeSideMenu);
+$('sideMenuBackdrop')?.addEventListener('click',closeSideMenu);
+$('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSideMenu()});
+
 $('toggleAuth').onclick=()=>{signup=!signup;$('authTitle').textContent=signup?'Create account':'Private Car Manager';$('authBtn').textContent=signup?'Create account':'Login';$('toggleAuth').textContent=signup?'Back to login':'Create account'};
 $('authBtn').onclick=async ev=>{ev.preventDefault();if(!db)return toast('Connecting to secure login...');let e=$('email').value.trim(),p=$('password').value;if(!e||!p)return toast('Enter email and password');let r=signup?await db.auth.signUp({email:e,password:p}):await db.auth.signInWithPassword({email:e,password:p});if(r.error)return toast(r.error.message);if(signup)toast('Account created. Check email if confirmation is enabled.')};
 $('logout').onclick=()=>db.auth.signOut();
 async function boot(){let s=await db.auth.getSession();if(s.data.session)start(s.data.session.user);else showLogin();db.auth.onAuthStateChange((_e,s)=>{if(s)start(s.user);else{startedUserId=null;showLogin()}})}
 function showLogin(){let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}let ps=$('policeLogoutStyle');if(ps)ps.remove();$('auth').classList.remove('hidden');$('app').classList.add('hidden');let fab=document.getElementById('dashboardFab');if(fab)fab.remove();let mn=document.getElementById('mobileNav');if(mn)mn.classList.add('auth-hidden');const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}}
-function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car'}
+function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car';updateDrawerContext()}
 async function start(u){
  if(startedUserId===u.id)return;
  startedUserId=u.id;user=u;
