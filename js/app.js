@@ -1140,9 +1140,9 @@ function printVehicleReport(){
    */
   sheet.style.cssText = [
     'display:block!important',
-    'position:relative!important',
-    'left:auto!important',
-    'top:auto!important',
+    'position:fixed!important',
+    'left:0!important',
+    'top:0!important',
     'width:210mm!important',
     'min-width:210mm!important',
     'max-width:210mm!important',
@@ -1185,7 +1185,9 @@ function printVehicleReport(){
       scrollX: 0,
       scrollY: 0,
       width: 794,
-      windowWidth: 794
+      windowWidth: 794,
+      x: 0,
+      y: 0
     },
     jsPDF: {
       unit:'mm',
