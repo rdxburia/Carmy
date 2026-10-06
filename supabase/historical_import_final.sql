@@ -7,6 +7,8 @@ alter table public.records add column if not exists subcategory text;
 alter table public.records add column if not exists original_invoice_total numeric;
 alter table public.records add column if not exists reconciliation_adjustment numeric default 0;
 alter table public.records add column if not exists audit_note text;
+alter table public.insurance_history add column if not exists import_batch_id text;
+alter table public.puc_history add column if not exists import_batch_id text;
 
 grant select,insert,update,delete on public.records to authenticated;
 grant select,insert,update,delete on public.record_items to authenticated;
@@ -54,7 +56,7 @@ begin
   end if;
 
   if exists(select 1 from public.records where car_id=p_car_id and import_batch_id=p_import_batch_id)
-     or exists(select 1 from public.puc_history where car_id=p_car_id and source='historical_import' and p_import_batch_id=coalesce((p_payload->>'import_batch_id'),p_import_batch_id))
+     or exists(select 1 from public.puc_history where car_id=p_car_id and source='historical_import' and import_batch_id=p_import_batch_id)
      or exists(select 1 from public.insurance_history where car_id=p_car_id and source='historical_import' and p_import_batch_id=coalesce((p_payload->>'import_batch_id'),p_import_batch_id))
      or exists(select 1 from public.insurance_claims where car_id=p_car_id and import_batch_id=p_import_batch_id) then
     raise exception 'This historical import batch was already imported';
@@ -73,7 +75,7 @@ begin
   loop
     insert into public.insurance_history(
       user_id,car_id,insurance_company,policy_number,insurance_type,insurance_addons,
-      issue_date,expiry_date,event_type,source,premium_amount,odometer_km,is_km_estimated
+      issue_date,expiry_date,event_type,source,premium_amount,odometer_km,is_km_estimated,import_batch_id
     )
     values(
       v_user,p_car_id,
@@ -92,7 +94,8 @@ begin
       'historical_import',
       nullif(v_policy->>'premium','')::numeric,
       nullif(v_policy->>'odometer_km','')::numeric,
-      coalesce((v_policy->>'is_km_estimated')::boolean,false)
+      coalesce((v_policy->>'is_km_estimated')::boolean,false),
+      p_import_batch_id
     )
     returning id into v_id;
 
@@ -169,7 +172,7 @@ begin
   loop
     insert into public.puc_history(
       user_id,car_id,certificate_number,state,issue_date,expiry_date,
-      event_type,source,odometer_km,is_km_estimated,cost,validity_months
+      event_type,source,odometer_km,is_km_estimated,cost,validity_months,import_batch_id
     )
     values(
       v_user,p_car_id,
@@ -186,7 +189,8 @@ begin
         when v_rec->>'date' is not null and v_rec->>'valid_till' is not null
         then greatest(0,round(extract(epoch from ((v_rec->>'valid_till')::date-(v_rec->>'date')::date))/86400/30.4375))::int
         else null
-      end
+      end,
+      p_import_batch_id
     );
     v_count_puc := v_count_puc + 1;
   end loop;
