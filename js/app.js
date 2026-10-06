@@ -737,4 +737,79 @@ window.editCar=async()=>{if(!car)return false;let old=document.getElementById('e
 async function openReportAndPrint(){await nav('report');setTimeout(()=>window.print(),350)}
 window.openReportAndPrint=openReportAndPrint;
 
+
+/* ===== Historical Import — Phase 1: draft parser + preview only ===== */
+let historicalImportDraft=null;
+function openHistoricalImport(){
+  let old=document.getElementById('historicalImportModal');if(old)old.remove();
+  const m=document.createElement('div');m.id='historicalImportModal';m.className='history-import-modal';
+  m.innerHTML='<div class="history-import-card"><div class="history-import-head"><div><span class="panel-kicker">HISTORICAL DATA</span><h2>Import Old History</h2><p class="muted">Paste old vehicle records. Nothing is saved until the preview is approved.</p></div><button class="ghost" id="hiClose">✕</button></div><div class="history-import-grid"><div><label>RAW HISTORY</label><textarea id="hiRaw" class="history-import-text" placeholder="Paste your old service, PUC, insurance and claim history here…"></textarea><div class="history-import-note">Estimated KM, dates, invoice numbers and original wording are preserved where detected.</div><button class="primary" id="hiParse">BUILD PREVIEW</button></div><div><div id="hiPreview" class="history-import-preview"><div class="history-import-empty"><b>Preview will appear here</b><span>Paste your history and click BUILD PREVIEW.</span></div></div></div></div></div>';
+  document.body.appendChild(m);
+  $('hiClose').onclick=()=>m.remove();
+  $('hiParse').onclick=()=>buildHistoricalPreview($('hiRaw').value);
+  m.onclick=e=>{if(e.target===m)m.remove()};
+}
+function hiDate(s){
+  if(!s)return null;
+  let x=String(s).trim().replace(/\//g,'-'),m=x.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if(m)return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+  m=x.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  return m?m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0'):null;
+}
+function hiMoney(s){if(s===undefined||s===null)return 0;let m=String(s).replace(/,/g,'').match(/[\d]+(?:\.\d+)?/);return m?Number(m[0]):0}
+function hiNum(s){let m=String(s||'').replace(/,/g,'').match(/[\d]+(?:\.\d+)?/);return m?Number(m[0]):null}
+function hiLines(raw){return String(raw||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
+function hiFindDate(line){
+  let m=String(line).match(/(?:Date|Service Date|Claim Date|Issued|Policy Period:)?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i);
+  return m?hiDate(m[1]):null;
+}
+function hiParseRecords(raw){
+  const lines=hiLines(raw),out=[],warnings=[];let section='',current=null;
+  const push=()=>{if(current){if(!current.date)warnings.push('A record without a date was skipped.');else{current.source='historical_import';current.import_batch_id=historicalImportDraft?.import_batch_id;out.push(current)}current=null}};
+  for(const l of lines){
+    if(/periodic regular services/i.test(l)){push();section='service';continue}
+    if(/battery replacement/i.test(l)){push();section='battery';continue}
+    if(/tyre replacement/i.test(l)){push();section='tyre';continue}
+    if(/pollution under control/i.test(l)){push();section='puc';continue}
+    if(/vehicle insurance history/i.test(l)){push();section='insurance';continue}
+    if(/insurance claims log/i.test(l)){push();section='claim';continue}
+    if(/personal out-of-pocket expenses/i.test(l)){push();section='repair';continue}
+    if(section==='puc'&&/^\|?\s*\*?\*?\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/.test(l)){
+      let cells=l.replace(/^\||\|$/g,'').split('|').map(x=>x.replace(/\*/g,'').trim());
+      if(cells.length>=6)out.push({kind:'puc',source:'historical_import',import_batch_id:historicalImportDraft?.import_batch_id,date:hiDate(cells[0]),puc_number:cells[2],state:(cells[3].match(/\b[A-Z]{2}\b/)||['',''])[1],odometer_km:hiNum(cells[1]),is_km_estimated:/est/i.test(cells[1]),valid_till:hiDate(cells[4]),cost:hiMoney(cells[5])});
+      continue;
+    }
+    if(/^(?:####\s*)?(?:service|claim)\s*\d+\s*:/i.test(l)){
+      push();let d=hiFindDate(l),km=hiNum((l.match(/odometer\s*:\s*([0-9,]+)/i)||[])[1]);
+      current={kind:section==='claim'?'claim':'record',date:d,odometer_km:km,is_km_estimated:false,record_type:section==='battery'?'Battery':section==='tyre'?'Tyre Work':section==='repair'?'Accident / Repair':'Regular Service',workshop:null,invoice_number:null,description:l.replace(/^.*?:/,'').trim(),parts_cost:0,labour_cost:0,total_cost:0,items:[]};continue;
+    }
+    if(current){
+      let d=hiFindDate(l);if(d&&!current.date)current.date=d;
+      let km=(l.match(/odometer\s*:\s*([0-9,]+)/i)||[])[1];if(km)current.odometer_km=hiNum(km);
+      let inv=(l.match(/invoice\s*(?:no\.?|number)\s*:\s*([A-Z0-9\/-]+)/i)||[])[1];if(inv)current.invoice_number=inv;
+      let ws=(l.match(/(?:service center|vendor)\s*:\s*(.+)/i)||[])[1];if(ws)current.workshop=ws.replace(/\*+/g,'').trim();
+      let total=(l.match(/total (?:cost|paid)\s*:\s*\*?\*?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(total)current.total_cost=hiMoney(total);
+      let parts=(l.match(/parts(?: cost)?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(parts)current.parts_cost=hiMoney(parts);
+      let labour=(l.match(/labour(?: charges| cost)?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(labour)current.labour_cost=hiMoney(labour);
+      if(/^\-\s+/.test(l)&&!/labour|total cost|invoice|service center|vendor|date|odometer/i.test(l)){let item=l.replace(/^-\s+/,'').replace(/\s+₹\s*[\d,]+(?:\.\d+)?\s*$/,'').trim();let cost=(l.match(/₹\s*([\d,]+(?:\.\d+)?)/)||[])[1];if(item)current.items.push({name:item,cost:hiMoney(cost)})}
+      if(/estimated/i.test(l)&&/odometer/i.test(l))current.is_km_estimated=true;
+    }
+  }
+  push();return {records:out,warnings};
+}
+function hiRenderRow(r){
+ const type=r.kind==='puc'?'PUC':r.kind==='claim'?'Insurance Claim':r.record_type;
+ const km=r.odometer_km==null?'—':Number(r.odometer_km).toLocaleString('en-IN')+(r.is_km_estimated?' · EST':'');
+ const cost=r.total_cost!=null?'₹'+Number(r.total_cost||0).toLocaleString('en-IN'):(r.cost!=null?'₹'+Number(r.cost||0).toLocaleString('en-IN'):'—');
+ return '<div class="history-import-row"><div><b>'+esc(r.date||'No date')+'</b><small>'+esc(type)+'</small></div><div><b>'+esc(km)+'</b><small>'+esc(r.workshop||r.state||'—')+'</small></div><div><b>'+esc(cost)+'</b><small>'+esc(r.invoice_number||r.puc_number||'')+'</small></div><span class="hi-badge '+(r.is_km_estimated?'hi-est':'')+'">'+(r.is_km_estimated?'Estimated KM':'Draft')+'</span></div>';
+}
+function buildHistoricalPreview(raw){
+ if(!car)return toast('Select a vehicle before importing history.','error');
+ const batch='batch_'+new Date().toISOString().replace(/\D/g,'').slice(0,15);
+ historicalImportDraft={import_batch_id:batch,source:'historical_import',raw_text:raw,created_at:new Date().toISOString()};
+ const parsed=hiParseRecords(raw);historicalImportDraft.records=parsed.records;historicalImportDraft.warnings=parsed.warnings;
+ const el=$('hiPreview');if(!el)return;
+ el.innerHTML='<div class="history-import-summary"><div><span>DETECTED</span><b>'+parsed.records.length+'</b></div><div><span>ESTIMATED KM</span><b>'+parsed.records.filter(x=>x.is_km_estimated).length+'</b></div><div><span>WARNINGS</span><b>'+parsed.warnings.length+'</b></div></div><div class="history-import-list">'+(parsed.records.length?parsed.records.map(hiRenderRow).join(''):'<div class="history-import-empty"><b>No structured records detected</b><span>This Phase 1 parser is a draft preview engine; unsupported formats remain untouched.</span></div>')+'</div><div class="history-import-actions"><button class="ghost" onclick="document.getElementById(\'historicalImportModal\')?.remove()">CLOSE</button><button class="primary" onclick="toast(\'Preview approved. Database upload is intentionally disabled in Phase 1.\')">APPROVE PREVIEW</button></div>';
+}
+window.openHistoricalImport=openHistoricalImport;
 function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(err?.message||err||'');return /does not exist|schema cache|PGRST20\d|42P01|42883|Could not find the (table|function)/i.test(m)?'Database setup incomplete: run supabase/'+file+' in Supabase SQL Editor (after Steps 1-4), then refresh. ('+m+')':m}
