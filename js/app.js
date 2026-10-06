@@ -1091,55 +1091,84 @@ function printVehicleReport(){
   }
 
   /*
-   * IMPORTANT:
-   * Do NOT call window.print() on the main application document.
-   * The report lives inside a .view/.view.active layout and the main
-   * document has print rules that hide application views. On some
-   * Chromium builds that results in a completely blank print preview.
-   *
-   * Open a dedicated same-origin print document instead. It contains
-   * ONLY the report, so no dashboard/sidebar/hidden-view CSS can hide it.
+   * Reliable print path:
+   * Print a dedicated iframe document. This completely avoids the
+   * application's .view/display/animation/layout rules and does not
+   * depend on opening a popup/new tab.
    */
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
-  if(!printWindow){
-    toast('Print window was blocked by the browser. Please allow pop-ups for this site.','error');
-    return;
+  document.getElementById('vehicleReportPrintFrame')?.remove();
+
+  const frame = document.createElement('iframe');
+  frame.id = 'vehicleReportPrintFrame';
+  frame.setAttribute('aria-hidden','true');
+  frame.style.cssText =
+    'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1;';
+  document.body.appendChild(frame);
+
+  const doc = frame.contentDocument;
+  if(!doc){
+    frame.remove();
+    return toast('Print engine could not be initialized. Please try again.','error');
   }
 
-  const reportHtml = source.innerHTML;
   const styles = [
-    'css/styles.css',
-    'css/premium.css'
-  ].map(path=>{
-    try{return '<link rel="stylesheet" href="'+new URL(path, location.href).href+'">';}
-    catch(e){return '';}
-  }).join('');
+    new URL('css/styles.css', location.href).href,
+    new URL('css/premium.css', location.href).href
+  ];
 
-  const printDoc = '<!doctype html><html><head>'+
-    '<meta charset="utf-8">'+
-    '<meta name="viewport" content="width=device-width,initial-scale=1">'+
-    '<title>Vehicle Report - '+esc(car?.registration_no||'CarCare Cloud')+'</title>'+
-    styles+
-    '<style>'+
-      'html,body{margin:0!important;padding:0!important;background:#fff!important}'+
-      'body{font-family:Inter,Arial,sans-serif;color:#172033}'+
-      '.report-sheet{margin:0 auto!important;box-shadow:none!important}'+
-      '@page{size:A4;margin:10mm}'+
-      '@media print{html,body{background:#fff!important}.report-sheet{width:100%!important;min-height:277mm!important;margin:0!important;padding:0!important;box-shadow:none!important;border-radius:0!important}.report-section{break-inside:avoid}.report-table{font-size:9px}.report-table th,.report-table td{padding:6px}}'+
-    '</style></head><body>'+
-    reportHtml+
-    '<script>'+
-      'window.addEventListener("load",async function(){'+
-        'try{if(document.fonts&&document.fonts.ready)await document.fonts.ready;}catch(e){}'+
-        'setTimeout(function(){window.focus();window.print();},250);'+
-      '});'+
-    '<\/script>'+
-    '</body></html>';
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">');
+  styles.forEach(href=>{
+    const link=doc.createElement('link');
+    link.rel='stylesheet';
+    link.href=href;
+    doc.head.appendChild(link);
+  });
 
-  printWindow.document.open();
-  printWindow.document.write(printDoc);
-  printWindow.document.close();
-  printWindow.focus();
+  const style=doc.createElement('style');
+  style.textContent=
+    'html,body{margin:0!important;padding:0!important;background:#fff!important}'+
+    'body{font-family:Inter,Arial,sans-serif;color:#172033}'+
+    '.report-sheet{margin:0 auto!important;box-shadow:none!important}'+
+    '@page{size:A4;margin:10mm}'+
+    '@media print{'+
+      'html,body{background:#fff!important}'+
+      '.report-sheet{width:100%!important;min-height:277mm!important;margin:0!important;padding:0!important;box-shadow:none!important;border-radius:0!important}'+
+      '.report-section{break-inside:avoid}'+
+      '.report-table{font-size:9px}'+
+      '.report-table th,.report-table td{padding:6px}'+
+    '}';
+  doc.head.appendChild(style);
+
+  const body=doc.createElement('body');
+  body.innerHTML=source.innerHTML;
+  doc.body.appendChild(body);
+  doc.close();
+
+  let printed=false;
+  const cleanup=()=>{
+    if(frame.parentNode)frame.remove();
+  };
+
+  const doPrint=async()=>{
+    if(printed)return;
+    printed=true;
+    try{
+      if(frame.contentDocument?.fonts?.ready)await frame.contentDocument.fonts.ready;
+    }catch(e){}
+    setTimeout(()=>{
+      try{
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      }finally{
+        setTimeout(cleanup,1200);
+      }
+    },200);
+  };
+
+  frame.onload=doPrint;
+  // Cached stylesheet / about:blank documents can occasionally skip onload.
+  setTimeout(doPrint,1200);
 }
 
 window.printVehicleReport = printVehicleReport;
