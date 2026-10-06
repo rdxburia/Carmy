@@ -120,3 +120,25 @@ input[type=checkbox]{accent-color:var(--c-accent)}
 #docExpiryPopup{z-index:10040!important}
 ::selection{background:#d9e8e1;color:var(--c-ink)}
 @media print{html,body{background:#fff!important;color:#000!important}}
+/* Minimal Overview + Owner Profile */
+.minimal-dashboard{display:flex;flex-direction:column;gap:16px}
+.minimal-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:24px;border:1px solid rgba(15,48,39,.10);border-radius:22px;background:#fff}
+.minimal-hero h2{margin:6px 0 4px;font-size:clamp(28px,4vw,42px);letter-spacing:-.04em}
+.minimal-hero p{margin:0;color:#737a84}
+.minimal-km{text-align:right;padding-left:20px;border-left:1px solid #e7e4dc}
+.minimal-km span,.minimal-card>span{display:block;font-size:10px;letter-spacing:.16em;font-weight:800;color:#8b8a84}
+.minimal-km b{display:block;margin-top:5px;font-size:27px}
+.minimal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.minimal-card{padding:18px;border:1px solid rgba(15,48,39,.09);border-radius:17px;background:#fff}
+.minimal-card b{display:block;margin-top:9px;font-size:19px}
+.minimal-card small{display:block;margin-top:5px;color:#85847e}
+.minimal-status{display:flex;align-items:center;gap:12px;padding:2px 4px;color:#737a84;font-size:13px}
+.minimal-last{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px;border:1px solid rgba(15,48,39,.09);border-radius:18px;background:#fff}
+.minimal-last h3{margin:5px 0 3px}.minimal-last p{margin:0;color:#737a84}
+.minimal-empty{padding:30px}
+.owner-profile-shell{max-width:900px;margin:0 auto}
+.owner-profile-head{margin-bottom:18px}
+.owner-profile-head h2{margin:5px 0}.owner-profile-card{padding:24px}
+.owner-profile-actions{display:flex;gap:10px;justify-content:flex-end}
+@media(max-width:850px){.minimal-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.minimal-hero{padding:18px;align-items:flex-start}.minimal-km{padding-left:12px}.minimal-km b{font-size:21px}.minimal-grid{grid-template-columns:1fr 1fr}.minimal-status{align-items:flex-start;flex-direction:column;gap:5px}.minimal-last{align-items:flex-start;flex-direction:column}.owner-profile-card{padding:16px}.owner-profile-actions{flex-direction:column}.owner-profile-actions button{width:100%}}
