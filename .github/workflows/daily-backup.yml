@@ -1,0 +1,123 @@
+name: Carmy Daily Backup
+
+on:
+  schedule:
+    # 03:00 IST (21:30 UTC) every day
+    - cron: "30 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare backup
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          mkdir -p backup-output
+
+          git bundle create "backup-output/Carmy-$DATE_UTC.bundle" --all
+
+          zip -qr "backup-output/Carmy-$DATE_UTC-source.zip" . \
+            -x ".git/*" \
+               "backup-output/*"
+
+          cat > "backup-output/backup-manifest.json" <<EOF
+          {
+            "backup_date_utc": "$DATE_UTC",
+            "repository": "$GITHUB_REPOSITORY",
+            "commit_sha": "$COMMIT_SHA",
+            "backup_scope": "source-code-and-git-history",
+            "database_backup": "not-yet-configured",
+            "r2_files_backup": "not-yet-configured"
+          }
+          EOF
+
+      - name: Install Google Drive client
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-api-python-client google-auth
+
+      - name: Upload backup to Google Drive
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "Missing GOOGLE_SERVICE_ACCOUNT_JSON secret."
+            exit 1
+          fi
+
+          if [[ -z "$GOOGLE_DRIVE_FOLDER_ID" ]]; then
+            echo "Missing GOOGLE_DRIVE_FOLDER_ID secret."
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          secret = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+          folder_id = os.environ["GOOGLE_DRIVE_FOLDER_ID"]
+
+          info = json.loads(secret)
+          credentials = service_account.Credentials.from_service_account_info(
+              info,
+              scopes=["https://www.googleapis.com/auth/drive.file"],
+          )
+
+          drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+          folder = drive.files().get(
+              fileId=folder_id,
+              fields="id,name,mimeType",
+              supportsAllDrives=True,
+          ).execute()
+
+          if folder.get("mimeType") != "application/vnd.google-apps.folder":
+              raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID is not a Drive folder.")
+
+          for path in sorted(Path("backup-output").iterdir()):
+              metadata = {
+                  "name": path.name,
+                  "parents": [folder_id],
+              }
+              media = MediaFileUpload(
+                  str(path),
+                  resumable=True,
+                  mimetype="application/octet-stream",
+              )
+              uploaded = drive.files().create(
+                  body=metadata,
+                  media_body=media,
+                  fields="id,name,size",
+                  supportsAllDrives=True,
+              ).execute()
+              print(f"Uploaded: {uploaded.get('name')} ({uploaded.get('size')} bytes)")
+
+          print("Google Drive backup upload completed.")
+          PY
+
+      - name: Backup summary
+        run: |
+          echo "Carmy code backup completed."
+          echo "Database and R2 backup will be added after their secure credentials are configured."
