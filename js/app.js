@@ -783,7 +783,7 @@ function hiParseRecords(raw){
       const itemSum=(current.items||[]).reduce((sum,x)=>sum+Number(x.cost||0),0);
       const invoice=Number(current.total_cost||0);
       if(!Number(current.parts_cost||0)&&itemSum>0&&!current.explicit_parts){
-        current.parts_cost=Math.max(0,itemSum-Number(current.labour_cost||0)-Number(current.other_cost||0));
+        current.parts_cost=itemSum;
       }
       const subtotal=Number(current.parts_cost||0)+Number(current.labour_cost||0)+Number(current.other_cost||0);
       if(invoice>0){
@@ -873,7 +873,6 @@ function hiParseRecords(raw){
   push();
   const dated=out.filter(x=>x.date&&x.odometer_km!=null&&(x.kind==='record'||x.kind==='claim')).sort((a,b)=>a.date.localeCompare(b.date));
   for(let i=1;i<dated.length;i++){const prev=Number(dated[i-1].odometer_km),now=Number(dated[i].odometer_km);if(now<prev)addWarning('Odometer decreased — '+dated[i].date+' ('+now.toLocaleString('en-IN')+' km) is lower than previous dated reading '+dated[i-1].date+' ('+prev.toLocaleString('en-IN')+' km). Original values preserved.');}
-  for(let i=0;i<dated.length;i++)for(let j=i+1;j<dated.length;j++){const days=Math.abs((new Date(dated[i].date)-new Date(dated[j].date))/86400000),a=Number(dated[i].odometer_km),b=Number(dated[j].odometer_km);if(days<=1&&a!==b&&Math.abs(a-b)<=5)addWarning('Odometer discrepancy detected — '+dated[i].date+' ('+a.toLocaleString('en-IN')+' km) vs '+dated[j].date+' ('+b.toLocaleString('en-IN')+' km). Data preserved as supplied.');}
   return {records:out,warnings};
 }
 function hiRenderRow(r){
