@@ -14,7 +14,7 @@
       <button class="drawer-link" data-view="docs"><span>05</span><b>Documents</b><em>Private glovebox</em></button>
       <button class="drawer-link" data-view="report"><span>06</span><b>Vehicle Report</b><em>A4 service dossier</em></button>
     </nav>
-    <div class="drawer-footer"><button class="drawer-utility" onclick="openOwnerProfile()">Owner Profile</button><button class="drawer-utility logout-drawer" id="drawerLogout">Sign Out</button><div class="drawer-secure">Private cloud garage <span>●</span></div></div>
+    <div class="drawer-footer"><button class="drawer-utility" data-view="owner">Owner Profile</button><button class="drawer-utility logout-drawer" id="drawerLogout">Sign Out</button><div class="drawer-secure">Private cloud garage <span>●</span></div></div>
   </aside>
 </div><div class="layout"><aside>
 <button class="active" data-view="dashboard">🏠 Dashboard</button><button data-view="cars">🚗 My Cars</button><button data-view="add">🛠 Add Record</button><button data-view="history">📜 History</button><button data-view="docs">📁 Documents</button><button data-view="report">🖨 A4 Report</button></aside><main class="main">
@@ -24,5 +24,6 @@
 <section id="history" class="view"><div class="toolbar"><h2>History</h2><div><select id="year"></select><button class="ghost" onclick="window.print()">Print</button></div></div><div class="card" id="historyTable"></div></section>
 <section id="docs" class="view"><div class="toolbar"><div><h2>Documents</h2><p class="muted">Private PDF/JPG/PNG storage linked to this car.</p></div><div class="doc-toolbar-actions"><button class="ghost" onclick="setDeletePassword()">🔐 Password</button><button class="ghost" onclick="forgotDeletePassword()">↩ Forgot?</button><button class="primary" onclick="openDocUploader()">＋ Add Document</button></div></div><div class="card"><div id="docList" style="margin-top:15px"></div></div></section>
 <section id="report" class="view"><div class="toolbar no-print"><div><h2>A4 Vehicle Report</h2><p class="muted">Use browser Print → Save as PDF.</p></div><button class="primary" onclick="window.print()">PRINT / SAVE PDF</button></div><div id="reportArea"></div></section>
+<section id="owner" class="view"><div id="ownerProfileContent"></div></section>
 </main></div></div><nav class="mobile-nav no-print" id="mobileNav"><div class="mobile-car-tab" id="mobileCarTab">🚗 <span id="mobileCarReg">No Car</span></div><button class="active" data-view="dashboard">⌂<br>Home</button><button data-view="cars">🚗<br>Cars</button><button data-view="add">＋<br>Add</button><button data-view="history">▤<br>History</button><button data-view="docs">▣<br>Docs</button></nav><div id="toast" class="toast"></div>
 <!-- Maintenance mode preserved for future use in js/maintenance.js and CSS. To reactivate, restore the maintenanceGate markup and maintenance.js script include. -->
