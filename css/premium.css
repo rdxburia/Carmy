@@ -1,119 +1,122 @@
-/* CarCare Cloud — Range Rover light theme. Loaded after styles.css; overrides only. */
+/* CarCare Cloud — minimal light theme. One font (Inter), white background, one green accent. Overrides styles.css. */
 :root{
-  --rr-bg:#faf9f6;--rr-white:#fff;--rr-panel:#fff;--rr-soft:#f4f2ec;
-  --rr-green:#0f3027;--rr-green-2:#1b4a3b;--rr-gold:#b08d4a;--rr-gold-2:#d4b676;
-  --rr-ink:#17201c;--rr-mute:#6b716c;--rr-line:rgba(15,48,39,.12);--rr-line-2:rgba(176,141,74,.35);
-  --rr-ok:#1f8a5b;--rr-warn:#b7791f;--rr-bad:#c0392b;
-  --serif:"Cormorant Garamond","Playfair Display",Georgia,serif;
-  --bg:var(--rr-bg);--card:#fff;--ink:var(--rr-ink);--muted:var(--rr-mute);--line:var(--rr-line);--b:var(--rr-green);
-  --auto-bg:var(--rr-bg);--auto-cyan:var(--rr-gold);--auto-blue:var(--rr-green);--auto-green:var(--rr-ok);--auto-yellow:var(--rr-warn);--auto-red:var(--rr-bad);
-  --auto-text:var(--rr-ink);--auto-muted:var(--rr-mute);--auto-line:var(--rr-line);--auto-surface:#fff;--auto-surface-2:var(--rr-soft);
-  --premium-panel:#fff;--premium-ink:var(--rr-ink);--premium-line:var(--rr-line);--premium-soft:var(--rr-soft);--premium-muted:var(--rr-mute);
-  --premium-accent:var(--rr-green);--premium-accent-soft:rgba(15,48,39,.06);--premium-deep:var(--rr-green);
-  --accent-a:var(--rr-green);--accent-b:var(--rr-gold);--ok:var(--rr-ok);--warn:var(--rr-warn);--bad:var(--rr-bad);
-  color-scheme:light;
+  --c-bg:#ffffff;--c-soft:#f7f7f5;--c-line:#e6e6e1;--c-ink:#141414;--c-mute:#6b6f6b;
+  --c-accent:#14352b;--c-accent-2:#1d4d3e;--c-ok:#1f7a54;--c-warn:#a8690f;--c-bad:#b83a2e;
+  --bg:var(--c-bg);--card:#fff;--ink:var(--c-ink);--muted:var(--c-mute);--line:var(--c-line);--b:var(--c-accent);
+  --auto-bg:var(--c-bg);--auto-cyan:var(--c-accent);--auto-blue:var(--c-accent);--auto-green:var(--c-ok);--auto-yellow:var(--c-warn);--auto-red:var(--c-bad);
+  --auto-text:var(--c-ink);--auto-muted:var(--c-mute);--auto-line:var(--c-line);--auto-surface:#fff;--auto-surface-2:var(--c-soft);
+  --premium-panel:#fff;--premium-ink:var(--c-ink);--premium-line:var(--c-line);--premium-soft:var(--c-soft);--premium-muted:var(--c-mute);
+  --premium-accent:var(--c-accent);--premium-accent-soft:var(--c-soft);--premium-deep:var(--c-accent);
+  --ok:var(--c-ok);--warn:var(--c-warn);--bad:var(--c-bad);color-scheme:light;
 }
-html,body{background:var(--rr-bg)!important;color:var(--rr-ink)!important}
-body{font-family:Inter,system-ui,sans-serif!important;
-  background:radial-gradient(900px 480px at 90% -10%,rgba(176,141,74,.10),transparent 60%),radial-gradient(800px 500px at -10% 0%,rgba(15,48,39,.06),transparent 60%),var(--rr-bg)!important}
-h1,h2,h3,.hero h1,.garage-hero h2,.drawer-head h3{font-family:var(--serif)!important;font-weight:700!important;letter-spacing:.01em!important;color:var(--rr-green)!important}
-.eyebrow,.panel-kicker,.drawer-kicker,.report-kicker,.glass-stat>span,.digital-cluster>span{color:var(--rr-gold)!important;letter-spacing:.22em!important;font-size:10.5px!important;font-weight:700!important;text-transform:uppercase}
-.muted,small{color:var(--rr-mute)!important}
-body #dashboard.active b,body #dashboard.active p,body #dashboard.active em,body #dashboard.active span:not(.doc-badge):not(.timeline-node){color:var(--rr-ink)}
-body #dashboard.active .panel-kicker,body #dashboard.active .eyebrow,body #dashboard.active .glass-stat>span{color:var(--rr-gold)}
-body #dashboard.active small{color:var(--rr-mute)}
+*,*::before,*::after{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif!important}
+html,body{background:#fff!important;color:var(--c-ink)!important}
+body{letter-spacing:0!important}
+h1,h2,h3,h4{font-weight:600!important;letter-spacing:-.01em!important;color:var(--c-ink)!important}
+.muted,small{color:var(--c-mute)!important}
 
-/* header + brand */
-.top{background:rgba(255,255,255,.88)!important;backdrop-filter:blur(16px)!important;-webkit-backdrop-filter:blur(16px)!important;border-bottom:1px solid var(--rr-line)!important;box-shadow:0 1px 0 var(--rr-line-2)!important}
-.brand,.top .brand{font-family:var(--serif)!important;text-transform:uppercase;letter-spacing:.2em!important;font-weight:700!important;color:var(--rr-green)!important;font-size:17px!important}
-.brand i{color:var(--rr-gold)!important;font-style:normal!important}
-.brand-mark{background:var(--rr-green)!important;color:var(--rr-gold-2)!important;border:1px solid var(--rr-gold)!important;border-radius:50%!important;font-family:var(--serif);letter-spacing:0!important}
-.menu-toggle{background:#fff!important;border:1px solid var(--rr-line)!important;border-radius:12px!important}
-.menu-toggle span{background:var(--rr-green)!important}
+/* header */
+.top{background:#fff!important;backdrop-filter:none!important;border-bottom:1px solid var(--c-line)!important;box-shadow:none!important}
+.brand,.top .brand{font-size:16px!important;font-weight:700!important;letter-spacing:.02em!important;text-transform:none!important;color:var(--c-ink)!important}
+.brand i{color:var(--c-accent)!important;font-style:normal!important}
+.brand-mark{background:var(--c-accent)!important;color:#fff!important;border:0!important;border-radius:8px!important;box-shadow:none!important}
+.menu-toggle{background:#fff!important;border:1px solid var(--c-line)!important;border-radius:10px!important;box-shadow:none!important}
+.menu-toggle span{background:var(--c-ink)!important}
+#brandHome{cursor:pointer;user-select:none}#brandHome:focus-visible{outline:2px solid var(--c-accent);outline-offset:4px;border-radius:8px}
 
 /* surfaces */
 .card,.glass-panel,.glass-stat,.doc-col,.loginbox,.step5-toolbar,.edit-modal-card,.doc-upload-card,.step5-modal-card,.sale-modal-card,.sale-generated-card,.doc-popup{
-  background:#fff!important;color:var(--rr-ink)!important;border:1px solid var(--rr-line)!important;border-radius:16px!important;
-  box-shadow:0 10px 34px rgba(15,48,39,.07)!important}
-.dangerbox{background:#fdf1ef!important;color:#7a241b!important;border:1px solid rgba(192,57,43,.35)!important;border-radius:14px!important}
-.glass-stat b,.digital-cluster strong{font-family:var(--serif)!important;font-size:30px!important;font-weight:700!important;color:var(--rr-green)!important}
-body #dashboard.active .glass-stat b.ok,.ok{color:var(--rr-ok)!important}
-body #dashboard.active .glass-stat b.warn,.warn{color:var(--rr-warn)!important}
-body #dashboard.active .glass-stat b.bad,body #dashboard.active .glass-stat b.danger,.bad{color:var(--rr-bad)!important}
-.garage-hero{background:linear-gradient(135deg,#fff,#f1eee6 70%,#e9e3d3)!important;border:1px solid var(--rr-line-2)!important;border-radius:22px!important;box-shadow:0 20px 50px rgba(15,48,39,.10)!important}
-.garage-hero:after{background:rgba(176,141,74,.14)!important}
-.avatar-glow{background:radial-gradient(circle,rgba(176,141,74,.28),transparent 65%)!important}
-.avatar-car{filter:drop-shadow(0 14px 14px rgba(15,48,39,.25))!important}
-.digital-cluster{background:var(--rr-green)!important;border:1px solid var(--rr-gold)!important;border-radius:14px!important}
-.digital-cluster strong{font-family:"JetBrains Mono",ui-monospace,monospace!important;color:var(--rr-gold-2)!important;letter-spacing:.06em}
-body #dashboard.active .digital-cluster span,body #dashboard.active .digital-cluster em{color:var(--rr-gold-2)}
-.health-badge{background:#fff!important;border:1px solid var(--rr-line-2)!important;letter-spacing:.14em!important}
-.spend-bars i{background:linear-gradient(90deg,var(--rr-green),var(--rr-gold))!important}
-.timeline-event{background:var(--rr-soft)!important;border:1px solid var(--rr-line)!important;color:var(--rr-ink)!important}
-.timeline-detail{background:#fff!important;border-color:var(--rr-line)!important;color:var(--rr-mute)!important}
-.timeline-node{background:var(--rr-gold)!important;box-shadow:0 0 0 4px rgba(176,141,74,.18)!important}
-.maintenance-timeline:before{background:linear-gradient(var(--rr-gold),transparent)!important}
+  background:#fff!important;color:var(--c-ink)!important;border:1px solid var(--c-line)!important;border-radius:12px!important;box-shadow:none!important;backdrop-filter:none!important}
+.dangerbox{background:#fdf3f1!important;color:#7a241b!important;border:1px solid #efc9c3!important;border-radius:10px!important}
+.edit-modal-card,.doc-upload-card,.step5-modal-card,.sale-modal-card,.sale-generated-card,.doc-popup{box-shadow:0 20px 60px rgba(0,0,0,.14)!important}
+
+/* ===== dashboard: kill the old dark theme ===== */
+#dashboard#dashboard.active,#dashboard#dashboard.active .hero{background:transparent!important;border:0!important;box-shadow:none!important}
+#dashboard#dashboard.active :is(h1,h2,h3,b,strong,p,span,em,div,i){color:var(--c-ink)!important;text-shadow:none!important}
+#dashboard#dashboard.active :is(small,.muted,.eyebrow,.panel-kicker,.glass-stat>span,.digital-cluster>span,.digital-cluster em,.spend-bars span,.timeline-date,.timeline-main small,.garage-avatar>span,.gauge-value small,.radial-gauge span,.hero .muted,.timeline-empty){color:var(--c-mute)!important}
+#dashboard#dashboard.active :is(.eyebrow,.panel-kicker,.glass-stat>span,.digital-cluster>span){font-size:11px!important;letter-spacing:.12em!important;font-weight:600!important;text-transform:uppercase}
+#dashboard#dashboard.active :is(.garage-hero,.glass-panel,.glass-stat,.digital-cluster,.flip-front,.flip-back,.timeline-empty){background:#fff!important;border:1px solid var(--c-line)!important;box-shadow:none!important;backdrop-filter:none!important}
+#dashboard#dashboard.active .garage-hero{border-radius:14px!important;background:var(--c-soft)!important}
+#dashboard#dashboard.active .garage-hero::before,#dashboard#dashboard.active .garage-hero::after,.avatar-glow{display:none!important}
+#dashboard#dashboard.active .garage-hero h2{font-size:30px!important;font-weight:700!important}
+#dashboard#dashboard.active .digital-cluster{border-radius:12px!important}
+#dashboard#dashboard.active .digital-cluster strong,#dashboard#dashboard.active .glass-stat b,#dashboard#dashboard.active .gauge-value{font-size:26px!important;font-weight:700!important;color:var(--c-ink)!important;letter-spacing:-.01em!important;font-variant-numeric:tabular-nums}
+#dashboard#dashboard.active .glass-stat b.ok,#dashboard#dashboard.active .health-badge.ok,#dashboard#dashboard.active .health-badge.ok *{color:var(--c-ok)!important}
+#dashboard#dashboard.active .glass-stat b.warn,#dashboard#dashboard.active .health-badge.warn,#dashboard#dashboard.active .health-badge.warn *{color:var(--c-warn)!important}
+#dashboard#dashboard.active .glass-stat b.danger,#dashboard#dashboard.active .glass-stat b.bad,#dashboard#dashboard.active .health-badge.danger,#dashboard#dashboard.active .health-badge.danger *{color:var(--c-bad)!important}
+#dashboard#dashboard.active .glass-stat b{background:transparent!important;padding:0!important}
+#dashboard#dashboard.active .health-badge{background:#fff!important;border:1px solid var(--c-line)!important;letter-spacing:.06em!important;box-shadow:none!important}
+#dashboard#dashboard.active .health-badge i{box-shadow:none!important}
+#dashboard#dashboard.active .avatar-car{filter:none!important;animation:none!important}
+#dashboard#dashboard.active .spend-bars i{background:var(--c-accent)!important;box-shadow:none!important;border-radius:4px!important}
+#dashboard#dashboard.active .radial-gauge{box-shadow:none!important;background:conic-gradient(var(--c-accent) var(--gauge,0%),var(--c-line) 0)!important}
+#dashboard#dashboard.active .radial-gauge>div{background:#fff!important}
+#dashboard#dashboard.active .timeline-event{background:var(--c-soft)!important;border:1px solid var(--c-line)!important;box-shadow:none!important}
+#dashboard#dashboard.active .timeline-event:hover{background:#f0f0ec!important}
+#dashboard#dashboard.active .timeline-detail{background:#fff!important;border:1px solid var(--c-line)!important}
+#dashboard#dashboard.active .timeline-node{background:var(--c-accent)!important;box-shadow:none!important}
+.maintenance-timeline:before{background:var(--c-line)!important}
+#dashboard#dashboard.active .flip-card{background:transparent!important}
+#dashboard#dashboard.active .ghost{background:#fff!important;color:var(--c-accent)!important;border:1px solid var(--c-line)!important;box-shadow:none!important}
+#dashboard#dashboard.active .primary{background:var(--c-accent)!important;color:#fff!important}
 
 /* buttons */
-button{transition:transform .18s,box-shadow .18s,background .18s,border-color .18s}
-button.primary,.primary{background:linear-gradient(135deg,var(--rr-green-2),var(--rr-green))!important;color:#f6ecd2!important;border:1px solid var(--rr-gold)!important;border-radius:12px!important;font-weight:700!important;text-transform:uppercase;font-size:12.5px!important;letter-spacing:.14em!important;box-shadow:0 8px 22px rgba(15,48,39,.22)!important}
-button.primary:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(15,48,39,.3)!important}
-button.ghost,.ghost{background:#fff!important;color:var(--rr-green)!important;border:1px solid var(--rr-line-2)!important;border-radius:12px!important}
-button.ghost:hover{background:var(--rr-soft)!important;border-color:var(--rr-gold)!important}
-button.danger,.danger{background:#fff!important;color:var(--rr-bad)!important;border:1px solid rgba(192,57,43,.4)!important;border-radius:12px!important}
+button{transition:background .15s,border-color .15s,transform .15s}
+button.primary,.primary{background:var(--c-accent)!important;color:#fff!important;border:1px solid var(--c-accent)!important;border-radius:10px!important;font-weight:600!important;font-size:13px!important;letter-spacing:.02em!important;text-transform:none!important;box-shadow:none!important}
+button.primary:hover{background:var(--c-accent-2)!important}
+button.ghost,.ghost{background:#fff!important;color:var(--c-accent)!important;border:1px solid var(--c-line)!important;border-radius:10px!important;box-shadow:none!important}
+button.ghost:hover{background:var(--c-soft)!important;border-color:#cfcfc8!important}
+button.danger,.danger{background:#fff!important;color:var(--c-bad)!important;border:1px solid #e8c3be!important;border-radius:10px!important;box-shadow:none!important}
 button:active{transform:scale(.98)}
 
 /* forms */
-label,.field label{color:var(--rr-green)!important;font-size:11px!important;letter-spacing:.13em;text-transform:uppercase;font-weight:700!important}
-input,select,textarea{background:#fff!important;color:var(--rr-ink)!important;border:1px solid rgba(15,48,39,.2)!important;border-radius:11px!important}
-input::placeholder,textarea::placeholder{color:#9aa09b!important}
-input:focus,select:focus,textarea:focus{outline:none!important;border-color:var(--rr-gold)!important;box-shadow:0 0 0 3px rgba(176,141,74,.2)!important}
-input[type=checkbox]{accent-color:var(--rr-green)}
-.choice-card{background:#fff!important;border:1px solid var(--rr-line)!important;color:var(--rr-ink)!important}
-.choice-card:hover{border-color:var(--rr-gold)!important;background:var(--rr-soft)!important}
-.choice-card:has(input:checked){border-color:var(--rr-green)!important;background:rgba(15,48,39,.06)!important;box-shadow:0 0 0 2px rgba(176,141,74,.25)!important}
-.choice-check{background:#fff!important;border-color:rgba(15,48,39,.25)!important}
-.choice-card:has(input:checked) .choice-check{background:var(--rr-green)!important;border-color:var(--rr-green)!important;color:var(--rr-gold-2)!important}
-.service-item-row{background:var(--rr-soft)!important;border:1px solid var(--rr-line)!important;border-radius:12px!important}
-.service-item-detail{border-top-color:var(--rr-line-2)!important}
+label,.field label{color:var(--c-mute)!important;font-size:12px!important;letter-spacing:.02em!important;text-transform:none!important;font-weight:600!important}
+input,select,textarea{background:#fff!important;color:var(--c-ink)!important;border:1px solid #d9d9d3!important;border-radius:10px!important;box-shadow:none!important}
+input::placeholder,textarea::placeholder{color:#a3a7a3!important}
+input:focus,select:focus,textarea:focus{outline:none!important;border-color:var(--c-accent)!important;box-shadow:0 0 0 3px rgba(20,53,43,.12)!important}
+input[type=checkbox]{accent-color:var(--c-accent)}
+.choice-card{background:#fff!important;border:1px solid var(--c-line)!important;color:var(--c-ink)!important}
+.choice-card:hover{background:var(--c-soft)!important;border-color:#cfcfc8!important}
+.choice-card:has(input:checked){border-color:var(--c-accent)!important;background:#f1f6f3!important;box-shadow:none!important}
+.choice-check{background:#fff!important;border-color:#cfcfc8!important}
+.choice-card:has(input:checked) .choice-check{background:var(--c-accent)!important;border-color:var(--c-accent)!important;color:#fff!important}
+.service-item-row{background:var(--c-soft)!important;border:1px solid var(--c-line)!important;border-radius:10px!important}
+.service-item-detail{border-top-color:var(--c-line)!important}
 
 /* tables + docs */
-.table th{color:var(--rr-gold)!important;background:transparent!important;letter-spacing:.14em;font-size:10.5px!important;text-transform:uppercase;border-bottom:1px solid var(--rr-line-2)!important}
-.table td{color:var(--rr-ink)!important;border-bottom:1px solid var(--rr-line)!important;background:transparent!important}
-.doc-row,.flip-front,.flip-back,.doc-empty{background:var(--rr-soft)!important;border:1px solid var(--rr-line)!important;color:var(--rr-ink)!important;border-radius:14px!important}
-.doc-badge.active,.doc-badge.ok{color:var(--rr-ok)!important;background:rgba(31,138,91,.1)!important}
-.doc-badge.soon,.doc-badge.warn{color:var(--rr-warn)!important;background:rgba(183,121,31,.12)!important}
-.doc-badge.expired,.doc-badge.bad{color:var(--rr-bad)!important;background:rgba(192,57,43,.1)!important}
+.table th{color:var(--c-mute)!important;background:transparent!important;font-size:11px!important;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--c-line)!important}
+.table td{color:var(--c-ink)!important;border-bottom:1px solid var(--c-line)!important;background:transparent!important}
+.doc-row,.flip-front,.flip-back,.doc-empty{background:var(--c-soft)!important;border:1px solid var(--c-line)!important;color:var(--c-ink)!important;border-radius:10px!important}
+.doc-badge.active,.doc-badge.ok{color:var(--c-ok)!important;background:#eaf5ef!important}
+.doc-badge.soon,.doc-badge.warn{color:var(--c-warn)!important;background:#fbf1de!important}
+.doc-badge.expired,.doc-badge.bad{color:var(--c-bad)!important;background:#fbe9e6!important}
 
 /* login */
-#auth,.login{background:radial-gradient(900px 520px at 50% -10%,rgba(176,141,74,.16),transparent 65%),var(--rr-bg)!important}
-.loginbox{padding:34px!important;border-radius:22px!important}
-.loginbox h1{font-size:34px!important}
+#auth,.login{background:#fff!important}
+.loginbox{padding:32px!important;border-radius:16px!important;box-shadow:0 12px 40px rgba(0,0,0,.07)!important}
+.loginbox h1{font-size:26px!important}
 
 /* drawer, fab, toast */
-.side-drawer{background:#fff!important;border-right:1px solid var(--rr-line-2)!important;color:var(--rr-ink)!important}
-.drawer-link{background:transparent!important;color:var(--rr-ink)!important;border:1px solid transparent!important;border-radius:14px!important}
-.drawer-link b{color:var(--rr-green)!important}
-.drawer-link span{color:var(--rr-gold)!important;font-family:var(--serif)}
-.drawer-link em{color:var(--rr-mute)!important;font-style:normal}
-.drawer-link:hover,.drawer-link.active{background:var(--rr-soft)!important;border-color:var(--rr-line-2)!important}
-.drawer-car,.drawer-utility{background:var(--rr-soft)!important;border:1px solid var(--rr-line)!important;color:var(--rr-green)!important;border-radius:14px!important}
-.drawer-close{color:var(--rr-green)!important;background:transparent!important}
-.side-menu-backdrop{background:rgba(15,48,39,.35)!important;backdrop-filter:blur(3px)}
-.fab-main{background:linear-gradient(135deg,var(--rr-green-2),var(--rr-green))!important;color:var(--rr-gold-2)!important;border:1px solid var(--rr-gold)!important;box-shadow:0 14px 32px rgba(15,48,39,.3)!important}
-#dashboardFab .fab-menu,#dashboard.active .fab-menu{background:#fff!important;border:1px solid var(--rr-line-2)!important;border-radius:16px!important;box-shadow:0 16px 40px rgba(15,48,39,.15)!important}
-#dashboard.active .fab-menu button,.fab-menu button{color:var(--rr-green)!important;background:transparent!important}
-.fab-menu button:hover{background:var(--rr-soft)!important}
+.side-drawer{background:#fff!important;border-right:1px solid var(--c-line)!important;color:var(--c-ink)!important}
+.drawer-link{background:transparent!important;color:var(--c-ink)!important;border:1px solid transparent!important;border-radius:10px!important}
+.drawer-link b{color:var(--c-ink)!important}.drawer-link span{color:var(--c-mute)!important}.drawer-link em{color:var(--c-mute)!important;font-style:normal}
+.drawer-link:hover,.drawer-link.active{background:var(--c-soft)!important;border-color:var(--c-line)!important}
+.drawer-kicker{color:var(--c-mute)!important;letter-spacing:.12em}
+.drawer-car,.drawer-utility{background:var(--c-soft)!important;border:1px solid var(--c-line)!important;color:var(--c-ink)!important;border-radius:10px!important}
+.drawer-close{color:var(--c-ink)!important;background:transparent!important}
+.side-menu-backdrop{background:rgba(0,0,0,.3)!important;backdrop-filter:none!important}
+.fab-main{background:var(--c-accent)!important;color:#fff!important;border:0!important;box-shadow:0 8px 24px rgba(0,0,0,.18)!important}
+#dashboardFab .fab-menu,#dashboard#dashboard.active .fab-menu{background:#fff!important;border:1px solid var(--c-line)!important;border-radius:12px!important;box-shadow:0 12px 32px rgba(0,0,0,.12)!important}
+#dashboardFab .fab-menu button,#dashboard#dashboard.active .fab-menu button{color:var(--c-ink)!important;background:transparent!important}
+.fab-menu button:hover{background:var(--c-soft)!important}
 #dashboardFab:not(.open) .fab-menu{pointer-events:none}
-.toast{background:var(--rr-green)!important;color:#f6ecd2!important;border:1px solid var(--rr-gold)!important;border-radius:14px!important}
+.toast{background:var(--c-ink)!important;color:#fff!important;border:0!important;border-radius:10px!important}
 
 /* modals (z-index bug fix kept) */
 #editCarModal,#insurancePicker{z-index:10030!important}
-#editCarModal,#insurancePicker,#editServiceRecordModal,#docUploadModal,#ownerProfileModal,#vehicleHistoryModal,#saleFormsModal{background:rgba(15,48,39,.38)!important;backdrop-filter:blur(6px)}
+#editCarModal,#insurancePicker,#editServiceRecordModal,#docUploadModal,#ownerProfileModal,#vehicleHistoryModal,#saleFormsModal{background:rgba(0,0,0,.4)!important;backdrop-filter:none!important}
 #editCarModal{overflow:auto}
-#insurancePicker>div{background:#fff!important;color:var(--rr-ink)!important;border:1px solid var(--rr-line-2)!important}
+#insurancePicker>div{background:#fff!important;color:var(--c-ink)!important;border:1px solid var(--c-line)!important}
 #docExpiryPopup{z-index:10040!important}
-
-::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#cfc7b3;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
-::selection{background:var(--rr-gold-2);color:var(--rr-green)}
+::selection{background:#d9e8e1;color:var(--c-ink)}
 @media print{html,body{background:#fff!important;color:#000!important}}
