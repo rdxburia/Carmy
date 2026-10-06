@@ -983,21 +983,76 @@ function hiConvertEstimated(id){
 async function hiApproveImport(){
   if(!historicalImportDraft||historicalImportDraft.warnings?.length)return toast('Resolve all warnings before approval.','error');
   if(!db||!car)return toast('Secure database connection is not ready.','error');
-  const btn=$('hiApprove');if(btn)btn.disabled=true;
-  showOperationOverlay('Importing historical history…','Atomic batch is being committed to Supabase');
+
+  const btn=$('hiApprove');
+  if(btn){btn.disabled=true;btn.dataset.oldText=btn.textContent;btn.textContent='⏳ SAVING…';}
+
+  showOperationOverlay('Processing Atomic Import…','Saving validated history securely to Supabase');
+
   try{
-    const payload={import_batch_id:historicalImportDraft.import_batch_id,records:historicalImportDraft.records,warnings:[]};
-    const {data,error}=await db.rpc('import_historical_batch',{p_car_id:car.id,p_import_batch_id:historicalImportDraft.import_batch_id,p_payload:payload});
+    const draft=historicalImportDraft;
+    const payload={
+      import_batch_id:draft.import_batch_id,
+      records:draft.records,
+      warnings:[]
+    };
+
+    // The RPC is the actual approval/commit point.
+    // It runs the complete historical import atomically in Supabase.
+    const {data,error}=await db.rpc('import_historical_batch',{
+      p_car_id:car.id,
+      p_import_batch_id:draft.import_batch_id,
+      p_payload:payload
+    });
+
     if(error)throw error;
-    await loadData();await nav('history');
-    document.getElementById('historicalImportModal')?.remove();
-    historicalImportDraft=null;historicalImportSelectedWarning=null;
-    toast('Historical history imported successfully.');
+
+    const importedRecords=Number(data?.records||0);
+    const importedItems=Number(data?.record_items||0);
+    const importedPuc=Number(data?.puc||0);
+    const importedInsurance=Number(data?.insurance||0);
+    const importedClaims=Number(data?.claims||0);
+    const importedTotal=importedRecords+importedPuc+importedInsurance+importedClaims;
+
+    hideOperationOverlay();
+
+    // IMPORTANT: database commit succeeded. From this point onward,
+    // a refresh/render failure must never be reported as an import failure.
+    toast(
+      'Import Successful! '+importedTotal+' historical records & certificates added to Vehicle History.'
+    );
+
+    // Close the preview after the success feedback is visible.
+    setTimeout(async()=>{
+      document.getElementById('historicalImportModal')?.remove();
+      historicalImportDraft=null;
+      historicalImportSelectedWarning=null;
+
+      try{
+        await loadData();
+        await nav('history');
+      }catch(refreshErr){
+        console.error('Historical import refresh failed after successful commit:',refreshErr);
+        toast('Import saved successfully, but Vehicle History refresh failed. Please refresh the page.','error');
+      }
+    },1500);
+
   }catch(err){
-    console.error('Historical import failed:',err);
-    toast('Import failed: '+(err?.message||'Database function not installed or import was rejected.'),'error');
+    console.error('Historical import failed before commit:',err);
+    hideOperationOverlay();
+    toast(
+      'Import failed: '+(
+        err?.message||
+        'Database import was rejected.'
+      ),
+      'error'
+    );
     hiRevalidateDraft();
-  }finally{hideOperationOverlay();}
+    if(btn){
+      btn.disabled=false;
+      btn.textContent=btn.dataset.oldText||'✓ APPROVE & IMPORT HISTORY';
+    }
+  }
 }
 function buildHistoricalPreview(raw){
   if(!car)return toast('Select a vehicle before importing history.','error');
