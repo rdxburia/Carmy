@@ -1094,10 +1094,9 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
    ========================================================= */
 
 function printVehicleReport(){
-  const source = document.getElementById('reportArea');
-  const originalSheet = source?.querySelector('.report-sheet');
+  const sheet = document.getElementById('reportArea')?.querySelector('.report-sheet');
 
-  if(!originalSheet || !originalSheet.innerHTML.trim()){
+  if(!sheet || !sheet.innerHTML.trim()){
     toast('Vehicle Report is still loading. Please open the report once and try again.','error');
     return;
   }
@@ -1108,65 +1107,20 @@ function printVehicleReport(){
   }
 
   /*
-   * A4 FIX:
-   * The browser report is 210mm wide, but html2pdf also adds page
-   * margins. That made the old canvas wider than the printable area,
-   * so the left side of the report was clipped.
+   * IMPORTANT:
+   * Never render a clone outside the viewport. html2canvas can return
+   * a blank canvas for off-screen/negative-position elements.
    *
-   * Render a dedicated 190mm A4-content clone instead:
-   * 210mm page - 10mm left - 10mm right = 190mm.
+   * Instead, render the SAME visible report element and temporarily
+   * normalize it to the exact A4 page width. This keeps all fonts,
+   * tables, cards and content in the real DOM.
    */
-  const stage = document.createElement('div');
-  stage.id = 'vehicleReportPdfStage';
-  stage.style.cssText = [
-    'position:fixed',
-    'left:-10000px',
-    'top:0',
-    'width:190mm',
-    'margin:0',
-    'padding:0',
-    'background:#fff',
-    'box-sizing:border-box',
-    'z-index:-1'
-  ].join(';');
-
-  const clone = originalSheet.cloneNode(true);
-  clone.removeAttribute('id');
-  clone.style.cssText = [
-    'display:block',
-    'width:190mm',
-    'min-height:277mm',
-    'margin:0!important',
-    'padding:10mm!important',
-    'box-sizing:border-box',
-    'background:#fff',
-    'color:#172033',
-    'box-shadow:none!important',
-    'border-radius:0!important',
-    'overflow:visible!important'
-  ].join(';');
-
-  /*
-   * Force every layout element to respect the A4 content width.
-   * This prevents flex/grid/table children from keeping the original
-   * 210mm desktop width and getting cropped on the left.
-   */
-  const fix = document.createElement('style');
-  fix.textContent = [
-    '#vehicleReportPdfStage *{box-sizing:border-box!important;max-width:100%!important}',
-    '#vehicleReportPdfStage .report-table{width:100%!important;table-layout:fixed!important}',
-    '#vehicleReportPdfStage .report-table th,#vehicleReportPdfStage .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
-    '#vehicleReportPdfStage img{max-width:100%!important;height:auto!important}',
-    '#vehicleReportPdfStage .report-section{break-inside:avoid}',
-    '#vehicleReportPdfStage .report-grid{width:100%!important}',
-    '#vehicleReportPdfStage .report-card{min-width:0!important}'
-  ].join('');
-
-  stage.appendChild(fix);
-  stage.appendChild(clone);
-  document.body.appendChild(stage);
-
   const button = document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
+  const saved = {
+    style: sheet.getAttribute('style'),
+    className: sheet.className
+  };
+
   if(button){
     button.disabled = true;
     button.textContent = 'GENERATING PDF…';
@@ -1176,23 +1130,62 @@ function printVehicleReport(){
     window.currentVehicle?.registration_number ||
     window.currentVehicle?.registration_no ||
     window.currentVehicle?.number ||
+    (typeof car!=='undefined' && car?.registration_no) ||
     'Vehicle'
   ).toString().replace(/[^a-z0-9_-]+/gi,'_')}.pdf`;
 
+  /*
+   * A4 = 210mm wide. Use ZERO html2pdf margin because the report itself
+   * already contains its own 15mm internal padding.
+   */
+  sheet.style.cssText = [
+    'display:block!important',
+    'position:relative!important',
+    'left:auto!important',
+    'top:auto!important',
+    'width:210mm!important',
+    'min-width:210mm!important',
+    'max-width:210mm!important',
+    'min-height:297mm!important',
+    'height:auto!important',
+    'margin:0!important',
+    'padding:15mm!important',
+    'box-sizing:border-box!important',
+    'overflow:visible!important',
+    'background:#fff!important',
+    'color:#172033!important',
+    'box-shadow:none!important',
+    'border-radius:0!important',
+    'transform:none!important'
+  ].join(';');
+
+  const exportStyle=document.createElement('style');
+  exportStyle.id='vehicleReportPdfExportStyle';
+  exportStyle.textContent=[
+    '#reportArea .report-sheet *{box-sizing:border-box!important}',
+    '#reportArea .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important}',
+    '#reportArea .report-table th,#reportArea .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
+    '#reportArea img{max-width:100%!important;height:auto!important}',
+    '#reportArea .report-section{break-inside:avoid!important}',
+    '#reportArea .report-card{min-width:0!important;max-width:100%!important}',
+    '#reportArea .report-grid{width:100%!important;max-width:100%!important}'
+  ].join('');
+  document.head.appendChild(exportStyle);
+
   const options = {
-    margin: [10,10,10,10],
+    margin: 0,
     filename,
-    image: { type:'jpeg', quality:0.98 },
+    image: {type:'jpeg', quality:0.98},
     html2canvas: {
       scale: 2,
       useCORS: true,
       allowTaint: false,
       backgroundColor:'#ffffff',
-      logging:false,
-      scrollX:0,
-      scrollY:0,
-      width: Math.ceil(stage.getBoundingClientRect().width),
-      windowWidth: Math.ceil(stage.getBoundingClientRect().width)
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      width: 794,
+      windowWidth: 794
     },
     jsPDF: {
       unit:'mm',
@@ -1206,26 +1199,34 @@ function printVehicleReport(){
     }
   };
 
+  /*
+   * Give the browser one frame to apply the A4 layout before html2canvas
+   * measures it. This also prevents the intermittent blank-canvas case.
+   */
   requestAnimationFrame(()=>{
-    html2pdf()
-      .set(options)
-      .from(stage)
-      .save()
-      .then(()=>{
-        toast('A4 Vehicle Report PDF generated successfully.','success');
-      })
-      .catch((err)=>{
-        console.error('Vehicle report PDF error:',err);
-        toast('PDF generation failed. Please refresh and try again.','error');
-      })
-      .finally(()=>{
-        stage.remove();
-        if(button){
-          button.disabled=false;
-          button.textContent='PRINT / SAVE PDF';
-        }
-      });
+    requestAnimationFrame(()=>{
+      html2pdf()
+        .set(options)
+        .from(sheet)
+        .save()
+        .then(()=>{
+          toast('A4 Vehicle Report PDF generated successfully.','success');
+        })
+        .catch((err)=>{
+          console.error('Vehicle report PDF error:',err);
+          toast('PDF generation failed. Please refresh and try again.','error');
+        })
+        .finally(()=>{
+          sheet.setAttribute('style', saved.style || '');
+          sheet.className = saved.className;
+          exportStyle.remove();
+          if(button){
+            button.disabled=false;
+            button.textContent='PRINT / SAVE PDF';
+          }
+        });
+    });
   });
 }
 
-window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;
+window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;
