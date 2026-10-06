@@ -919,6 +919,7 @@ function renderHistoricalRecords(){
 
 function hiSelectRecord(id){
   const w=(historicalImportDraft?.warnings||[]).find(x=>x.recordId===id);
+  if(!w){const r=(historicalImportDraft?.records||[]).find(x=>hiRecordId(x)===id);if(r?.is_km_estimated)return hiReviewEstimated(id);}
   historicalImportSelectedWarning=w||null;
   renderHistoricalRecords();renderHistoricalResolver();
 }
