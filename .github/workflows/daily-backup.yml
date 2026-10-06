@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  backup-code:
+  backup:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full repository history
@@ -18,7 +18,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare backup
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client zip
+
+      - name: Create code backup
         shell: bash
         run: |
           set -euo pipefail
@@ -33,14 +38,64 @@ jobs:
             -x ".git/*" \
                "backup-output/*"
 
+          echo "$COMMIT_SHA" > "backup-output/git-commit.txt"
+
+      - name: Create Supabase PostgreSQL backup
+        env:
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SUPABASE_BACKUP_DB_URL" ]]; then
+            echo "Missing SUPABASE_BACKUP_DB_URL secret."
+            exit 1
+          fi
+
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+
+          # Plain SQL: human-readable and easy to restore.
+          pg_dump "$SUPABASE_BACKUP_DB_URL" \
+            --format=plain \
+            --no-owner \
+            --no-privileges \
+            --file="backup-output/Carmy-Supabase-$DATE_UTC.sql"
+
+          # Custom archive: compact and flexible for pg_restore.
+          pg_dump "$SUPABASE_BACKUP_DB_URL" \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --file="backup-output/Carmy-Supabase-$DATE_UTC.dump"
+
+          gzip -9 "backup-output/Carmy-Supabase-$DATE_UTC.sql"
+
+      - name: Create backup manifest and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+          COMMIT_SHA="$(git rev-parse HEAD)"
+
+          sha256sum backup-output/* > backup-output/SHA256SUMS.txt
+
           cat > "backup-output/backup-manifest.json" <<EOF
           {
             "backup_date_utc": "$DATE_UTC",
             "repository": "$GITHUB_REPOSITORY",
             "commit_sha": "$COMMIT_SHA",
-            "backup_scope": "source-code-and-git-history",
-            "database_backup": "not-yet-configured",
-            "r2_files_backup": "not-yet-configured"
+            "scope": {
+              "source_code": true,
+              "git_history": true,
+              "supabase_postgresql": true,
+              "r2_files": false,
+              "d1_cache": false
+            },
+            "next_backup_layers": [
+              "Cloudflare R2 files",
+              "Cloudflare D1 cache/schema"
+            ]
           }
           EOF
 
@@ -76,10 +131,9 @@ jobs:
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          secret = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+          info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
           folder_id = os.environ["GOOGLE_DRIVE_FOLDER_ID"]
 
-          info = json.loads(secret)
           credentials = service_account.Credentials.from_service_account_info(
               info,
               scopes=["https://www.googleapis.com/auth/drive.file"],
@@ -119,5 +173,5 @@ jobs:
 
       - name: Backup summary
         run: |
-          echo "Carmy code backup completed."
-          echo "Database and R2 backup will be added after their secure credentials are configured."
+          echo "Carmy code + Supabase database backup completed."
+          echo "R2 and D1 backup layers will be added after those services are configured."
