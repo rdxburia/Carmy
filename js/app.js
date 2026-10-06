@@ -766,8 +766,11 @@ function hiMoney(s){if(s===undefined||s===null)return 0;let m=String(s).replace(
 function hiNum(s){let m=String(s||'').replace(/,/g,'').match(/[\d]+(?:\.\d+)?/);return m?Number(m[0]):null}
 function hiLines(raw){return String(raw||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
 function hiFindDate(line){
-  let m=String(line).match(/(?:Date|Service Date|Claim Date|Issued|Policy Period:)?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i);
-  return m?hiDate(m[1]):null;
+  const s=String(line||'');
+  let m=s.match(/(\d{1,2}[\\/-]\d{1,2}[\\/-]\d{4})/);if(m)return hiDate(m[1]);
+  m=s.match(/([A-Za-z]+\s+\d{1,2},\s*\d{4})/);if(m)return hiDate(m[1]);
+  m=s.match(/\b(\d{1,2}\s+[A-Za-z]+\s+\d{4})\b/);if(m)return hiDate(m[1]);
+  return null;
 }
 function hiParseRecords(raw){
   const lines=hiLines(raw),out=[],warnings=[];let section='',current=null;
@@ -799,21 +802,27 @@ function hiParseRecords(raw){
       let d=hiFindDate(l);if(d&&!current.date)current.date=d;
       let km=(l.match(/odometer\s*:\s*([0-9,]+)/i)||[])[1];if(km)current.odometer_km=hiNum(km);
       if(/estimated/i.test(l)&&/odometer/i.test(l))current.is_km_estimated=true;
-      let inv=(l.match(/invoice\s*(?:no\.?|number)\s*:\s*([A-Z0-9\/-]+)/i)||[])[1];if(inv)current.invoice_number=inv;
+      let inv=(l.match(/invoice\s*(?:no\.?|number)?\s*:\s*([A-Z0-9\/-]+)/i)||[])[1];if(inv)current.invoice_number=inv;
       let ws=(l.match(/(?:service center|vendor)\s*:\s*(.+)/i)||[])[1];if(ws)current.workshop=ws.replace(/\*+/g,'').trim();
       let desc=(l.match(/work done\s*:\s*(.+)/i)||[])[1];if(desc)current.description=desc.replace(/\*+/g,'').trim();
       let total=(l.match(/total (?:cost|paid)\s*:\s*\*?\*?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(total)current.total_cost=hiMoney(total);
       let parts=(l.match(/parts(?: cost)?\s*:?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(parts)current.parts_cost=hiMoney(parts);
       let labour=(l.match(/labour(?: charges| cost)?\s*:?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(labour)current.labour_cost=hiMoney(labour);
-      if(/^\-\s+/.test(l)&&!/labour|total cost|invoice|service center|vendor|date|odometer|cost breakdown/i.test(l)){let item=l.replace(/^\-\s+/,'').replace(/\s+₹\s*[\d,]+(?:\.\d+)?\s*$/,'').trim();let cost=(l.match(/₹\s*([\d,]+(?:\.\d+)?)/)||[])[1];if(item)current.items.push({name:item,cost:hiMoney(cost)})}
+      if(/^\-\s+/.test(l)&&!/labour|total cost|invoice|service center|vendor|date|odometer|cost breakdown/i.test(l)){let item=l.replace(/^\-\s+/,'').replace(/\s+₹\s*[\d,]+(?:\.\d+)?\s*$/,'').trim();let cost=(l.match(/₹\s*([\d,]+(?:\.\d+)?)/)||[])[1];if(item)current.items.push({name:item.replace(/:\s*$/,''),cost:hiMoney(cost)})}
     }
     if(section==='insurance'&&out.length){
       const pol=out[out.length-1];
-      let company=(l.match(/insurance company\s*:\s*(.+)/i)||[])[1],num=(l.match(/policy number\s*:\s*([A-Z0-9\/-]+)/i)||[])[1],type=(l.match(/policy type\s*:\s*(.+)/i)||[])[1],prem=(l.match(/total premium\s*:\s*\*?\*?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
+      let company=(l.match(/(?:insurance company|company)\s*:\s*(.+)/i)||[])[1],num=(l.match(/policy number\s*:\s*([A-Z0-9\/-]+)/i)||[])[1],type=(l.match(/policy type\s*:\s*(.+)/i)||[])[1],prem=(l.match(/total premium\s*:\s*\*?\*?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
       if(pol.kind==='insurance'){if(company)pol.company=company.replace(/\*+/g,'').trim();if(num)pol.policy_number=num;if(type)pol.policy_type=type.replace(/\*+/g,'').trim();if(prem)pol.premium=hiMoney(prem)}
     }
   }
-  push();return {records:out,warnings};
+  push();
+  const dated=out.filter(x=>(x.kind==='record'||x.kind==='claim')&&x.date&&x.odometer_km!=null);
+  for(let i=0;i<dated.length;i++)for(let j=i+1;j<dated.length;j++){
+    const days=Math.abs((new Date(dated[i].date)-new Date(dated[j].date))/86400000),kmDiff=Math.abs(Number(dated[i].odometer_km)-Number(dated[j].odometer_km));
+    if(days<=1&&kmDiff>0&&kmDiff<=5)warnings.push('Odometer discrepancy detected — '+dated[i].date+' ('+Number(dated[i].odometer_km).toLocaleString('en-IN')+' km) vs '+dated[j].date+' ('+Number(dated[j].odometer_km).toLocaleString('en-IN')+' km). Data preserved as supplied.');
+  }
+  return {records:out,warnings};
 }
 function hiRenderRow(r){
  const type=r.kind==='puc'?'PUC':r.kind==='claim'?'Insurance Claim':r.record_type;
