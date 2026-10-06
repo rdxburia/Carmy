@@ -756,6 +756,8 @@ function hiDate(s){
   if(m)return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
   m=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if(m)return m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+  m=raw.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+  if(m){const months={january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12};const mo=months[m[1].toLowerCase()];if(mo)return m[3]+'-'+String(mo).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0')}
   const parsed=Date.parse(raw);
   if(!Number.isNaN(parsed)){const d=new Date(parsed);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
   return null;
@@ -772,12 +774,12 @@ function hiParseRecords(raw){
   const push=()=>{if(current){if(!current.date)warnings.push('A '+(current.kind||'record')+' without a date was skipped.');else{current.source='historical_import';current.import_batch_id=historicalImportDraft?.import_batch_id;out.push(current)}current=null}};
   const newCurrent=(kind,date,km)=>{push();current={kind,date,odometer_km:km,is_km_estimated:false,record_type:'Other',workshop:null,invoice_number:null,description:null,parts_cost:0,labour_cost:0,total_cost:0,items:[]};if(kind==='claim')current.record_type='Accident / Repair';if(section==='battery')current.record_type='Battery';if(section==='tyre')current.record_type='Tyre Work';if(section==='repair')current.record_type='Accident / Repair';if(section==='service')current.record_type='Regular Service';};
   for(const l of lines){
-    if(/periodic regular services/i.test(l)){push();section='service';continue}
+    if(/(?:periodic )?regular services?/i.test(l)){push();section='service';continue}
     if(/battery replacement/i.test(l)){push();section='battery';continue}
     if(/tyre replacement/i.test(l)){push();section='tyre';continue}
     if(/pollution under control/i.test(l)){push();section='puc';continue}
-    if(/vehicle insurance history/i.test(l)){push();section='insurance';continue}
-    if(/insurance claims log/i.test(l)){push();section='claim';continue}
+    if(/(?:vehicle )?insurance history/i.test(l)){push();section='insurance';continue}
+    if(/insurance claims?(?: log)?/i.test(l)){push();section='claim';continue}
     if(/personal out-of-pocket expenses/i.test(l)){push();section='repair';continue}
     if(section==='puc'&&/^\|?\s*\*?\*?\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/.test(l)){
       let cells=l.replace(/^\||\|$/g,'').split('|').map(x=>x.replace(/\*/g,'').trim());
