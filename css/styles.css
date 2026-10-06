@@ -971,3 +971,94 @@ button{border-radius:11px!important}
  #dashboard.active .flip-card{min-height:154px}
  #dashboard.active .flip-inner{min-height:154px}
 }
+
+/* =========================================================
+   A4 VEHICLE REPORT - PRINT FIX
+   Keep only the report visible in browser print preview.
+   This avoids blank pages caused by hidden .view/layout states.
+   ========================================================= */
+
+@media print{
+  html,
+  body{
+    width:100%!important;
+    min-height:100%!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    color:#172033!important;
+  }
+
+  body *{
+    visibility:hidden!important;
+  }
+
+  #report,
+  #report *{
+    visibility:visible!important;
+  }
+
+  #report{
+    display:block!important;
+    position:static!important;
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    margin:0!important;
+    padding:0!important;
+    overflow:visible!important;
+    background:#fff!important;
+    color:#172033!important;
+  }
+
+  #reportArea{
+    display:block!important;
+    position:static!important;
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    margin:0!important;
+    padding:0!important;
+    overflow:visible!important;
+    background:#fff!important;
+  }
+
+  #report .toolbar,
+  #report .no-print{
+    display:none!important;
+  }
+
+  #report .report-sheet{
+    display:block!important;
+    visibility:visible!important;
+    width:100%!important;
+    max-width:none!important;
+    min-height:277mm!important;
+    height:auto!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    color:#172033!important;
+    box-shadow:none!important;
+    border:0!important;
+    border-radius:0!important;
+    transform:none!important;
+    animation:none!important;
+  }
+
+  #report .report-section,
+  #report .report-head,
+  #report .report-grid,
+  #report .report-two,
+  #report .report-panel,
+  #report .report-table,
+  #report .report-total,
+  #report .report-footer{
+    visibility:visible!important;
+  }
+
+  @page{
+    size:A4 portrait;
+    margin:10mm;
+  }
+}
