@@ -76,9 +76,35 @@ function dateOnlyEnd(x){if(!x)return null;let p=String(x).split('-').map(Number)
 function st(x){if(!x)return['MISSING','bad'];let d=dateOnlyEnd(x);if(!d)return['MISSING','bad'];let days=(d-Date.now())/86400000;return days<0?['EXPIRED','bad']:days<=30?['EXPIRING SOON','warn']:['VALID','ok']}
 function closeSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');$('menuToggle')?.setAttribute('aria-expanded','false');document.body.classList.remove('menu-open')}
 function openSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.add('open');m.setAttribute('aria-hidden','false');$('menuToggle')?.setAttribute('aria-expanded','true');document.body.classList.add('menu-open');updateDrawerContext()}
-function updateDrawerContext(){let reg=$('drawerCarReg'),model=$('drawerCarModel'),u=$('drawerUser');if(reg)reg.textContent=car?.registration_no||'No Vehicle';if(model)model.textContent=car?(car.make_model||'Vehicle')+' • '+(car.fuel||''):'Select a vehicle';if(u)u.textContent=user?.email||'Secure Garage'}
-async function nav(v){if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}if(v==='add'&&!(await ensureRequiredCarDetails()))return;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(v).classList.add('active');document.querySelectorAll('aside button,.mobile-nav button,.drawer-link').forEach(x=>x.classList.toggle('active',x.dataset.view===v));if(v==='add')prefillRecordForm();if(v==='dashboard')dash();if(v==='cars')carsView();if(v==='history')renderHistory();if(v==='docs')docsView();if(v==='report')report();closeSideMenu()}
-document.querySelectorAll('aside button,.mobile-nav button,.drawer-link').forEach(x=>x.onclick=()=>nav(x.dataset.view));
+function updateIdentityUI(){
+ const owner=(ownerProfile?.full_name||user?.user_metadata?.full_name||'').trim();
+ const display=owner||'Owner';
+ const top=$('userEmail');if(top)top.textContent=display;
+ const u=$('drawerUser');if(u)u.textContent=display;
+}
+function updateDrawerContext(){
+ let reg=$('drawerCarReg'),model=$('drawerCarModel');
+ if(reg)reg.textContent=car?.registration_no||'No Vehicle';
+ if(model)model.textContent=car?(car.make_model||'Vehicle')+' • '+(car.fuel||''):'Select a vehicle';
+ updateIdentityUI();
+}
+async async function nav(v){
+ if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}
+ if(v==='add'&&!(await ensureRequiredCarDetails()))return;
+ document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+ const target=$(v);if(!target)return;
+ target.classList.add('active');
+ document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
+ if(v==='add')prefillRecordForm();
+ if(v==='dashboard')dash();
+ if(v==='cars')carsView();
+ if(v==='history')renderHistory();
+ if(v==='docs')docsView();
+ if(v==='report')report();
+ if(v==='owner')ownerProfileView();
+ closeSideMenu();
+}
+document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.onclick=()=>nav(x.dataset.view));
 $('menuToggle')?.addEventListener('click',openSideMenu);
 $('brandHome')?.addEventListener('click',()=>nav('dashboard'));
 $('brandHome')?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();nav('dashboard')}});
@@ -107,6 +133,7 @@ async function start(u){
    updateCarTab();
    setAppLoadingStatus('Securing your vehicle files...','Loading service history and private documents');
    await loadData();
+   updateIdentityUI();
    setAppLoadingStatus('Checking vehicle compliance...','Calculating Insurance & PUC status');
    if(car){dash();guard()}else{dash()}
    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
@@ -281,21 +308,22 @@ function dashTimeline(){
 }
 function toggleTimelineEvent(id){const e=document.getElementById('timeline-'+id);if(e)e.classList.toggle('open')}
 function dash(){
- if(!car){$('dash').innerHTML='<div class="card">Add your first car.</div>';return}
- const body=vehicleBodyType(car.make_model), health=dashboardHealth(), service=serviceDueStatus(), cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry),cpk=maintenanceCostPerKm(),spend=yearlySpendData(),max=Math.max(spend.total,1);
+ if(!car){$('dash').innerHTML='<div class="card minimal-empty"><h3>No vehicle selected</h3><p class="muted">Add your first car to start managing its records.</p></div>';return}
+ const health=dashboardHealth(),service=serviceDueStatus(),cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry);
  $('dashTitle').textContent=car.registration_no;
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
- const docsActive=docs.filter(d=>!d.archived_at).filter(d=>['rc','insurance','puc'].includes(d.document_type)).slice(0,6);
  $('dash').innerHTML=
- '<section class="garage-hero"><div class="garage-hero-info"><div class="eyebrow">YOUR VEHICLE GARAGE</div><h2>'+esc(car.registration_no)+(car.vehicle_status==='sold'?' <span class="sold-badge">SOLD</span>':'')+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p><div class="health-badge '+(car.vehicle_status==='sold'?'neutral':health[1])+'"><i></i>'+(car.vehicle_status==='sold'?'VEHICLE SOLD':health[0])+'</div><small>'+esc(car.vehicle_status==='sold'?'Ownership lifecycle closed. Historical service and compliance records are preserved.':health[2])+'</small></div>'+
- vehicleAvatar(body,car.fuel)+
- '<div class="digital-cluster"><span>CURRENT ODOMETER</span><strong>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+'</strong><em>KM</em></div></section>'+
- '<div class="dashboard-grid dashboard-stats"><div class="glass-stat"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>All recorded maintenance</small></div><div class="glass-stat"><span>SERVICE SCHEDULE</span><b class="'+service.cls+'">'+service.state+'</b><small>'+esc(service.text)+'</small></div><div class="glass-stat"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry||'Missing')+'</small></div><div class="glass-stat"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry||'Missing')+'</small></div></div>'+
- '<div class="dashboard-grid dashboard-analytics"><div class="glass-panel"><div class="panel-heading"><div><span class="panel-kicker">MAINTENANCE EFFICIENCY</span><h3>Cost per KM</h3></div><span class="gauge-value">'+(cpk!==null?'₹'+cpk.toFixed(2):'—')+'<small>/ KM</small></span></div><div class="radial-gauge" style="--gauge:'+Math.min((cpk||0)/10*100,100)+'%"><div><b>'+(cpk!==null?Math.round(Math.max(0,100-Math.min(cpk/10*100,100))):'—')+'</b><span>efficiency</span></div></div><p class="muted">Based on recorded maintenance cost and current odometer.</p></div>'+
- '<div class="glass-panel"><div class="panel-heading"><div><span class="panel-kicker">YEAR '+spend.year+'</span><h3>Spend Breakdown</h3></div><b>'+money(spend.total)+'</b></div><div class="spend-bars"><div><span>Regular Service</span><b>'+money(spend.regular)+'</b><i style="width:'+(spend.regular/max*100)+'%"></i></div><div><span>Major Repairs</span><b>'+money(spend.major)+'</b><i style="width:'+(spend.major/max*100)+'%"></i></div><div><span>Other</span><b>'+money(spend.other)+'</b><i style="width:'+(spend.other/max*100)+'%"></i></div></div><small class="muted">Insurance premium is not included because no premium amount is currently stored.</small></div></div>'+
- '<div class="glass-panel timeline-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE HISTORY</span><h3>Maintenance Timeline</h3></div><button class="ghost" onclick="nav(\'history\')">View all</button></div>'+dashTimeline()+'</div>'+
- '<div class="glass-panel glovebox-panel"><div class="panel-heading"><div><span class="panel-kicker">DIGITAL GLOVEBOX</span><h3>Vehicle Documents</h3></div><button class="ghost" onclick="nav(\'docs\')">Open Documents</button></div><div class="dashboard-doc-grid">'+(docsActive.length?docsActive.map(renderDashDocCard).join(''):'<div class="timeline-empty">No active RC / Insurance / PUC documents.</div>')+'</div></div>'+
- '<div class="dashboard-bottom-grid"><div class="glass-panel"><b>Vehicle Identity</b><p>'+esc(car.make_model||'—')+' • '+esc(car.fuel||'—')+'</p><p>VIN: '+esc(car.vin||'—')+'<br>Engine: '+esc(car.engine_no||'—')+'</p></div><div class="glass-panel"><b>Last Service</b><h3>'+esc(last?.service_date||'No records')+'</h3><p>'+esc(last?.description||'No service record yet')+'</p></div></div>';
+ '<section class="minimal-dashboard">'+
+ '<div class="minimal-hero"><div><span class="panel-kicker">VEHICLE OVERVIEW</span><h2>'+esc(car.registration_no)+(car.vehicle_status==='sold'?' <span class="sold-badge">SOLD</span>':'')+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p></div><div class="minimal-km"><span>CURRENT KM</span><b>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+'</b></div></div>'+
+ '<div class="minimal-grid">'+
+ '<div class="minimal-card"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry||'Not available')+'</small></div>'+
+ '<div class="minimal-card"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry||'Not available')+'</small></div>'+
+ '<div class="minimal-card"><span>SERVICE</span><b class="'+service.cls+'">'+esc(service.state)+'</b><small>'+esc(service.text)+'</small></div>'+
+ '<div class="minimal-card"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>Recorded maintenance</small></div>'+
+ '</div>'+
+ '<div class="minimal-status"><span class="health-badge '+(car.vehicle_status==='sold'?'neutral':health[1])+'"><i></i>'+esc(car.vehicle_status==='sold'?'VEHICLE SOLD':health[0])+'</span><span>'+esc(car.vehicle_status==='sold'?'Ownership lifecycle closed.':health[2])+'</span></div>'+
+ '<div class="minimal-last"><div><span class="panel-kicker">LAST SERVICE</span><h3>'+esc(last?.service_date||'No service record')+'</h3><p>'+esc(last?.description||'No service record yet')+'</p></div><button class="ghost" onclick="nav(\'history\')">VIEW HISTORY</button></div>'+
+ '</section>';
  renderFab();
 }
 function renderDashDocCard(d){
