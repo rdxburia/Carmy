@@ -1,14 +1,74 @@
 -- CarCare Cloud: HISTORICAL IMPORT FINALIZATION
--- Run after historical_import_phase1.sql and Step 5.
--- Phase 1 remains preview-only until this function is installed.
--- Final import is one RPC call so the database transaction is atomic.
+-- Run after the existing base schema. This migration is self-healing for
+-- all columns required by the atomic historical import RPC.
 
+-- Historical import columns on service/repair records.
+alter table public.records add column if not exists source text not null default 'manual';
+alter table public.records add column if not exists import_batch_id text;
+alter table public.records add column if not exists is_km_estimated boolean not null default false;
 alter table public.records add column if not exists subcategory text;
 alter table public.records add column if not exists original_invoice_total numeric;
 alter table public.records add column if not exists reconciliation_adjustment numeric default 0;
 alter table public.records add column if not exists audit_note text;
+
+-- Historical import columns on insurance / PUC.
+alter table public.insurance_history add column if not exists source text not null default 'manual';
 alter table public.insurance_history add column if not exists import_batch_id text;
+alter table public.insurance_history add column if not exists premium_amount numeric;
+alter table public.insurance_history add column if not exists odometer_km numeric;
+alter table public.insurance_history add column if not exists is_km_estimated boolean not null default false;
+
+alter table public.puc_history add column if not exists source text not null default 'manual';
 alter table public.puc_history add column if not exists import_batch_id text;
+alter table public.puc_history add column if not exists odometer_km numeric;
+alter table public.puc_history add column if not exists is_km_estimated boolean not null default false;
+alter table public.puc_history add column if not exists cost numeric;
+
+-- Claims table is also made available here so this final migration can be
+-- safely re-run even when the earlier foundation migration was skipped.
+create table if not exists public.insurance_claims(
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  car_id uuid not null references public.cars(id) on delete cascade,
+  policy_id uuid references public.insurance_history(id) on delete set null,
+  claim_date date not null,
+  odometer_km numeric,
+  is_km_estimated boolean not null default false,
+  workshop_name text,
+  invoice_number text,
+  reason text,
+  parts_changed text,
+  parts_cost numeric default 0,
+  labour_cost numeric default 0,
+  insurer_paid_amount numeric default 0,
+  source text not null default 'manual',
+  import_batch_id text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.insurance_claims add column if not exists source text not null default 'manual';
+alter table public.insurance_claims add column if not exists import_batch_id text;
+alter table public.insurance_claims add column if not exists odometer_km numeric;
+alter table public.insurance_claims add column if not exists is_km_estimated boolean not null default false;
+alter table public.insurance_claims add column if not exists workshop_name text;
+alter table public.insurance_claims add column if not exists invoice_number text;
+alter table public.insurance_claims add column if not exists reason text;
+alter table public.insurance_claims add column if not exists parts_changed text;
+alter table public.insurance_claims add column if not exists parts_cost numeric default 0;
+alter table public.insurance_claims add column if not exists labour_cost numeric default 0;
+alter table public.insurance_claims add column if not exists insurer_paid_amount numeric default 0;
+
+create index if not exists records_car_date_idx on public.records(car_id,service_date desc);
+create index if not exists records_import_batch_idx on public.records(user_id,import_batch_id);
+create index if not exists insurance_claims_car_date_idx on public.insurance_claims(car_id,claim_date desc);
+create index if not exists insurance_claims_policy_idx on public.insurance_claims(policy_id);
+
+alter table public.insurance_claims enable row level security;
+drop policy if exists insurance_claims_owner on public.insurance_claims;
+create policy insurance_claims_owner on public.insurance_claims
+for all to authenticated
+using(auth.uid()=user_id and exists(select 1 from public.cars c where c.id=car_id and c.user_id=auth.uid()))
+with check(auth.uid()=user_id and exists(select 1 from public.cars c where c.id=car_id and c.user_id=auth.uid()));
 
 grant select,insert,update,delete on public.records to authenticated;
 grant select,insert,update,delete on public.record_items to authenticated;
@@ -57,8 +117,6 @@ begin
     raise exception 'Import blocked: % warning(s) remain unresolved', v_warnings;
   end if;
 
-  -- Server-side revalidation: the browser gate is UX only; the database
-  -- independently blocks unresolved financial gaps and KM decreases.
   for v_rec in
     select value
     from jsonb_array_elements(coalesce(p_payload->'records','[]'::jsonb))
@@ -103,7 +161,6 @@ begin
     policy_id uuid not null
   ) on commit drop;
 
-  -- Insurance policies
   for v_policy in
     select value
     from jsonb_array_elements(coalesce(p_payload->'records','[]'::jsonb))
@@ -142,7 +199,6 @@ begin
     v_count_insurance := v_count_insurance + 1;
   end loop;
 
-  -- Regular/Other/Battery/Tyre/Repair records and their item rows
   for v_rec in
     select value
     from jsonb_array_elements(coalesce(p_payload->'records','[]'::jsonb))
@@ -199,7 +255,6 @@ begin
     end loop;
   end loop;
 
-  -- PUC history
   for v_rec in
     select value
     from jsonb_array_elements(coalesce(p_payload->'records','[]'::jsonb))
@@ -231,7 +286,6 @@ begin
     v_count_puc := v_count_puc + 1;
   end loop;
 
-  -- Insurance claims
   for v_rec in
     select value
     from jsonb_array_elements(coalesce(p_payload->'records','[]'::jsonb))
