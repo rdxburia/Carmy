@@ -750,6 +750,7 @@ function openHistoricalImport(){
   $('hiClose').onclick=()=>m.remove();
   $('hiCloseBottom').onclick=()=>m.remove();
   $('hiParse').onclick=()=>buildHistoricalPreview($('hiRaw').value);
+  $('hiApprove').onclick=()=>hiApproveImport();
   m.onclick=e=>{if(e.target===m)m.remove()};
 }
 
