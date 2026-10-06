@@ -1085,90 +1085,77 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
 
 function printVehicleReport(){
   const source = document.getElementById('reportArea');
-  if(!source || !source.innerHTML.trim()){
+  const sheet = source?.querySelector('.report-sheet');
+
+  if(!sheet || !sheet.innerHTML.trim()){
     toast('Vehicle Report is still loading. Please open the report once and try again.','error');
     return;
   }
 
   /*
-   * Reliable print path:
-   * Print a dedicated iframe document. This completely avoids the
-   * application's .view/display/animation/layout rules and does not
-   * depend on opening a popup/new tab.
+   * FINAL PDF PATH:
+   * Do not use window.print(), popup windows or hidden iframes.
+   * html2pdf.js is already loaded by index.html and renders the
+   * actual visible report DOM directly to an A4 PDF.
    */
-  document.getElementById('vehicleReportPrintFrame')?.remove();
-
-  const frame = document.createElement('iframe');
-  frame.id = 'vehicleReportPrintFrame';
-  frame.setAttribute('aria-hidden','true');
-  frame.style.cssText =
-    'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;z-index:-1;';
-  document.body.appendChild(frame);
-
-  const doc = frame.contentDocument;
-  if(!doc){
-    frame.remove();
-    return toast('Print engine could not be initialized. Please try again.','error');
+  if(typeof window.html2pdf !== 'function'){
+    toast('PDF engine is still loading. Please refresh once and try again.','error');
+    return;
   }
 
-  const styles = [
-    new URL('css/styles.css', location.href).href,
-    new URL('css/premium.css', location.href).href
-  ];
+  const vehicle = (window.currentVehicle?.registration_number ||
+                   window.currentVehicle?.registration_no ||
+                   window.currentVehicle?.number ||
+                   'Vehicle').toString().replace(/[^a-z0-9_-]+/gi,'_');
 
-  doc.open();
-  doc.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">');
-  styles.forEach(href=>{
-    const link=doc.createElement('link');
-    link.rel='stylesheet';
-    link.href=href;
-    doc.head.appendChild(link);
-  });
-
-  const style=doc.createElement('style');
-  style.textContent=
-    'html,body{margin:0!important;padding:0!important;background:#fff!important}'+
-    'body{font-family:Inter,Arial,sans-serif;color:#172033}'+
-    '.report-sheet{margin:0 auto!important;box-shadow:none!important}'+
-    '@page{size:A4;margin:10mm}'+
-    '@media print{'+
-      'html,body{background:#fff!important}'+
-      '.report-sheet{width:100%!important;min-height:277mm!important;margin:0!important;padding:0!important;box-shadow:none!important;border-radius:0!important}'+
-      '.report-section{break-inside:avoid}'+
-      '.report-table{font-size:9px}'+
-      '.report-table th,.report-table td{padding:6px}'+
-    '}';
-  doc.head.appendChild(style);
-
-  const body=doc.createElement('body');
-  body.innerHTML=source.innerHTML;
-  doc.body.appendChild(body);
-  doc.close();
-
-  let printed=false;
-  const cleanup=()=>{
-    if(frame.parentNode)frame.remove();
+  const options = {
+    margin: [10,10,10,10],
+    filename: `Carmy_Vehicle_Report_${vehicle}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: Math.max(sheet.scrollWidth, 794)
+    },
+    jsPDF: {
+      unit: 'mm',
+      format: 'a4',
+      orientation: 'portrait',
+      compress: true
+    },
+    pagebreak: {
+      mode: ['css','legacy'],
+      avoid: ['.report-section']
+    }
   };
 
-  const doPrint=async()=>{
-    if(printed)return;
-    printed=true;
-    try{
-      if(frame.contentDocument?.fonts?.ready)await frame.contentDocument.fonts.ready;
-    }catch(e){}
-    setTimeout(()=>{
-      try{
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
-      }finally{
-        setTimeout(cleanup,1200);
+  const button = document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
+  if(button){
+    button.disabled = true;
+    button.textContent = 'GENERATING PDF…';
+  }
+
+  html2pdf()
+    .set(options)
+    .from(sheet)
+    .save()
+    .then(()=>{
+      toast('A4 Vehicle Report PDF generated successfully.','success');
+    })
+    .catch((err)=>{
+      console.error('Vehicle report PDF error:', err);
+      toast('PDF generation failed. Please refresh and try again.','error');
+    })
+    .finally(()=>{
+      if(button){
+        button.disabled = false;
+        button.textContent = 'PRINT / SAVE PDF';
       }
-    },200);
-  };
-
-  frame.onload=doPrint;
-  // Cached stylesheet / about:blank documents can occasionally skip onload.
-  setTimeout(doPrint,1200);
+    });
 }
 
-window.printVehicleReport = printVehicleReport;
+window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;
