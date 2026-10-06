@@ -890,7 +890,7 @@ function buildHistoricalPreview(raw){
  if(!car)return toast('Select a vehicle before importing history.','error');
  const batch='batch_'+new Date().toISOString().replace(/\D/g,'').slice(0,15);
  historicalImportDraft={import_batch_id:batch,source:'historical_import',raw_text:raw,created_at:new Date().toISOString()};
- const parsed=hiParseRecords(raw);historicalImportDraft.records=parsed.records;historicalImportDraft.warnings=parsed.warnings;
+ const parsed=hiParseRecords(raw);parsed.records.sort((a,b)=>String(a.date||'9999-99-99').localeCompare(String(b.date||'9999-99-99')));historicalImportDraft.records=parsed.records;historicalImportDraft.warnings=parsed.warnings;
  const el=$('hiPreview');if(!el)return;
  el.innerHTML='<div class="history-import-summary"><div><span>DETECTED</span><b>'+parsed.records.length+'</b></div><div><span>ESTIMATED KM</span><b>'+parsed.records.filter(x=>x.is_km_estimated).length+'</b></div><div><span>WARNINGS</span><b>'+parsed.warnings.length+'</b></div></div><div class="history-import-list">'+(parsed.records.length?parsed.records.map(hiRenderRow).join(''):'<div class="history-import-empty"><b>No structured records detected</b><span>This Phase 1 parser is a draft preview engine; unsupported formats remain untouched.</span></div>')+'</div><div class="history-import-actions"><button class="ghost" onclick="document.getElementById(\'historicalImportModal\')?.remove()">CLOSE</button><button class="primary" onclick="toast(\'Preview approved. Database upload is intentionally disabled in Phase 1.\')">APPROVE PREVIEW</button></div>';
 }
