@@ -89,11 +89,14 @@ function updateDrawerContext(){
  updateIdentityUI();
 }
 async function nav(v){
+ const validViews=['dashboard','cars','add','history','docs','report','owner'];
+ if(!validViews.includes(v))v='dashboard';
  if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}
  if(v==='add'&&!(await ensureRequiredCarDetails()))return;
  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
  const target=$(v);if(!target)return;
  target.classList.add('active');
+ try{ localStorage.setItem('carcare_last_view',v); }catch(e){}
  document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
  if(v==='add')prefillRecordForm();
  if(v==='dashboard')dash();
@@ -161,6 +164,13 @@ async function start(u){
    updateIdentityUI();
    setAppLoadingStatus('Checking vehicle compliance...','Calculating Insurance & PUC status');
    if(car){dash();guard()}else{dash()}
+   let lastView='dashboard';
+   try{ lastView=localStorage.getItem('carcare_last_view')||'dashboard'; }catch(e){}
+   if(['dashboard','cars','add','history','docs','report','owner'].includes(lastView) && lastView!=='dashboard'){
+     await nav(lastView);
+   }else{
+     await nav('dashboard');
+   }
    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
    $('app').classList.remove('hidden');
    $('app').classList.add('app-ready');
