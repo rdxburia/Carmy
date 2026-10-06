@@ -153,3 +153,40 @@ input[type=checkbox]{accent-color:var(--c-accent)}
 .history-import-preview{border:1px solid var(--c-line);border-radius:12px;overflow:hidden;background:#fff}.history-import-summary{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--c-line);background:var(--c-soft)}.history-import-summary div{padding:13px;border-right:1px solid var(--c-line)}.history-import-summary div:last-child{border-right:0}.history-import-summary span{display:block;font-size:10px;letter-spacing:.12em;color:var(--c-mute);font-weight:700}.history-import-summary b{display:block;margin-top:4px;font-size:20px}.history-import-list{max-height:500px;overflow:auto}.history-import-row{display:grid;grid-template-columns:1.1fr 1.2fr .8fr auto;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--c-line)}.history-import-row:last-child{border-bottom:0}.history-import-row b{display:block;font-size:13px}.history-import-row small{display:block;margin-top:3px;font-size:11px}.hi-badge{justify-self:end;padding:5px 8px;border-radius:999px;background:#eef2ef;color:var(--c-accent);font-size:10px;font-weight:700;white-space:nowrap}.hi-badge.hi-est{background:#fbf1de;color:var(--c-warn)}.history-import-empty{padding:50px 20px;text-align:center;display:grid;gap:6px;color:var(--c-mute)}.history-import-actions{display:flex;justify-content:flex-end;gap:8px;padding:14px;border-top:1px solid var(--c-line)}
 @media(max-width:850px){.history-import-grid{grid-template-columns:1fr}.history-import-text{min-height:300px}.history-import-list{max-height:360px}}
 @media(max-width:600px){.history-import-card{padding:15px}.history-import-row{grid-template-columns:1fr 1fr}.hi-badge{justify-self:start}.history-import-summary b{font-size:17px}.toolbar-actions{width:100%}.toolbar-actions button{flex:1}}
+
+/* Historical Import — final split preview/resolver */
+.history-import-final-card{width:min(1320px,100%);padding:20px}
+.history-import-final-grid{grid-template-columns:minmax(0,1.15fr) minmax(360px,.85fr);align-items:stretch}
+.history-import-left,.history-import-right{min-width:0}
+.hi-left-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.hi-toolbar-count{font-size:11px;color:var(--c-mute);font-weight:700}
+.hi-record-list{max-height:430px;border:1px solid var(--c-line);border-radius:12px;margin-bottom:12px}
+.history-import-row{width:100%;background:#fff;text-align:left;cursor:pointer;font:inherit}
+.history-import-row:hover{background:var(--c-soft)}
+.history-import-row.hi-warning-row{background:#fff9f2}
+.history-import-row.hi-selected-row{outline:2px solid var(--c-accent);outline-offset:-2px;background:#f5faf7}
+.hi-badge.hi-warn{background:#fde9e6;color:#b42318}
+.hi-resolver{height:100%;min-height:520px;border:1px solid var(--c-line);border-radius:12px;background:var(--c-soft);overflow:auto}
+.hi-resolver-head{padding:18px;border-bottom:1px solid var(--c-line)}
+.hi-resolver-head span{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--c-warn)}
+.hi-resolver-head h3{margin:6px 0 3px}
+.hi-resolver-head p{margin:0;color:var(--c-mute);font-size:12px}
+.hi-resolver-card{margin:16px;padding:16px;background:#fff;border:1px solid var(--c-line);border-radius:12px;display:grid;gap:12px}
+.hi-resolver-issue{padding:12px;border-radius:9px;background:#fff8ed;border:1px solid #f0d7a9;font-size:13px;line-height:1.55}
+.hi-radio{display:flex!important;gap:9px;align-items:flex-start;padding:10px;border:1px solid var(--c-line);border-radius:9px;background:#fff;margin:0!important;font-size:13px!important}
+.hi-radio input{margin-top:3px}
+.hi-field-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.hi-field-row input{min-width:0}
+.hi-full-btn{width:100%}
+.hi-divider{text-align:center;color:var(--c-mute);font-size:11px;font-weight:700}
+.history-import-status{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;margin-top:14px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-soft);font-size:12px}
+.history-import-status>div{display:flex;gap:12px;align-items:center}
+.hi-status-est{color:var(--c-warn);font-weight:700}
+#hiApprove:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:850px){
+  .history-import-final-grid{grid-template-columns:1fr}
+  .hi-record-list{max-height:330px}
+  .hi-resolver{min-height:360px}
+  .history-import-text{min-height:280px}
+  .history-import-status{align-items:flex-start;flex-direction:column}
+}
