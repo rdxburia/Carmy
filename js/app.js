@@ -775,201 +775,117 @@ function hiFindDate(line){
 function hiParseRecords(raw){
   const lines=hiLines(raw),out=[],warnings=[];
   let section='',current=null;
-
+  const addWarning=w=>{if(w&&!warnings.includes(w))warnings.push(w)};
   const push=()=>{
     if(!current)return;
-    if(!current.date){warnings.push('A '+(current.kind||'record')+' without a date was skipped.');current=null;return;}
+    if(!current.date){if(current.kind!=='header')addWarning('A '+(current.kind||'record')+' without a date was skipped.');current=null;return;}
     if(current.kind==='record'||current.kind==='claim'){
-      const itemSum=(current.items||[]).reduce((s,x)=>s+Number(x.cost||0),0);
-      const explicitParts=Number(current.parts_cost||0);
-      const explicitLabour=Number(current.labour_cost||0);
-      const explicitOther=Number(current.other_cost||0);
-      if(!explicitParts && itemSum>0) current.parts_cost=Math.max(0,itemSum-explicitLabour-explicitOther);
-      const subtotal=Number(current.parts_cost||0)+Number(current.labour_cost||0)+Number(current.other_cost||0);
+      const itemSum=(current.items||[]).reduce((sum,x)=>sum+Number(x.cost||0),0);
       const invoice=Number(current.total_cost||0);
+      if(!Number(current.parts_cost||0)&&itemSum>0&&!current.explicit_parts){
+        current.parts_cost=Math.max(0,itemSum-Number(current.labour_cost||0)-Number(current.other_cost||0));
+      }
+      const subtotal=Number(current.parts_cost||0)+Number(current.labour_cost||0)+Number(current.other_cost||0);
       if(invoice>0){
         current.reconciliation_adjustment=invoice-subtotal;
         if(Math.abs(current.reconciliation_adjustment)>0.01){
           current.audit_note='Itemized subtotal (₹'+subtotal.toLocaleString('en-IN')+') differs from invoice total (₹'+invoice.toLocaleString('en-IN')+') by ₹'+Math.abs(current.reconciliation_adjustment).toLocaleString('en-IN')+'. Original invoice total preserved.';
-          warnings.push('Financial reconciliation difference detected — '+current.date+' (₹'+Math.abs(current.reconciliation_adjustment).toLocaleString('en-IN')+'). Original invoice total preserved.');
+          addWarning('Financial reconciliation difference detected — '+current.date+' (₹'+Math.abs(current.reconciliation_adjustment).toLocaleString('en-IN')+'). Original invoice total preserved.');
         }else current.reconciliation_adjustment=0;
       }
     }
     current.source='historical_import';
     current.import_batch_id=historicalImportDraft?.import_batch_id;
-    out.push(current);
-    current=null;
+    out.push(current);current=null;
   };
-
-  const newCurrent=(kind,date,km,recordType)=>{
+  const newCurrent=(kind,recordType)=>{
     push();
-    current={kind,date,odometer_km:km,is_km_estimated:false,record_type:recordType||'Other',
-      workshop:null,invoice_number:null,description:null,parts_cost:0,labour_cost:0,other_cost:0,
-      total_cost:0,reconciliation_adjustment:0,audit_note:null,items:[]};
+    current={kind,date:null,odometer_km:null,is_km_estimated:false,record_type:recordType||'Other',subcategory:null,workshop:null,invoice_number:null,description:null,parts_cost:0,labour_cost:0,other_cost:0,total_cost:0,reconciliation_adjustment:0,audit_note:null,items:[]};
     if(kind==='claim')current.record_type='Accident / Repair';
     if(kind==='insurance')current.record_type='Insurance Policy';
     if(kind==='puc')current.record_type='PUC';
-    if(section==='battery')current.record_type='Battery';
-    if(section==='tyre')current.record_type='Tyre Work';
-    if(section==='repair')current.record_type='Other';
-    if(section==='service')current.record_type='Regular Service';
   };
-
+  const dateFromText=txt=>{const m=String(txt||'').match(/(\d{1,2}[\\/-]\d{1,2}[\\/-]\d{4})/);return m?hiDate(m[1]):hiFindDate(txt)};
   for(const l of lines){
-    if(/^service\s*#?\s*\d+/i.test(l)){
-      section='service';
-      const d=hiFindDate(l);
-      if(d)newCurrent('record',d,hiNum((l.match(/odometer\s*:\s*([0-9,]+)/i)||[])[1]),'Regular Service');
+    const clean=l.replace(/^\*+\s*|\s*\*+$/g,'').trim();
+    if(/^CARMY\s*-\s*RAW HISTORICAL VEHICLE DATA/i.test(clean)||/^VEHICLE\s*:/i.test(clean)||/^IMPORTANT\s*:/i.test(clean)||/^DATA INTEGRITY RULES/i.test(clean)||/^={3,}$/i.test(clean)||/^\d+\.\s*(PERIODIC|VEHICLE INSURANCE|INSURANCE CLAIMS|PUC RECORDS|REGULAR SERVICE)/i.test(clean)){if(/^DATA INTEGRITY RULES/i.test(clean))push();continue;}
+    if(/^SERVICE\s*#?\s*\d+/i.test(clean)){section='service';newCurrent('record','Regular Service');continue;}
+    if(/^BATTERY(?: REPLACEMENT)?$/i.test(clean)){section='battery';newCurrent('record','Battery');continue;}
+    if(/^TYRE\s*REPLACEMENT$/i.test(clean)||/^TYRES?$/i.test(clean)){section='tyre';newCurrent('record','Tyre Work');continue;}
+    if(/^PUC\s*\d+/i.test(clean)){section='puc';newCurrent('puc','PUC');continue;}
+    if(/^PUC(?: RECORDS?| HISTORY)?$/i.test(clean)){section='puc';push();continue;}
+    if(/^POLICY\s*#?\s*\d+/i.test(clean)){section='insurance';newCurrent('insurance','Insurance Policy');continue;}
+    if(/^VEHICLE INSURANCE HISTORY$/i.test(clean)||/^INSURANCE HISTORY$/i.test(clean)){section='insurance';push();continue;}
+    if(/^CLAIM\s*#?\s*\d+/i.test(clean)){section='claim';newCurrent('claim','Accident / Repair');continue;}
+    if(/^INSURANCE CLAIMS?(?: LOG)?$/i.test(clean)){section='claim';push();continue;}
+    if(/^(?:\d+\.\s*)?OTHER\s*[-:]/i.test(clean)){section='repair';newCurrent('record','Other');const m=clean.match(/OTHER\s*[-:]\s*(.+)$/i);if(m)current.subcategory=m[1].trim();continue;}
+    if(/^REPAIR\s*#?\s*\d+/i.test(clean)){section='repair';newCurrent('record','Other');continue;}
+    if(/^PERSONAL OUT-OF-POCKET REPAIRS?\s*&?\s*PARTS REPLACEMENTS?$/i.test(clean)||/^PERSONAL OUT-OF-POCKET EXPENSES$/i.test(clean)){section='repair';push();continue;}
+    if(section==='puc'&&current){
+      const cells=clean.replace(/^\||\|$/g,'').split('|').map(x=>x.replace(/\*/g,'').trim());
+      if(cells.length>=6&&hiFindDate(cells[0])){current.date=hiDate(cells[0]);current.odometer_km=hiNum(cells[1]);current.is_km_estimated=/est/i.test(cells[1]);current.puc_number=cells[2];current.state=(cells[3].match(/\b[A-Z]{2}\b/)||['',''])[1]||cells[3];current.valid_till=hiDate(cells[4]);current.cost=hiMoney(cells[5]);current.total_cost=current.cost;push();continue;}
+    }
+    if(!current)continue;
+    if(/^DATE\s*:/i.test(clean)){
+      const d=dateFromText(clean);
+      if(d){if(current.date)push();if(!current)newCurrent(section==='claim'?'claim':section==='insurance'?'insurance':section==='puc'?'puc':'record',section==='claim'?'Accident / Repair':section==='insurance'?'Insurance Policy':section==='puc'?'PUC':section==='service'?'Regular Service':section==='battery'?'Battery':section==='tyre'?'Tyre Work':'Other');current.date=d;continue;}
+    }
+    if(/^POLICY PERIOD\s*:/i.test(clean)){const d=dateFromText(clean);if(d)current.date=d;continue;}
+    if(/^ODOMETER\s*:/i.test(clean)){const km=(clean.match(/ODOMETER\s*:\s*([0-9,]+)/i)||[])[1];if(km)current.odometer_km=hiNum(km);if(/estimated/i.test(clean))current.is_km_estimated=true;continue;}
+    if(/^ODOMETER STATUS\s*:/i.test(clean)){if(/estimated/i.test(clean))current.is_km_estimated=true;continue;}
+    let m;
+    m=clean.match(/^INVOICE\s*(?:NO\.?|NUMBER)?\s*:\s*(.+)$/i);if(m){current.invoice_number=m[1].trim();continue;}
+    m=clean.match(/^(?:SERVICE CENTER|WORKSHOP|VENDOR|GARAGE)\s*:\s*(.+)$/i);if(m){current.workshop=m[1].trim();continue;}
+    m=clean.match(/^CATEGORY\s*:\s*(.+)$/i);if(m){current.record_type=m[1].trim();continue;}
+    m=clean.match(/^SUBCATEGORY\s*:\s*(.+)$/i);if(m){current.subcategory=m[1].trim();continue;}
+    m=clean.match(/^(?:WORK|WORK DONE|DESCRIPTION|REASON)\s*:\s*(.+)$/i);if(m){current.description=m[1].trim();continue;}
+    m=clean.match(/^INSURANCE COMPANY\s*:\s*(.+)$/i);if(m){current.company=m[1].trim();continue;}
+    m=clean.match(/^POLICY NO\s*:\s*(.+)$/i);if(m){current.policy_number=m[1].trim();continue;}
+    m=clean.match(/^POLICY TYPE\s*:\s*(.+)$/i);if(m){current.policy_type=m[1].trim();continue;}
+    m=clean.match(/^ISSUED\s*:\s*(.+)$/i);if(m){current.issued_date=hiDate(m[1]);continue;}
+    m=clean.match(/^LINKED CLAIM\s*:\s*(.+)$/i);if(m){current.linked_claim=m[1].trim();continue;}
+    m=clean.match(/^PREMIUM\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.premium=hiMoney(m[1]);current.total_cost=current.premium;continue;}
+    m=clean.match(/^(?:VALID UNTIL|VALID TILL|EXPIRY DATE|VALIDITY)\s*:\s*(.+)$/i);if(m){current.valid_till=hiDate(m[1]);continue;}
+    m=clean.match(/^PUC CERTIFICATE NO\s*:\s*(.+)$/i);if(m){current.puc_number=m[1].trim();continue;}
+    m=clean.match(/^STATE\s*:\s*(.+)$/i);if(m){current.state=m[1].trim();continue;}
+    m=clean.match(/^COST PER TYRE\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.cost_per_tyre=hiMoney(m[1]);continue;}
+    m=clean.match(/^TOTAL COST\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.total_cost=hiMoney(m[1]);continue;}
+    m=clean.match(/^TOTAL CLAIM\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.total_cost=hiMoney(m[1]);continue;}
+    m=clean.match(/^TOTAL PREMIUM\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.total_cost=hiMoney(m[1]);current.premium=current.total_cost;continue;}
+    m=clean.match(/^PARTS COST\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.parts_cost=hiMoney(m[1]);current.explicit_parts=true;continue;}
+    m=clean.match(/^PARTS\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.parts_cost=hiMoney(m[1]);current.explicit_parts=true;continue;}
+    m=clean.match(/^LABOUR(?: CHARGES| COST)?\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.labour_cost=hiMoney(m[1]);continue;}
+    m=clean.match(/^(?:MISCELLANEOUS \/ TAXES \/ ROUNDING|GST \/ TAXES \/ ROUNDING)\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m){current.other_cost=hiMoney(m[1]);continue;}
+    m=clean.match(/^COST\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)/i);if(m&&current.kind==='puc'){current.cost=hiMoney(m[1]);current.total_cost=current.cost;continue;}
+    m=clean.match(/^PAID BY\s*:\s*(.+)$/i);if(m){current.paid_by=m[1].trim();continue;}
+    if(/^[-•]\s*/.test(clean)){
+      const item=clean.replace(/^[-•]\s*/,'').trim(),itemMoney=item.match(/:\s*₹?\s*([0-9,]+(?:\.\d+)?)\s*$/);
+      if(itemMoney){const name=item.replace(/\s*:\s*₹?\s*[0-9,]+(?:\.\d+)?\s*$/,'').trim();current.items.push({name,cost:hiMoney(itemMoney[1])});}
+      else if(current.record_type==='Other'||current.kind==='record')current.description=current.description?current.description+'; '+item:item;
       continue;
     }
-    if(/^battery(?: replacement)?$/i.test(l)){
-      push();section='battery';continue;
-    }
-    if(/^tyre replacement$/i.test(l)||/^tyres?$/i.test(l)){
-      push();section='tyre';continue;
-    }
-    if(/^pollution under control|^puc(?: records?| history)?$/i.test(l)){
-      push();section='puc';continue;
-    }
-    if(/^vehicle insurance history$/i.test(l)||/^insurance history$/i.test(l)){
-      push();section='insurance';continue;
-    }
-    if(/^insurance claims? log$/i.test(l)){
-      push();section='claim';continue;
-    }
-    if(/^personal out-of-pocket repairs? &? parts replacements?$/i.test(l)||/^personal out-of-pocket expenses$/i.test(l)){
-      push();section='repair';continue;
-    }
-    if(/^claim\s*#?\s*\d+/i.test(l)){
-      section='claim';
-      const d=hiFindDate(l);
-      newCurrent('claim',d,null,'Accident / Repair');
-      continue;
-    }
-    if(/^policy\s*#?\s*\d+/i.test(l)){
-      section='insurance';
-      newCurrent('insurance',hiFindDate(l),null,'Insurance Policy');
-      continue;
-    }
-    if(/^puc\s*\d+/i.test(l)){
-      section='puc';
-      newCurrent('puc',hiFindDate(l),null,'PUC');
-      continue;
-    }
-    if(/^repair\s*\d+/i.test(l)){
-      section='repair';
-      newCurrent('record',hiFindDate(l),null,'Other');
-      continue;
-    }
-
-    if(section==='puc' && current){
-      const cells=l.replace(/^\||\|$/g,'').split('|').map(x=>x.replace(/\*/g,'').trim());
-      if(cells.length>=6 && hiFindDate(cells[0])){
-        current.date=hiDate(cells[0]);
-        current.odometer_km=hiNum(cells[1]);
-        current.is_km_estimated=/est/i.test(cells[1]);
-        current.puc_number=cells[2];
-        current.state=(cells[3].match(/\b[A-Z]{2}\b/)||['',''])[1];
-        current.valid_till=hiDate(cells[4]);
-        current.cost=hiMoney(cells[5]);
-        push();continue;
-      }
-    }
-
-    if(current){
-      let d=hiFindDate(l);
-      if(d && !current.date)current.date=d;
-
-      let km=(l.match(/odometer\s*:\s*([0-9,]+)/i)||[])[1];
-      if(km)current.odometer_km=hiNum(km);
-      if(/estimated/i.test(l)&&/odometer|km status/i.test(l))current.is_km_estimated=true;
-
-      let inv=(l.match(/invoice\s*(?:no\.?|number)?\s*:\s*([A-Z0-9\/-]+)/i)||[])[1];
-      if(inv)current.invoice_number=inv;
-
-      let ws=(l.match(/(?:service center|workshop|vendor|garage)\s*:\s*(.+)/i)||[])[1];
-      if(ws)current.workshop=ws.replace(/\*+/g,'').trim();
-
-      let desc=(l.match(/(?:work done|service type|category|claim type)\s*:\s*(.+)/i)||[])[1];
-      if(desc)current.description=desc.replace(/\*+/g,'').trim();
-
-      let total=(l.match(/(?:original invoice total|total cost|total claim amount|total paid)\s*:\s*\₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
-      if(total)current.total_cost=hiMoney(total);
-
-      let parts=(l.match(/parts cost\s*:\s*\₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
-      if(parts)current.parts_cost=hiMoney(parts);
-
-      let labour=(l.match(/labour(?: charges| cost)?\s*:\s*\₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
-      if(labour)current.labour_cost=hiMoney(labour);
-
-      let misc=(l.match(/(?:miscellaneous \/ taxes \/ rounding|gst \/ taxes \/ rounding)\s*:\s*\₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
-      if(misc)current.other_cost=hiMoney(misc);
-
-      let prem=(l.match(/total premium\s*:\s*\₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];
-      if(prem){current.premium=hiMoney(prem);current.total_cost=hiMoney(prem);}
-
-      let company=(l.match(/insurance company\s*:\s*(.+)/i)||[])[1];
-      if(company)current.company=company.trim();
-
-      let pol=(l.match(/policy number\s*:\s*([A-Z0-9\/\-]+)/i)||[])[1];
-      if(pol)current.policy_number=pol;
-
-      let ptype=(l.match(/policy type\s*:\s*(.+)/i)||[])[1];
-      if(ptype)current.policy_type=ptype.trim();
-
-      let expiry=(l.match(/(?:expiry date|valid until|valid till)\s*:\s*(.+)/i)||[])[1];
-      if(expiry)current.valid_till=hiDate(expiry);
-
-      let issued=(l.match(/issued\s*:\s*(.+)/i)||[])[1];
-      if(issued && !current.date)current.date=hiDate(issued);
-
-      let claimLink=(l.match(/linked claim\s*:\s*(.+)/i)||[])[1];
-      if(claimLink)current.linked_claim=claimLink.trim();
-
-      if(current.kind==='claim'){
-        let reason=(l.match(/reason for claim\s*:\s*(.+)/i)||[])[1];
-        if(reason)current.description=reason.trim();
-        let status=(l.match(/payment status\s*:\s*(.+)/i)||[])[1];
-        if(status)current.payment_status=status.trim();
-      }
-
-      if(/^cost per tyre\s*:/i.test(l)){
-        const n=hiMoney(l);
-        current.total_cost=n*4;
-      }
-
-      const itemMatch=l.match(/^(?:[-*]\s*)?(.+?)\s*:\s*\₹\s*([0-9,]+(?:\.\d+)?)(?:\s*)$/);
-      if(itemMatch && !/^(parts cost|labour|total cost|total claim amount|total premium|miscellaneous|gst \/ taxes|odometer|invoice|date|cost per tyre|premium|idv|repair cost|insurance approved amount|customer paid amount)$/i.test(itemMatch[1].trim())){
-        current.items.push({name:itemMatch[1].trim(),cost:hiMoney(itemMatch[2])});
-      }
-
-      if(current.kind==='puc'){
-        let n=(l.match(/puc number\s*:\s*([A-Z0-9\/\-]+)/i)||[])[1];
-        let v=(l.match(/(?:validity|valid until)\s*:\s*(.+)/i)||[])[1];
-        let c=(l.match(/(?:puc )?cost\s*:\s*\₹?\s*([0-9,]+)/i)||[])[1];
-        if(n)current.puc_number=n;
-        if(v)current.valid_till=hiDate(v);
-        if(c)current.cost=hiMoney(c);
-      }
+    const itemMatch=clean.match(/^(.+?)\s*:\s*₹?\s*([0-9,]+(?:\.\d+)?)\s*$/i);
+    if(itemMatch){
+      const key=itemMatch[1].trim();
+      if(!/^(DATE|ODOMETER|INVOICE|SERVICE CENTER|WORKSHOP|VENDOR|CATEGORY|SUBCATEGORY|TOTAL COST|TOTAL CLAIM|TOTAL PREMIUM|PARTS|PARTS COST|LABOUR|PREMIUM|COST|POLICY NO|POLICY TYPE|ISSUED|LINKED CLAIM|VALID UNTIL|VALID TILL|EXPIRY DATE|MISCELLANEOUS \/ TAXES \/ ROUNDING|GST \/ TAXES \/ ROUNDING|COST PER TYRE)$/i.test(key))current.items.push({name:key,cost:hiMoney(itemMatch[2])});
     }
   }
-
   push();
-
-  const dated=out.filter(x=>(x.kind==='record'||x.kind==='claim')&&x.date&&x.odometer_km!=null);
-  for(let i=0;i<dated.length;i++)for(let j=i+1;j<dated.length;j++){
-    const days=Math.abs((new Date(dated[i].date)-new Date(dated[j].date))/86400000);
-    const a=Number(dated[i].odometer_km),b=Number(dated[j].odometer_km);
-    if(days<=1&&a!==b&&Math.abs(a-b)<=5)
-      warnings.push('Odometer discrepancy detected — '+dated[i].date+' ('+a.toLocaleString('en-IN')+' km) vs '+dated[j].date+' ('+b.toLocaleString('en-IN')+' km). Data preserved as supplied.');
-  }
+  const dated=out.filter(x=>x.date&&x.odometer_km!=null&&(x.kind==='record'||x.kind==='claim')).sort((a,b)=>a.date.localeCompare(b.date));
+  for(let i=1;i<dated.length;i++){const prev=Number(dated[i-1].odometer_km),now=Number(dated[i].odometer_km);if(now<prev)addWarning('Odometer decreased — '+dated[i].date+' ('+now.toLocaleString('en-IN')+' km) is lower than previous dated reading '+dated[i-1].date+' ('+prev.toLocaleString('en-IN')+' km). Original values preserved.');}
+  for(let i=0;i<dated.length;i++)for(let j=i+1;j<dated.length;j++){const days=Math.abs((new Date(dated[i].date)-new Date(dated[j].date))/86400000),a=Number(dated[i].odometer_km),b=Number(dated[j].odometer_km);if(days<=1&&a!==b&&Math.abs(a-b)<=5)addWarning('Odometer discrepancy detected — '+dated[i].date+' ('+a.toLocaleString('en-IN')+' km) vs '+dated[j].date+' ('+b.toLocaleString('en-IN')+' km). Data preserved as supplied.');}
   return {records:out,warnings};
 }
 function hiRenderRow(r){
- const type=r.kind==='puc'?'PUC':r.kind==='claim'?'Insurance Claim':r.record_type;
- const km=r.odometer_km==null?'—':Number(r.odometer_km).toLocaleString('en-IN')+(r.is_km_estimated?' · EST':'');
- const cost=r.total_cost!=null?'₹'+Number(r.total_cost||0).toLocaleString('en-IN'):(r.cost!=null?'₹'+Number(r.cost||0).toLocaleString('en-IN'):'—');
- return '<div class="history-import-row"><div><b>'+esc(r.date||'No date')+'</b><small>'+esc(type)+'</small></div><div><b>'+esc(km)+'</b><small>'+esc(r.workshop||r.state||'—')+'</small></div><div><b>'+esc(cost)+'</b><small>'+esc(r.invoice_number||r.puc_number||'')+'</small></div><span class="hi-badge '+(r.is_km_estimated?'hi-est':'')+'">'+(r.is_km_estimated?'Estimated KM':'Draft')+'</span></div>';
+  const type=r.kind==='puc'?'PUC':r.kind==='claim'?'Insurance Claim':r.record_type;
+  const detail=r.subcategory||r.description||r.company||r.state||'—';
+  const km=r.odometer_km==null?'—':Number(r.odometer_km).toLocaleString('en-IN')+(r.is_km_estimated?' · EST':'');
+  let cost='—';
+  if(r.kind==='insurance')cost=r.premium!=null?'₹'+Number(r.premium||0).toLocaleString('en-IN'):'—';
+  else if(r.total_cost!=null&&Number(r.total_cost)>0)cost='₹'+Number(r.total_cost||0).toLocaleString('en-IN');
+  else if(r.cost!=null)cost='₹'+Number(r.cost||0).toLocaleString('en-IN');
+  const badge=r.is_km_estimated?'Estimated KM':'Draft';
+  return '<div class="history-import-row"><div><b>'+esc(r.date||'No date')+'</b><small>'+esc(type)+'</small><small>'+esc(detail)+'</small></div><div><b>'+esc(km)+'</b><small>'+esc(r.workshop||r.company||r.state||'—')+'</small></div><div><b>'+esc(cost)+'</b><small>'+esc(r.invoice_number||r.policy_number||r.puc_number||'')+'</small></div><span class="hi-badge '+(r.is_km_estimated?'hi-est':'')+'">'+badge+'</span></div>';
 }
 function buildHistoricalPreview(raw){
  if(!car)return toast('Select a vehicle before importing history.','error');
