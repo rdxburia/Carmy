@@ -1094,9 +1094,10 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
    ========================================================= */
 
 function printVehicleReport(){
-  const sheet = document.getElementById('reportArea')?.querySelector('.report-sheet');
+  const source = document.getElementById('reportArea');
+  const original = source?.querySelector('.report-sheet');
 
-  if(!sheet || !sheet.innerHTML.trim()){
+  if(!original || !original.innerHTML.trim()){
     toast('Vehicle Report is still loading. Please open the report once and try again.','error');
     return;
   }
@@ -1107,128 +1108,122 @@ function printVehicleReport(){
   }
 
   /*
-   * IMPORTANT:
-   * Never render a clone outside the viewport. html2canvas can return
-   * a blank canvas for off-screen/negative-position elements.
-   *
-   * Instead, render the SAME visible report element and temporarily
-   * normalize it to the exact A4 page width. This keeps all fonts,
-   * tables, cards and content in the real DOM.
+   * Stable PDF export:
+   * Put a REAL, VISIBLE copy in a full-screen print stage.
+   * html2canvas is unreliable with hidden/off-screen/fixed-only nodes.
+   * The clone therefore remains visible and centered while html2pdf
+   * measures and renders it.
    */
-  const button = document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
-  const saved = {
-    style: sheet.getAttribute('style'),
-    className: sheet.className
-  };
+  document.getElementById('vehicleReportPdfStage')?.remove();
 
-  if(button){
-    button.disabled = true;
-    button.textContent = 'GENERATING PDF…';
-  }
+  const stage=document.createElement('div');
+  stage.id='vehicleReportPdfStage';
+  stage.style.cssText=[
+    'position:fixed',
+    'inset:0',
+    'width:100vw',
+    'height:100vh',
+    'overflow:auto',
+    'background:#fff',
+    'z-index:2147483647',
+    'display:flex',
+    'justify-content:center',
+    'align-items:flex-start',
+    'padding:20px',
+    'box-sizing:border-box'
+  ].join(';');
 
-  const filename = `Carmy_Vehicle_Report_${(
-    window.currentVehicle?.registration_number ||
-    window.currentVehicle?.registration_no ||
-    window.currentVehicle?.number ||
-    (typeof car!=='undefined' && car?.registration_no) ||
-    'Vehicle'
-  ).toString().replace(/[^a-z0-9_-]+/gi,'_')}.pdf`;
-
-  /*
-   * A4 = 210mm wide. Use ZERO html2pdf margin because the report itself
-   * already contains its own 15mm internal padding.
-   */
-  sheet.style.cssText = [
-    'display:block!important',
-    'position:fixed!important',
-    'left:0!important',
-    'top:0!important',
-    'width:210mm!important',
-    'min-width:210mm!important',
-    'max-width:210mm!important',
-    'min-height:297mm!important',
+  const clone=original.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.cssText=[
+    'display:block',
+    'flex:0 0 auto',
+    'width:190mm!important',
+    'min-width:190mm!important',
+    'max-width:190mm!important',
+    'min-height:277mm!important',
     'height:auto!important',
     'margin:0!important',
-    'padding:15mm!important',
+    'padding:10mm!important',
     'box-sizing:border-box!important',
-    'overflow:visible!important',
     'background:#fff!important',
     'color:#172033!important',
     'box-shadow:none!important',
     'border-radius:0!important',
+    'overflow:visible!important',
     'transform:none!important'
   ].join(';');
 
-  const exportStyle=document.createElement('style');
-  exportStyle.id='vehicleReportPdfExportStyle';
-  exportStyle.textContent=[
-    '#reportArea .report-sheet *{box-sizing:border-box!important}',
-    '#reportArea .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important}',
-    '#reportArea .report-table th,#reportArea .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
-    '#reportArea img{max-width:100%!important;height:auto!important}',
-    '#reportArea .report-section{break-inside:avoid!important}',
-    '#reportArea .report-card{min-width:0!important;max-width:100%!important}',
-    '#reportArea .report-grid{width:100%!important;max-width:100%!important}'
+  const css=document.createElement('style');
+  css.textContent=[
+    '#vehicleReportPdfStage *{box-sizing:border-box!important}',
+    '#vehicleReportPdfStage .report-grid{width:100%!important;max-width:100%!important}',
+    '#vehicleReportPdfStage .report-two{width:100%!important;max-width:100%!important}',
+    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important}',
+    '#vehicleReportPdfStage .report-table th,#vehicleReportPdfStage .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
+    '#vehicleReportPdfStage img{max-width:100%!important;height:auto!important}',
+    '#vehicleReportPdfStage .report-section{break-inside:avoid!important}',
+    '@media(max-width:760px){#vehicleReportPdfStage .report-grid{grid-template-columns:repeat(3,1fr)!important}#vehicleReportPdfStage .report-two{grid-template-columns:1fr 1fr!important}}'
   ].join('');
-  document.head.appendChild(exportStyle);
 
-  const options = {
-    margin: 0,
+  stage.appendChild(css);
+  stage.appendChild(clone);
+  document.body.appendChild(stage);
+
+  const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
+  if(button){button.disabled=true;button.textContent='GENERATING PDF…';}
+
+  const filename=`Carmy_Vehicle_Report_${(
+    typeof car!=='undefined' && car?.registration_no || 'Vehicle'
+  ).toString().replace(/[^a-z0-9_-]+/gi,'_')}.pdf`;
+
+  const options={
+    margin:[10,10,10,10],
     filename,
-    image: {type:'jpeg', quality:0.98},
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      allowTaint: false,
+    image:{type:'jpeg',quality:0.98},
+    html2canvas:{
+      scale:2,
+      useCORS:true,
+      allowTaint:false,
       backgroundColor:'#ffffff',
-      logging: false,
-      scrollX: 0,
-      scrollY: 0,
-      width: 794,
-      windowWidth: 794,
-      x: 0,
-      y: 0
+      logging:false,
+      scrollX:0,
+      scrollY:0
     },
-    jsPDF: {
+    jsPDF:{
       unit:'mm',
       format:'a4',
       orientation:'portrait',
       compress:true
     },
-    pagebreak: {
+    pagebreak:{
       mode:['css','legacy'],
       avoid:['.report-section']
     }
   };
 
   /*
-   * Give the browser one frame to apply the A4 layout before html2canvas
-   * measures it. This also prevents the intermittent blank-canvas case.
+   * Wait for layout/fonts before measurement. The stage is visible,
+   * so html2canvas receives a normal, measurable DOM tree.
    */
   requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      html2pdf()
-        .set(options)
-        .from(sheet)
-        .save()
-        .then(()=>{
-          toast('A4 Vehicle Report PDF generated successfully.','success');
-        })
-        .catch((err)=>{
-          console.error('Vehicle report PDF error:',err);
-          toast('PDF generation failed. Please refresh and try again.','error');
-        })
-        .finally(()=>{
-          sheet.setAttribute('style', saved.style || '');
-          sheet.className = saved.className;
-          exportStyle.remove();
-          if(button){
-            button.disabled=false;
-            button.textContent='PRINT / SAVE PDF';
-          }
-        });
+    requestAnimationFrame(async()=>{
+      try{
+        if(document.fonts?.ready)await document.fonts.ready;
+        await html2pdf().set(options).from(clone).save();
+        toast('A4 Vehicle Report PDF generated successfully.','success');
+      }catch(err){
+        console.error('Vehicle report PDF error:',err);
+        toast('PDF generation failed. Please try again.','error');
+      }finally{
+        stage.remove();
+        if(button){
+          button.disabled=false;
+          button.textContent='PRINT / SAVE PDF';
+        }
+      }
     });
   });
 }
 
-window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;
+window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;
