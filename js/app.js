@@ -1075,3 +1075,41 @@ window.hiResolveFinancial=hiResolveFinancial;
 window.hiConvertEstimated=hiConvertEstimated;
 window.hiApproveImport=hiApproveImport;
 function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(err?.message||err||'');return /does not exist|schema cache|PGRST20\d|42P01|42883|Could not find the (table|function)/i.test(m)?'Database setup incomplete: run supabase/'+file+' in Supabase SQL Editor (after Steps 1-4), then refresh. ('+m+')':m}
+
+/* =========================================================
+   A4 REPORT PRINT PORTAL
+   Browser print receives a dedicated report-only DOM node.
+   This avoids blank pages caused by .view/display/visibility
+   rules during native window.print().
+   ========================================================= */
+
+function printVehicleReport(){
+  const source = document.getElementById('reportArea');
+  if(!source || !source.innerHTML.trim()){
+    toast('Vehicle Report is still loading. Please open the report once and try again.','error');
+    return;
+  }
+
+  document.getElementById('vehicleReportPrintPortal')?.remove();
+
+  const portal = document.createElement('div');
+  portal.id = 'vehicleReportPrintPortal';
+  portal.innerHTML = source.innerHTML;
+  document.body.appendChild(portal);
+
+  const cleanup = ()=>{
+    portal.remove();
+    window.removeEventListener('afterprint', cleanup);
+  };
+
+  window.addEventListener('afterprint', cleanup);
+
+  // Allow the browser one paint cycle before opening print preview.
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      window.print();
+    });
+  });
+}
+
+window.printVehicleReport = printVehicleReport;
