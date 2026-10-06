@@ -1062,3 +1062,59 @@ button{border-radius:11px!important}
     margin:10mm;
   }
 }
+
+
+/* =========================================================
+   A4 REPORT DEDICATED PRINT PORTAL
+   ========================================================= */
+
+#vehicleReportPrintPortal{
+  display:none;
+}
+
+@media print{
+  /* Hide the application completely. */
+  body > *:not(#vehicleReportPrintPortal){
+    display:none!important;
+  }
+
+  html,
+  body{
+    width:100%!important;
+    min-height:0!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+
+  #vehicleReportPrintPortal{
+    display:block!important;
+    visibility:visible!important;
+    width:100%!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    color:#172033!important;
+  }
+
+  #vehicleReportPrintPortal .report-sheet{
+    display:block!important;
+    width:100%!important;
+    max-width:none!important;
+    min-height:277mm!important;
+    margin:0!important;
+    padding:0!important;
+    box-shadow:none!important;
+    border:0!important;
+    border-radius:0!important;
+    background:#fff!important;
+    color:#172033!important;
+    transform:none!important;
+    animation:none!important;
+  }
+
+  @page{
+    size:A4 portrait;
+    margin:10mm;
+  }
+}
