@@ -780,7 +780,7 @@ function hiParseRecords(raw){
     if(/(?:periodic )?regular services?/i.test(l)){push();section='service';continue}
     if(/battery replacement/i.test(l)){push();section='battery';continue}
     if(/tyre replacement/i.test(l)){push();section='tyre';continue}
-    if(/pollution under control/i.test(l)){push();section='puc';continue}
+    if(/(?:pollution under control|puc records?)/i.test(l)){push();section='puc';continue}
     if(/(?:vehicle )?insurance history/i.test(l)){push();section='insurance';continue}
     if(/insurance claims?(?: log)?/i.test(l)){push();section='claim';continue}
     if(/personal out-of-pocket expenses/i.test(l)){push();section='repair';continue}
@@ -805,7 +805,7 @@ function hiParseRecords(raw){
       let inv=(l.match(/invoice\s*(?:no\.?|number)?\s*:\s*([A-Z0-9\/-]+)/i)||[])[1];if(inv)current.invoice_number=inv;
       let ws=(l.match(/(?:service center|vendor)\s*:\s*(.+)/i)||[])[1];if(ws)current.workshop=ws.replace(/\*+/g,'').trim();
       let desc=(l.match(/work done\s*:\s*(.+)/i)||[])[1];if(desc)current.description=desc.replace(/\*+/g,'').trim();
-      let total=(l.match(/total (?:cost|paid)\s*:\s*\*?\*?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(total)current.total_cost=hiMoney(total);
+      let total=(l.match(/total (?:cost|paid)\s*:?\s*\*?\*?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(total)current.total_cost=hiMoney(total);
       let parts=(l.match(/parts(?: cost)?\s*:?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(parts)current.parts_cost=hiMoney(parts);
       let labour=(l.match(/labour(?: charges| cost)?\s*:?\s*₹?\s*([0-9,]+(?:\.\d+)?)/i)||[])[1];if(labour)current.labour_cost=hiMoney(labour);
       if(/^\-\s+/.test(l)&&!/labour|total cost|invoice|service center|vendor|date|odometer|cost breakdown/i.test(l)){let item=l.replace(/^\-\s+/,'').replace(/\s+₹\s*[\d,]+(?:\.\d+)?\s*$/,'').trim();let cost=(l.match(/₹\s*([\d,]+(?:\.\d+)?)/)||[])[1];if(item)current.items.push({name:item.replace(/:\s*$/,''),cost:hiMoney(cost)})}
