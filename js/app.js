@@ -1090,26 +1090,56 @@ function printVehicleReport(){
     return;
   }
 
-  document.getElementById('vehicleReportPrintPortal')?.remove();
+  /*
+   * IMPORTANT:
+   * Do NOT call window.print() on the main application document.
+   * The report lives inside a .view/.view.active layout and the main
+   * document has print rules that hide application views. On some
+   * Chromium builds that results in a completely blank print preview.
+   *
+   * Open a dedicated same-origin print document instead. It contains
+   * ONLY the report, so no dashboard/sidebar/hidden-view CSS can hide it.
+   */
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
+  if(!printWindow){
+    toast('Print window was blocked by the browser. Please allow pop-ups for this site.','error');
+    return;
+  }
 
-  const portal = document.createElement('div');
-  portal.id = 'vehicleReportPrintPortal';
-  portal.innerHTML = source.innerHTML;
-  document.body.appendChild(portal);
+  const reportHtml = source.innerHTML;
+  const styles = [
+    'css/styles.css',
+    'css/premium.css'
+  ].map(path=>{
+    try{return '<link rel="stylesheet" href="'+new URL(path, location.href).href+'">';}
+    catch(e){return '';}
+  }).join('');
 
-  const cleanup = ()=>{
-    portal.remove();
-    window.removeEventListener('afterprint', cleanup);
-  };
+  const printDoc = '<!doctype html><html><head>'+
+    '<meta charset="utf-8">'+
+    '<meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<title>Vehicle Report - '+esc(car?.registration_no||'CarCare Cloud')+'</title>'+
+    styles+
+    '<style>'+
+      'html,body{margin:0!important;padding:0!important;background:#fff!important}'+
+      'body{font-family:Inter,Arial,sans-serif;color:#172033}'+
+      '.report-sheet{margin:0 auto!important;box-shadow:none!important}'+
+      '@page{size:A4;margin:10mm}'+
+      '@media print{html,body{background:#fff!important}.report-sheet{width:100%!important;min-height:277mm!important;margin:0!important;padding:0!important;box-shadow:none!important;border-radius:0!important}.report-section{break-inside:avoid}.report-table{font-size:9px}.report-table th,.report-table td{padding:6px}}'+
+    '</style></head><body>'+
+    reportHtml+
+    '<script>'+
+      'window.addEventListener("load",async function(){'+
+        'try{if(document.fonts&&document.fonts.ready)await document.fonts.ready;}catch(e){}'+
+        'setTimeout(function(){window.focus();window.print();},250);'+
+      '});'+
+    '<\/script>'+
+    '</body></html>';
 
-  window.addEventListener('afterprint', cleanup);
-
-  // Allow the browser one paint cycle before opening print preview.
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      window.print();
-    });
-  });
+  printWindow.document.open();
+  printWindow.document.write(printDoc);
+  printWindow.document.close();
+  printWindow.focus();
 }
 
 window.printVehicleReport = printVehicleReport;
