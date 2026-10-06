@@ -37,6 +37,8 @@ declare
   v_count_puc int := 0;
   v_count_insurance int := 0;
   v_count_claims int := 0;
+  v_prev_km numeric := null;
+  v_prev_date date := null;
   v_warnings int := coalesce(jsonb_array_length(coalesce(p_payload->'warnings','[]'::jsonb)),0);
 begin
   if v_user is null then
@@ -55,9 +57,43 @@ begin
     raise exception 'Import blocked: % warning(s) remain unresolved', v_warnings;
   end if;
 
+  -- Server-side revalidation: the browser gate is UX only; the database
+  -- independently blocks unresolved financial gaps and KM decreases.
+  for v_rec in
+    select value
+    from jsonb_array_elements(coalesce(p_payload->'records','[]'::jsonb))
+    where value->>'kind' in ('record','claim')
+    order by (value->>'date')::date
+  loop
+    if v_rec->>'original_invoice_total' is not null
+       and nullif(v_rec->>'original_invoice_total','') is not null
+       and coalesce(v_rec->>'financial_resolution','')=''
+       and abs(
+         (v_rec->>'original_invoice_total')::numeric -
+         (
+           coalesce(nullif(v_rec->>'parts_cost','')::numeric,0)+
+           coalesce(nullif(v_rec->>'labour_cost','')::numeric,0)+
+           coalesce(nullif(v_rec->>'other_cost','')::numeric,0)
+         )
+       ) > 0.01 then
+      raise exception 'Import blocked: unresolved financial gap on %', v_rec->>'date';
+    end if;
+
+    if coalesce((v_rec->>'is_km_estimated')::boolean,false)=false
+       and nullif(v_rec->>'odometer_km','') is not null then
+      if v_prev_km is not null
+         and (v_rec->>'odometer_km')::numeric < v_prev_km
+         and coalesce(v_rec->>'odometer_resolution','')='' then
+        raise exception 'Import blocked: unresolved odometer decrease on %', v_rec->>'date';
+      end if;
+      v_prev_km := (v_rec->>'odometer_km')::numeric;
+      v_prev_date := (v_rec->>'date')::date;
+    end if;
+  end loop;
+
   if exists(select 1 from public.records where car_id=p_car_id and import_batch_id=p_import_batch_id)
      or exists(select 1 from public.puc_history where car_id=p_car_id and source='historical_import' and import_batch_id=p_import_batch_id)
-     or exists(select 1 from public.insurance_history where car_id=p_car_id and source='historical_import' and p_import_batch_id=coalesce((p_payload->>'import_batch_id'),p_import_batch_id))
+     or exists(select 1 from public.insurance_history where car_id=p_car_id and source='historical_import' and import_batch_id=p_import_batch_id)
      or exists(select 1 from public.insurance_claims where car_id=p_car_id and import_batch_id=p_import_batch_id) then
     raise exception 'This historical import batch was already imported';
   end if;
