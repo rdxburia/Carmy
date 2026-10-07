@@ -465,13 +465,15 @@ function openOwnerProfile(){
 }
 async function openVehicleHistory(id=car?.id){
  const target=cars.find(x=>x.id===id)||car;if(!target)return;
- const [ih,ph,rh,sh]=await Promise.all([
-   db.from('insurance_history').select('*').eq('car_id',target.id).order('created_at',{ascending:false}),
-   db.from('puc_history').select('*').eq('car_id',target.id).order('created_at',{ascending:false}),
-   db.from('policy_renewals').select('*').eq('car_id',target.id).order('renewal_date',{ascending:false}),
-   db.from('sale_history').select('*').eq('car_id',target.id).order('sale_date',{ascending:false})
- ]);
- const insuranceRows=ih.error?[]:(ih.data||[]),pucRows=ph.error?[]:(ph.data||[]),renewalRows=rh.error?[]:(rh.data||[]),saleRows=sh.error?[]:(sh.data||[]);
+ const qs='?car_id='+encodeURIComponent(target.id);
+ try{
+   const [ih,ph,rh,sh]=await Promise.all([
+     workerGet('/api/insurance'+qs),
+     workerGet('/api/puc'+qs),
+     workerGet('/api/renewals'+qs),
+     workerGet('/api/sale-history'+qs)
+   ]);
+   const insuranceRows=Array.isArray(ih?.data)?ih.data:[],pucRows=Array.isArray(ph?.data)?ph.data:[],renewalRows=Array.isArray(rh?.data)?rh.data:[],saleRows=Array.isArray(sh?.data)?sh.data:[];
  let old=document.getElementById('vehicleHistoryModal');if(old)old.remove();
  let m=document.createElement('div');m.id='vehicleHistoryModal';
  m.innerHTML='<div class="step5-modal-card history-modal"><div class="toolbar"><div><h3>'+esc(target.registration_no)+' • Compliance History</h3><p class="muted">Server-side historical snapshots remain linked to this vehicle.</p></div><button class="ghost" id="vhClose">✕</button></div>'+
@@ -480,6 +482,7 @@ async function openVehicleHistory(id=car?.id){
  '<div class="history-section"><h4>Policy Renewal History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>Type</th><th>Old Expiry</th><th>New Expiry</th><th>Source</th></tr></thead><tbody>'+(renewalRows.length?renewalRows.map(x=>'<tr><td>'+esc(x.renewal_date)+'</td><td>'+esc(x.policy_type?.toUpperCase())+'</td><td>'+esc(x.old_expiry)+'</td><td>'+esc(x.new_expiry)+'</td><td>'+esc(x.source)+'</td></tr>').join(''):'<tr><td colspan="5">No renewal history recorded yet.</td></tr>')+'</tbody></table></div></div>'+
  '<div class="history-section"><h4>Sale History</h4><div class="table-scroll"><table class="table"><thead><tr><th>Sale Date</th><th>Buyer</th><th>RTO</th><th>Financier</th><th>Status</th></tr></thead><tbody>'+(saleRows.length?saleRows.map(x=>'<tr><td>'+esc(x.sale_date)+'</td><td>'+esc(x.buyer_name)+'</td><td>'+esc(x.buyer_rto)+'</td><td>'+esc(x.financier)+'</td><td>'+esc(x.status)+'</td></tr>').join(''):'<tr><td colspan="5">No sale history — vehicle is '+(target.vehicle_status==='sold'?'marked SOLD':'active')+'.</td></tr>')+'</tbody></table></div></div></div>';
  document.body.appendChild(m);$('vhClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
+ }catch(err){toast('Compliance history could not be loaded: '+(err?.message||err),'error');}
 }
 function carsView(){
  $('carsList').innerHTML='<div class="step5-toolbar"><div><b>Owner & Vehicle Records</b><span class="muted">Profile, compliance history and sold lifecycle are stored in the cloud.</span></div><button class="ghost" onclick="openOwnerProfile()">👤 Owner Profile</button></div>'+
