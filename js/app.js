@@ -155,10 +155,11 @@ function showAppLoading(){
    const diff=state.target-state.value;
    if(diff>0)state.value=Math.min(state.target,state.value+Math.max(.045,diff*.075*(dt/16.67)));
    const pct=Math.max(0,Math.min(100,state.value));
+   o.style.setProperty('--loading-parallax',(-pct*.32)+'px');
    const carEl=document.getElementById('appLoadingCar');
-   if(carEl)carEl.style.left=pct+'%';
+   if(carEl)carEl.style.left=(4+(pct*.92))+'%';
    const fill=document.getElementById('appLoadingProgressFill');
-   if(fill)fill.style.width=pct+'%';
+   if(fill)fill.style.transform='scaleX('+(pct/100)+')';
    const percent=document.getElementById('appLoadingPercent');
    if(percent)percent.textContent=Math.round(pct)+'%';
    if(carEl){
