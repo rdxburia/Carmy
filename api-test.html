@@ -41,9 +41,8 @@
           return;
         }
 
-        const response = await fetch(WORKER + "/api/vehicles", {
-          headers: { Authorization: "Bearer " + session.access_token }
-        });
+        const headers = { Authorization: "Bearer " + session.access_token };
+        const response = await fetch(WORKER + "/api/vehicles", { headers });
         const body = await response.json();
 
         if (!response.ok) {
@@ -54,11 +53,45 @@
           return;
         }
 
+        const vehicles = Array.isArray(body.data) ? body.data : [];
+        if (!vehicles.length) {
+          show({
+            worker: "ok",
+            authentication: "ok",
+            vehicles_api: "ok",
+            vehicle_count: 0,
+            service_history_api: "not_tested",
+            message: "No vehicle is available for the service-history test."
+          });
+          return;
+        }
+
+        const carId = vehicles[0].id;
+        const historyResponse = await fetch(
+          WORKER + "/api/service-history?car_id=" + encodeURIComponent(carId),
+          { headers }
+        );
+        const historyBody = await historyResponse.json();
+
+        if (!historyResponse.ok) {
+          show({
+            worker: "ok",
+            authentication: "ok",
+            vehicles_api: "ok",
+            vehicle_count: vehicles.length,
+            service_history_http_status: historyResponse.status,
+            service_history_response: historyBody
+          }, false);
+          return;
+        }
+
         show({
           worker: "ok",
           authentication: "ok",
           vehicles_api: "ok",
-          vehicle_count: Array.isArray(body.data) ? body.data.length : null
+          vehicle_count: vehicles.length,
+          service_history_api: "ok",
+          service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null
         });
       } catch (error) {
         show("TEST FAILED: " + (error?.message || error), false);
