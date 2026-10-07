@@ -24,8 +24,11 @@ export async function supabaseRest(env, path, options = {}, userToken) {
   }
 
   if (!response.ok) {
-    const message = body?.message || body?.hint || "Supabase request failed.";
-    throw new Error(message);
+    console.error("Supabase REST error", response.status, body?.message || body?.hint || body);
+    const err = new Error("Upstream data service request failed.");
+    err.status = 502;
+    err.code = "UPSTREAM_ERROR";
+    throw err;
   }
 
   return body;
@@ -47,7 +50,11 @@ export async function supabaseRpc(env, name, args, userToken) {
   }
 
   if (!response.ok) {
-    throw new Error(body?.message || body?.hint || "Supabase RPC failed.");
+    console.error("Supabase RPC error", response.status, body?.message || body?.hint || body);
+    const err = new Error("Upstream data service request failed.");
+    err.status = 502;
+    err.code = "UPSTREAM_ERROR";
+    throw err;
   }
 
   return body;
