@@ -642,6 +642,9 @@ function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.regis
 async function start(u){
  if(startedUserId===u.id)return;
  startedUserId=u.id;user=u;
+ stopVerificationCountdown();
+ pendingVerificationEmail='';
+ try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
  $('auth').classList.add('hidden');
  $('app').classList.add('hidden');
  $('userEmail').textContent=u.email;
@@ -1831,4 +1834,4 @@ function printVehicleReport(){
   });
 }
 
-window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;window.printVehicleReport = printVehicleReport;
+window.printVehicleReport = printVehicleReport;
