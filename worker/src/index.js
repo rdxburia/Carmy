@@ -8,6 +8,7 @@ import { listPucHistory } from "./puc.js";
 import { getProfile } from "./profile.js";
 import { listRenewals } from "./renewals.js";
 import { listSaleHistory } from "./sales.js";
+import { handleCacheWebhook } from "./cache-webhook.js";
 
 function originFor(request, env) {
   const origin = request.headers.get("Origin");
@@ -44,6 +45,10 @@ export default {
 
     if (url.pathname === "/" && request.method === "GET") {
       return json({ ok: true, service: "carmy-api" }, 200, origin);
+    }
+
+    if (url.pathname === "/api/cache/invalidate" && request.method === "POST") {
+      return handleCacheWebhook(request, env, origin);
     }
 
     if (url.pathname === "/api/health" && request.method === "GET") {
