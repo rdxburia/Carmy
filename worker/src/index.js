@@ -147,7 +147,10 @@ export default {
       return error("Route not found.", 404, origin, "NOT_FOUND");
     } catch (err) {
       console.error(err);
-      return error(err?.message || "Internal server error.", Number(err?.status) || 500, origin, err?.code || "INTERNAL_ERROR");
+      const status = Number(err?.status) || 500;
+      const code = err?.code || "INTERNAL_ERROR";
+      const message = status >= 500 ? "Internal server error." : (err?.message || "Request failed.");
+      return error(message, status, origin, code);
     }
   },
 };
