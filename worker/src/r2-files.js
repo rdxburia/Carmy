@@ -119,6 +119,19 @@ export async function finalizeUpload(env, user, userToken, input) {
     throw err;
   }
 
+  // Enforce the same limits again at finalization. The client controls the
+  // initial file_size metadata, so it must never be treated as authoritative.
+  if (Number(object.size) <= 0 || Number(object.size) > MAX_FILE_SIZE) {
+    await env.R2.delete(pendingKey);
+    throw new Error("Uploaded file exceeds the 10 MB limit.");
+  }
+
+  const uploadedContentType = String(object.httpMetadata?.contentType || "");
+  if (!ALLOWED_MIME.has(uploadedContentType)) {
+    await env.R2.delete(pendingKey);
+    throw new Error("Uploaded file type is not allowed.");
+  }
+
   const finalKey = pendingKey.replace(/^pending\//, "documents/");
   const saved = await env.R2.put(finalKey, object.body, {
     httpMetadata: object.httpMetadata,
