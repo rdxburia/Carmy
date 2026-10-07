@@ -28,17 +28,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           DATE_UTC="$(date -u +%Y-%m-%d)"
           COMMIT_SHA="$(git rev-parse HEAD)"
           mkdir -p backup-output
-
           git bundle create "backup-output/Carmy-$DATE_UTC.bundle" --all
-
-          zip -qr "backup-output/Carmy-$DATE_UTC-source.zip" . \
-            -x ".git/*" \
-               "backup-output/*"
-
+          zip -qr "backup-output/Carmy-$DATE_UTC-source.zip" . -x ".git/*" "backup-output/*"
           echo "$COMMIT_SHA" > "backup-output/git-commit.txt"
 
       - name: Create Supabase PostgreSQL backup
@@ -47,49 +41,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           if [[ -z "$SUPABASE_BACKUP_DB_URL" ]]; then
             echo "Missing SUPABASE_BACKUP_DB_URL secret."
             exit 1
           fi
-
           DATE_UTC="$(date -u +%Y-%m-%d)"
-
-          # Plain SQL: human-readable and easy to restore.
-          # Supabase currently runs PostgreSQL 17.x. Use the matching official
-          # PostgreSQL 17 client instead of the runner's older client.
-          docker run --rm \
-            -e PGPASSWORD="" \
-            -v "$PWD/backup-output:/backup" \
-            postgres:17-alpine \
-            pg_dump "$SUPABASE_BACKUP_DB_URL" \
-              --format=plain \
-              --no-owner \
-              --no-privileges \
-              --file="/backup/Carmy-Supabase-$DATE_UTC.sql"
-
-          # Custom archive: compact and flexible for pg_restore.
-          docker run --rm \
-            -v "$PWD/backup-output:/backup" \
-            postgres:17-alpine \
-            pg_dump "$SUPABASE_BACKUP_DB_URL" \
-              --format=custom \
-              --no-owner \
-              --no-privileges \
-              --file="/backup/Carmy-Supabase-$DATE_UTC.dump"
-
+          docker run --rm -e PGPASSWORD="" -v "$PWD/backup-output:/backup" postgres:17-alpine pg_dump "$SUPABASE_BACKUP_DB_URL" --format=plain --no-owner --no-privileges --file="/backup/Carmy-Supabase-$DATE_UTC.sql"
+          docker run --rm -v "$PWD/backup-output:/backup" postgres:17-alpine pg_dump "$SUPABASE_BACKUP_DB_URL" --format=custom --no-owner --no-privileges --file="/backup/Carmy-Supabase-$DATE_UTC.dump"
           gzip -9 "backup-output/Carmy-Supabase-$DATE_UTC.sql"
 
       - name: Create backup manifest and checksums
         shell: bash
         run: |
           set -euo pipefail
-
           DATE_UTC="$(date -u +%Y-%m-%d)"
           COMMIT_SHA="$(git rev-parse HEAD)"
-
           sha256sum backup-output/* > backup-output/SHA256SUMS.txt
-
           cat > "backup-output/backup-manifest.json" <<EOF
           {
             "backup_date_utc": "$DATE_UTC",
@@ -116,36 +83,37 @@ jobs:
 
       - name: Upload backup to Google Drive
         env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]]; then
-            echo "Missing GOOGLE_SERVICE_ACCOUNT_JSON secret."
-            exit 1
-          fi
-
-          if [[ -z "$GOOGLE_DRIVE_FOLDER_ID" ]]; then
-            echo "Missing GOOGLE_DRIVE_FOLDER_ID secret."
-            exit 1
-          fi
+          for name in GOOGLE_OAUTH_REFRESH_TOKEN GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_DRIVE_FOLDER_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing $name secret."
+              exit 1
+            fi
+          done
 
           python - <<'PY'
-          import json
           import os
           from pathlib import Path
 
-          from google.oauth2 import service_account
+          from google.oauth2.credentials import Credentials
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
           folder_id = os.environ["GOOGLE_DRIVE_FOLDER_ID"]
 
-          credentials = service_account.Credentials.from_service_account_info(
-              info,
+          credentials = Credentials(
+              token=None,
+              refresh_token=os.environ["GOOGLE_OAUTH_REFRESH_TOKEN"],
+              token_uri="https://oauth2.googleapis.com/token",
+              client_id=os.environ["GOOGLE_OAUTH_CLIENT_ID"],
+              client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
               scopes=["https://www.googleapis.com/auth/drive"],
           )
 
@@ -161,10 +129,7 @@ jobs:
               raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID is not a Drive folder.")
 
           for path in sorted(Path("backup-output").iterdir()):
-              metadata = {
-                  "name": path.name,
-                  "parents": [folder_id],
-              }
+              metadata = {"name": path.name, "parents": [folder_id]}
               media = MediaFileUpload(
                   str(path),
                   resumable=True,
@@ -178,7 +143,7 @@ jobs:
               ).execute()
               print(f"Uploaded: {uploaded.get('name')} ({uploaded.get('size')} bytes)")
 
-          print("Google Drive backup upload completed.")
+          print("Google Drive OAuth backup upload completed.")
           PY
 
       - name: Backup summary
