@@ -13,6 +13,24 @@ async function workerGet(path){
   if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
   return body;
 }
+async function workerPost(path,payload){
+  if(!db)throw new Error('Secure API connection is not ready.');
+  const session=await db.auth.getSession();const token=session?.data?.session?.access_token;
+  if(!token)throw new Error('Secure login session expired. Please login again.');
+  const res=await fetch(WORKER_API+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload||{})});
+  let body=null;try{body=await res.json()}catch(e){}
+  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
+  return body;
+}
+async function workerDelete(path){
+  if(!db)throw new Error('Secure API connection is not ready.');
+  const session=await db.auth.getSession();const token=session?.data?.session?.access_token;
+  if(!token)throw new Error('Secure login session expired. Please login again.');
+  const res=await fetch(WORKER_API+path,{method:'DELETE',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
+  let body=null;try{body=await res.json()}catch(e){}
+  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
+  return body;
+}
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K);return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
@@ -578,11 +596,12 @@ function renderDocFlipCard(d){
  const meta=d.document_type==='insurance'?(car.insurance_number||'Policy number not recorded'):d.document_type==='puc'?((car.puc_state||'State')+' • '+(car.puc_validity_months?car.puc_validity_months+' months':'Validity not recorded')):d.document_type==='rc'?'Registration Certificate':(d.document_name||'Vehicle document');
  const pathArg=JSON.stringify(d.storage_path),nameArg=JSON.stringify(d.file_name),idArg=JSON.stringify(d.id),typeArg=JSON.stringify(d.document_type);
  const renew=(d.document_type==='insurance'||d.document_type==='puc')?'<button class="primary" onclick="event.stopPropagation();openDocUploader('+typeArg+')">Renew</button>':'';
- return `<div class="flip-card doc-flip-card" tabindex="0"><div class="flip-inner"><div class="flip-front"><div class="doc-card-top"><span class="doc-card-icon">${icon}</span><span class="doc-badge ${cls}">${status}</span></div><b>${esc(title)}</b><small>${esc(meta)}</small><em>${esc(d.document_expiry?'Expiry '+d.document_expiry:'No expiry required')}</em></div><div class="flip-back"><b>${esc(title)}</b><small>${esc(d.file_name)}</small><div class="doc-flip-actions"><button class="ghost" onclick="event.stopPropagation();openDocumentPreview(${pathArg},${nameArg})">Preview</button><button class="ghost" onclick="event.stopPropagation();downloadDoc(${pathArg})">Download</button>${renew}${!d.archived_at?'<button class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="event.stopPropagation();deleteDoc('+idArg+','+pathArg+')">Delete</button>':''}</div></div></div></div>`;
+ return '<div class="flip-card doc-flip-card" tabindex="0"><div class="flip-inner"><div class="flip-front"><div class="doc-card-top"><span class="doc-card-icon">'+icon+'</span><span class="doc-badge '+cls+'">'+status+'</span></div><b>'+esc(title)+'</b><small>'+esc(meta)+'</small><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'No expiry required')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><small>'+esc(d.file_name)+'</small><div class="doc-flip-actions"><button class="ghost" onclick="event.stopPropagation();openDocumentPreview('+idArg+','+pathArg+','+nameArg+')">Preview</button><button class="ghost" onclick="event.stopPropagation();downloadDoc('+idArg+','+pathArg+')">Download</button>'+renew+(!d.archived_at?'<button class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="event.stopPropagation();deleteDoc('+idArg+','+pathArg+','+(d.archived_at?'true':'false')+')">Delete</button>':'')+'</div></div></div></div>';
 }
 function renderDocRow(d){
  let [status,cls]=docStatus(d),title=docTypeLabel(d);
- return '<div class="doc-row '+cls+'"><div class="doc-icon">'+(d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄')+'</div><div class="doc-main"><b>'+esc(title)+'</b><span>'+esc(d.file_name)+'</span><small>Uploaded: '+new Date(d.created_at).toLocaleDateString()+'</small>'+(d.document_expiry?'<span class="doc-expiry">'+(status==='Expired'?'Expired on':'Expiry')+' '+esc(d.document_expiry)+'</span>':'')+'<span class="doc-badge '+cls+'">'+status+'</span>'+(d.archived_at?'<em>Archive: '+esc(d.archive_name||'Year Wise')+'</em>':'')+'</div><div class="doc-actions"><button class="ghost" onclick="openDocumentPreview(\''+d.storage_path.replace(/'/g,"\\'")+'\',\''+d.file_name.replace(/'/g,"\\'")+'\')">Preview</button><button class="ghost" onclick="downloadDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button><button class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\','+(d.archived_at?'true':'false')+')">Delete</button></div></div>'}
+ return '<div class="doc-row '+cls+'"><div class="doc-icon">'+(d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄')+'</div><div class="doc-main"><b>'+esc(title)+'</b><span>'+esc(d.file_name)+'</span><small>Uploaded: '+new Date(d.created_at).toLocaleDateString()+'</small>'+(d.document_expiry?'<span class="doc-expiry">'+(status==='Expired'?'Expired on':'Expiry')+' '+esc(d.document_expiry)+'</span>':'')+'<span class="doc-badge '+cls+'">'+status+'</span>'+(d.archived_at?'<em>Archive: '+esc(d.archive_name||'Year Wise')+'</em>':'')+'</div><div class="doc-actions"><button class="ghost" onclick="openDocumentPreview(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\',\''+d.file_name.replace(/'/g,"\\'")+'\')">Preview</button><button class="ghost" onclick="downloadDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button><button class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\','+(d.archived_at?'true':'false')+')">Delete</button></div></div>';
+}
 async function docsView(){if(!car)return;let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};active.forEach(d=>(groups[d.document_type]||groups.other).push(d));let html='<div class="doc-grid">';[['rc','Registration Certificate','📘'],['puc','PUC','🌿'],['insurance','Insurance','🛡️'],['other','Other Documents','📄']].forEach(([key,label,icon])=>{html+='<div class="doc-col"><div class="doc-col-head"><div><span class="doc-col-icon">'+icon+'</span><b>'+label+'</b></div><span>'+groups[key].length+'</span></div>'+(groups[key].length?'<div class="doc-flip-grid">'+groups[key].map(renderDocFlipCard).join('')+'</div>':'<div class="doc-empty">No '+label+' document</div>')+'</div>'});html+='</div>';if(!deletePasswordChanged())html+='<div class="doc-security-notice">🔒 Please change default password to unlock delete actions.</div>';if(arch.length){let by={};arch.forEach(d=>{let k=d.archive_name||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});html+='<div class="doc-archive"><div class="doc-archive-head">📁 Archived Documents</div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>'}$('docList').innerHTML=html;if(active.some(d=>docExpired(d))&&window.__expiryPopupFor!==car.id){window.__expiryPopupFor=car.id;showDocumentExpiryPopup()}}
 function showDocumentExpiryPopup(){
  if(document.getElementById('docExpiryPopup'))return;
@@ -614,102 +633,96 @@ function formatDateNice(x){
 function openDocUploader(preselectedType=''){
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
- m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. Insurance/PUC expiry is entered manually; RC expiry is calculated from Issue Date + vehicle fuel type.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
+ m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. New documents use private Cloudflare R2; existing documents remain on legacy Supabase Storage.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
  document.body.appendChild(m);
  if(['rc','puc','insurance','other'].includes(preselectedType))$('docType').value=preselectedType;
  const updateFields=()=>{
    let t=$('docType').value,rc=t==='rc',expiry=t==='insurance'||t==='puc';
-   $('docNameWrap').style.display=t==='other'?'block':'none';
-   $('docExpiryWrap').style.display=expiry?'block':'none';
-   $('docIssueReq').textContent=(rc||t==='insurance'||t==='puc')?'*':'';
+   $('docNameWrap').style.display=t==='other'?'block':'none';$('docExpiryWrap').style.display=expiry?'block':'none';$('docIssueReq').textContent=(rc||t==='insurance'||t==='puc')?'*':'';
    $('rcValidityInfo').style.display=rc?'block':'none';
    if(rc){$('rcValidityYears').textContent=rcValidityYears(car?.fuel);let x=calculateRcExpiry($('docIssue').value,car?.fuel);$('rcCalculatedExpiry').textContent=x?formatDateNice(x):'—'}
  };
- $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();if(preselectedType)$('docUploadTitle').textContent=preselectedType==='insurance'?'Renew Insurance':preselectedType==='puc'?'Renew PUC':preselectedType==='rc'?'Replace Registration Certificate':'Upload Vehicle Document';
- $('docUploadClose').onclick=()=>m.remove();
- m.onclick=e=>{if(e.target===m&&$('docUploadBtn')&&!$('docUploadBtn').disabled)m.remove()};
+ $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();
+ if(preselectedType)$('docUploadTitle').textContent=preselectedType==='insurance'?'Renew Insurance':preselectedType==='puc'?'Renew PUC':preselectedType==='rc'?'Replace Registration Certificate':'Upload Vehicle Document';
+ $('docUploadClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m&&$('docUploadBtn')&&!$('docUploadBtn').disabled)m.remove()};
  $('docUploadBtn').onclick=async()=>{
    let btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
    btn.disabled=true;btn.classList.add('is-uploading');label.innerHTML='<span class="inline-spinner"></span> UPLOADING...';
-   let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null;
-   let e=(t==='rc')?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');
-   let f=$('docFile').files[0];
-   const MAX_FILE_SIZE=10*1024*1024;
-   const ALLOWED_MIME=new Set(['application/pdf','image/jpeg','image/png']);
-   const ALLOWED_EXT=new Set(['pdf','jpg','jpeg','png']);
-   const fail=(msg)=>{btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';toast(msg,'error')};
+   let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null,e=t==='rc'?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');
+   let f=$('docFile').files[0],MAX_FILE_SIZE=10*1024*1024,ALLOWED_MIME=new Set(['application/pdf','image/jpeg','image/png']),ALLOWED_EXT=new Set(['pdf','jpg','jpeg','png']);
+   const fail=msg=>{btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';toast(msg,'error')};
    if(!f||!car)return fail('Failed to upload document. Select a file.');
    if(f.size<=0)return fail('Failed to upload document. The selected file is empty.');
    if(f.size>MAX_FILE_SIZE)return fail('File is too large. Maximum allowed size is 10 MB.');
-   let ext=(f.name.split('.').pop()||'').toLowerCase();
-   if(!ALLOWED_MIME.has(f.type)||!ALLOWED_EXT.has(ext))return fail('Unsupported file. Only PDF, JPG, JPEG and PNG files are allowed.');
+   let ext=(f.name.split('.').pop()||'').toLowerCase();if(!ALLOWED_MIME.has(f.type)||!ALLOWED_EXT.has(ext))return fail('Unsupported file. Only PDF, JPG, JPEG and PNG files are allowed.');
    if(t==='other'&&!n)return fail('Failed to upload Other Document. Enter document name.');
    if((t==='rc'||t==='insurance'||t==='puc')&&!issue)return fail('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':'PUC Certificate')+'. Issue Date is required.');
    if((t==='insurance'||t==='puc')&&!e)return fail('Failed to upload '+(t==='insurance'?'Insurance Document':'PUC Certificate')+'. Expiry date is required.');
    let oldDoc=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
    let oldPatch=t==='insurance'?{insurance_expiry:car.insurance_expiry}:t==='puc'?{puc_expiry:car.puc_expiry}:null;
-   let path=user.id+'/'+car.id+'/active/'+t+'/'+crypto.randomUUID()+'-'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-180);
-   let storageUploaded=false,newDocId=null,archived=false,activated=false,complianceUpdated=false;
+   let newDocId=null,archived=false,complianceUpdated=false,pendingKey=null,finalKey=null;
    try{
-     let u=await db.storage.from('car-documents').upload(path,f,{contentType:f.type,upsert:false});
-     if(u.error)throw new Error('Secure file upload failed: '+u.error.message);
-     storageUploaded=true;
-     // Insert as inactive first so Step 2's one-active-per-type index remains compatible.
-     let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:path,mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:false}).select('id').single();
-     if(ins.error)throw new Error('Document record save failed: '+ins.error.message);
-     newDocId=ins.data.id;
+     const signed=await workerPost('/api/files/presign-upload',{car_id:car.id,file_name:f.name,mime_type:f.type,file_size:f.size,document_type:t});
+     pendingKey=signed.data.pending_key;
+     const put=await fetch(signed.data.upload_url,{method:'PUT',headers:{'Content-Type':f.type},body:f});
+     if(!put.ok)throw new Error('R2 upload failed ('+put.status+').');
+     finalKey=pendingKey.replace(/^pending\//,'documents/');
+     let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:finalKey,storage_backend:'r2',mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:false}).select('id').single();
+     if(ins.error)throw new Error('Document record save failed: '+ins.error.message);newDocId=ins.data.id;
      if(oldDoc){
        let folder=docTypeLabel(oldDoc)+'-'+fyLabel(oldDoc.document_expiry||oldDoc.created_at);
        let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id).is('archived_at',null);
-       if(au.error)throw new Error('Old document could not be archived: '+au.error.message);
-       archived=true;
+       if(au.error)throw new Error('Old document could not be archived: '+au.error.message);archived=true;
      }
+     const finalized=await workerPost('/api/files/finalize',{car_id:car.id,pending_key:pendingKey});
+     if(finalized?.data?.storage_path!==finalKey)throw new Error('R2 final storage path verification failed.');
      let activate=await db.from('documents').update({active:true,archived_at:null}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
      if(activate.error)throw new Error('New document could not be activated: '+activate.error.message);
-     activated=true;
      if(t==='insurance'||t==='puc'){
-       let patch=t==='insurance'?{insurance_expiry:e}:{puc_expiry:e};
-       let cr=await db.from('cars').update(patch).eq('id',car.id).eq('user_id',user.id);
+       let patch=t==='insurance'?{insurance_expiry:e}:{puc_expiry:e};let cr=await db.from('cars').update(patch).eq('id',car.id).eq('user_id',user.id);
        if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);
        Object.assign(car,patch);complianceUpdated=true;
      }
-     let refreshError=null;
-     try{await loadData()}catch(refreshErrCaught){refreshError=refreshErrCaught}
-     // The upload transaction is complete at this point. Close only after success;
-     // a list-refresh problem must not roll back a successfully saved document.
-     m.remove();
-     let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
+     let refreshError=null;try{await loadData()}catch(refreshErrCaught){refreshError=refreshErrCaught}
+     m.remove();let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
      toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):name+' uploaded successfully!');
      if(refreshError)toast('Document saved, but the document list could not refresh. Please refresh the page.','error');
    }catch(err){
-     // Best-effort rollback keeps a failed replacement from leaving a ghost file/record or wrong compliance date.
+     if(newDocId){try{await workerDelete('/api/files/object?document_id='+encodeURIComponent(newDocId)+'&car_id='+encodeURIComponent(car.id))}catch(cleanErr){console.error('R2 cleanup failed:',cleanErr)}}
      if(complianceUpdated&&oldPatch)await db.from('cars').update(oldPatch).eq('id',car.id).eq('user_id',user.id);
      if(newDocId)await db.from('documents').delete().eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
      if(archived&&oldDoc)await db.from('documents').update({archive_name:null,archived_at:null,active:true}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id);
-     if(storageUploaded)await db.storage.from('car-documents').remove([path]);
      toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
-   }finally{
-     if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}
-   }
+   }finally{if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}}
  };
 }
 window.openDocUploader=openDocUploader;
-async function openDocumentPreview(path,fileName='Document'){
+async function openDocumentPreview(id,path,fileName='Document'){
  let existing=document.getElementById('documentPreviewModal');if(existing)existing.remove();
- let r=await db.storage.from('car-documents').createSignedUrl(path,300);
- if(r.error)return toast('Preview failed: '+r.error.message,'error');
- let url=r.data.signedUrl;
- let ext=(fileName.split('.').pop()||'').toLowerCase();
- let media=ext==='pdf'
-   ? '<iframe class="document-preview-frame" src="'+url+'" title="'+esc(fileName)+'"></iframe>'
-   : '<img class="document-preview-image" src="'+url+'" alt="'+esc(fileName)+'">';
- let m=document.createElement('div');m.id='documentPreviewModal';
- m.innerHTML='<div class="document-preview-card"><div class="document-preview-head"><div><b>'+esc(fileName)+'</b><small>Secure preview • expires in 5 minutes</small></div><button class="ghost" type="button" id="documentPreviewClose">✕</button></div><div class="document-preview-body">'+media+'</div><div class="document-preview-foot"><button class="ghost" type="button" onclick="downloadDoc(\''+path.replace(/'/g,"\\'")+'\')">Download</button><button class="primary" type="button" onclick="document.getElementById(\'documentPreviewModal\').remove()">Close</button></div></div>';
- document.body.appendChild(m);
- $('documentPreviewClose').onclick=()=>m.remove();
- m.onclick=e=>{if(e.target===m)m.remove()};
+ const doc=docs.find(d=>d.id===id);if(!doc)return toast('Document was not found. Refresh and try again.','error');
+ try{
+   let url;
+   if((doc.storage_backend||'supabase')==='r2'){
+     const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(id)+'&car_id='+encodeURIComponent(car.id));url=r.data.url;
+   }else{
+     const r=await db.storage.from('car-documents').createSignedUrl(path,300);if(r.error)throw r.error;url=r.data.signedUrl;
+   }
+   let ext=(fileName.split('.').pop()||'').toLowerCase();
+   let media=ext==='pdf'?'<iframe class="document-preview-frame" src="'+url+'" title="'+esc(fileName)+'"></iframe>':'<img class="document-preview-image" src="'+url+'" alt="'+esc(fileName)+'">';
+   let m=document.createElement('div');m.id='documentPreviewModal';
+   m.innerHTML='<div class="document-preview-card"><div class="document-preview-head"><div><b>'+esc(fileName)+'</b><small>Secure preview • expires in 5 minutes</small></div><button class="ghost" type="button" id="documentPreviewClose">✕</button></div><div class="document-preview-body">'+media+'</div><div class="document-preview-foot"><button class="ghost" type="button" onclick="downloadDoc(\''+id+'\',\''+path.replace(/'/g,"\\'")+'\')">Download</button><button class="primary" type="button" onclick="document.getElementById(\'documentPreviewModal\').remove()">Close</button></div></div>';
+   document.body.appendChild(m);$('documentPreviewClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
+ }catch(err){toast('Preview failed: '+(err?.message||'Please try again.'),'error')}
 }
-window.downloadDoc=async path=>{let r=await db.storage.from('car-documents').createSignedUrl(path,300,{download:true});if(r.error)return toast(r.error.message);window.open(r.data.signedUrl,'_blank')};
+window.downloadDoc=async(id,path)=>{
+ const doc=docs.find(d=>d.id===id);if(!doc)return toast('Document was not found.','error');
+ try{
+   let url;
+   if((doc.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(id)+'&car_id='+encodeURIComponent(car.id));url=r.data.url;}
+   else{const r=await db.storage.from('car-documents').createSignedUrl(path,300,{download:true});if(r.error)throw r.error;url=r.data.signedUrl;}
+   window.open(url,'_blank');
+ }catch(err){toast(err?.message||'Document download failed.','error')}
+};
 const DEFAULT_DELETE_PASSWORD='1234';
 function deletePasswordChanged(){return (localStorage.getItem('carcare_delete_password')||DEFAULT_DELETE_PASSWORD)!==DEFAULT_DELETE_PASSWORD}
 function ensureSecurityPassword(){return true}
@@ -719,41 +732,36 @@ function setDeletePassword(){changeDeletePassword(false)}
 async function deleteDoc(id,path,isArchived=false){
  if(!deletePasswordChanged())return toast('Please change default password to unlock delete actions.','error');
  if(!id||!path||!car)return toast('Document delete request is invalid.','error');
- let target=docs.find(d=>d.id===id&&d.car_id===car.id);
- if(!target)return toast('Document was not found for this vehicle. Refresh and try again.','error');
+ let target=docs.find(d=>d.id===id&&d.car_id===car.id);if(!target)return toast('Document was not found for this vehicle. Refresh and try again.','error');
  if(target.storage_path!==path)return toast('Document path verification failed. Refresh and try again.','error');
- let p=prompt('Enter your 4-character security PIN to confirm permanent deletion.','');
- if(p===null)return;
- let saved=localStorage.getItem('carcare_delete_password');
- if(!saved||p.trim()!==saved)return toast('Invalid Security PIN. Document was not deleted.','error');
+ let p=prompt('Enter your 4-character security PIN to confirm permanent deletion.','');if(p===null)return;
+ let saved=localStorage.getItem('carcare_delete_password');if(!saved||p.trim()!==saved)return toast('Invalid Security PIN. Document was not deleted.','error');
  if(!confirm((isArchived?'Delete this archived document permanently from the server?':'Delete this document permanently?')+' This cannot be undone.'))return;
- let btns=[...document.querySelectorAll('.doc-delete')].filter(b=>b.offsetParent!==null);
- btns.forEach(b=>b.disabled=true);
+ let btns=[...document.querySelectorAll('.doc-delete')].filter(b=>b.offsetParent!==null);btns.forEach(b=>b.disabled=true);
  try{
-   // Database RLS verifies both document ownership and parent vehicle ownership.
-   // Storage RLS independently verifies user + vehicle folder ownership.
+   if((target.storage_backend||'supabase')==='r2'){
+     let r=await db.from('documents').delete().eq('id',target.id).eq('car_id',car.id).eq('user_id',user.id).select('id').maybeSingle();
+     if(r.error)throw new Error('Database authorization/deletion failed: '+r.error.message);
+     if(!r.data)throw new Error('Document could not be deleted. Server authorization rejected the request.');
+     try{await workerDelete('/api/files/object?document_id='+encodeURIComponent(target.id)+'&car_id='+encodeURIComponent(car.id))}
+     catch(err){
+       const restore=await db.from('documents').insert({id:target.id,user_id:target.user_id,car_id:target.car_id,file_name:target.file_name,storage_path:target.storage_path,storage_backend:'r2',mime_type:target.mime_type,file_size:target.file_size,document_type:target.document_type,document_name:target.document_name,document_expiry:target.document_expiry,archive_name:target.archive_name,archived_at:target.archived_at,active:target.active});
+       if(restore.error)throw new Error('R2 deletion failed and database restore failed. Verify the document before retrying.');
+       throw new Error('R2 deletion failed; document was restored safely. '+err.message);
+     }
+     toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');await loadData();return;
+   }
    let r=await db.from('documents').delete().eq('id',target.id).eq('car_id',car.id).eq('user_id',user.id).select('id').maybeSingle();
    if(r.error)throw new Error('Database authorization/deletion failed: '+r.error.message);
    if(!r.data)throw new Error('Document could not be deleted. Server authorization rejected the request.');
    let s=await db.storage.from('car-documents').remove([target.storage_path]);
    if(s.error){
-     // Restore the DB row if the file could not be removed, so a failed delete is retryable.
-     let restore=await db.from('documents').insert({
-       id:target.id,user_id:target.user_id,car_id:target.car_id,file_name:target.file_name,
-       storage_path:target.storage_path,mime_type:target.mime_type,file_size:target.file_size,
-       document_type:target.document_type,document_name:target.document_name,document_expiry:target.document_expiry,
-       archive_name:target.archive_name,archived_at:target.archived_at,active:target.active
-     });
-     if(restore.error)throw new Error('Storage deletion failed and the database restore also failed. Do not retry repeatedly; refresh and verify the document: '+s.error.message);
+     let restore=await db.from('documents').insert({id:target.id,user_id:target.user_id,car_id:target.car_id,file_name:target.file_name,storage_path:target.storage_path,mime_type:target.mime_type,file_size:target.file_size,document_type:target.document_type,document_name:target.document_name,document_expiry:target.document_expiry,archive_name:target.archive_name,archived_at:target.archived_at,active:target.active});
+     if(restore.error)throw new Error('Storage deletion failed and database restore also failed. Refresh and verify the document: '+s.error.message);
      throw new Error('Server file deletion failed; document was restored safely. '+s.error.message);
    }
-   toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');
-   await loadData();
- }catch(err){
-   toast(err?.message||'Document deletion failed.','error');
- }finally{
-   btns.forEach(b=>b.disabled=false);
- }
+   toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');await loadData();
+ }catch(err){toast(err?.message||'Document deletion failed.','error')}finally{btns.forEach(b=>b.disabled=false)}
 }
 async function pickInsuranceCompany(current=''){return new Promise(resolve=>{let old=document.getElementById('insurancePicker');if(old)old.remove();let wrap=document.createElement('div');wrap.id='insurancePicker';wrap.style='position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(5px);display:grid;place-items:center;z-index:100';wrap.innerHTML='<div style="background:#fff;padding:22px;border-radius:18px;width:min(420px,calc(100% - 30px));box-shadow:0 25px 70px rgba(15,23,42,.25)"><h3 style="margin:0 0 12px">Select Insurance Company *</h3><select id="insurancePickerSelect" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:10px">'+insuranceCompanies.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="ghost" id="insurancePickerCancel">Cancel</button><button class="primary" id="insurancePickerOk">Select</button></div></div>';document.body.appendChild(wrap);let sel=document.getElementById('insurancePickerSelect');sel.value=insuranceCompanies.includes(current)?current:'Not Available';document.getElementById('insurancePickerCancel').onclick=()=>{wrap.remove();resolve(null)};document.getElementById('insurancePickerOk').onclick=()=>{let v=sel.value;wrap.remove();resolve(v)};sel.focus()})}
 async function ensureRequiredCarDetails(){if(!car){toast('Please add a car first');await nav('cars');return false}let missing=[];if(!car.registration_no)missing.push('Registration Number');if(!car.make_model)missing.push('Make / Model');if(!car.model_year)missing.push('Model Year');if(!car.fuel)missing.push('Fuel Type');if(!car.insurance_company||car.insurance_company==='Not Available')missing.push('Insurance Company');if(!car.insurance_expiry)missing.push('Insurance Expiry');if(!car.puc_state||!car.puc_expiry)missing.push('PUC State / PUC Expiry');if(!car.insurance_number)missing.push('Insurance Policy Number');if(!Array.isArray(car.insurance_type)||car.insurance_type.length<2)missing.push('Insurance Type (minimum 2)');if(!car.puc_certificate_no)missing.push('PUC Number');if(!car.puc_validity_months)missing.push('PUC Validity');if(!missing.length)return true;let msg='Required information missing:\n\n• '+missing.join('\n• ')+'\n\nPlease complete the required vehicle details.';if(!confirm(msg))return false;let ok=await window.editCar();if(!ok)return false;return !!car.make_model&&!!car.model_year&&!!car.fuel&&!!car.insurance_company&&car.insurance_company!=='Not Available'&&!!car.insurance_expiry&&!!car.insurance_number&&Array.isArray(car.insurance_type)&&car.insurance_type.length>=2&&!!car.puc_state&&!!car.puc_certificate_no&&!!car.puc_validity_months&&!!car.puc_expiry}
