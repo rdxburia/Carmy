@@ -177,6 +177,24 @@ export async function deleteR2Document(env, user, userToken, documentId, carId) 
     throw new Error("Document storage path verification failed.");
   }
 
+  // Delete the R2 object first. The document was already ownership-checked above.
   await env.R2.delete(key);
-  return { deleted: true, storage_path: key };
+
+  // Remove metadata only after the R2 object deletion succeeds.
+  // This keeps the operation atomic from the frontend's point of view.
+  const deletedRows = await supabaseRest(
+    env,
+    `documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}&car_id=eq.${encodeURIComponent(carId)}&storage_backend=eq.r2`,
+    {
+      method: "DELETE",
+      headers: { Prefer: "return=representation" },
+    },
+    userToken
+  );
+
+  return {
+    deleted: true,
+    database_deleted: Array.isArray(deletedRows) ? deletedRows.length > 0 : false,
+    storage_path: key,
+  };
 }
