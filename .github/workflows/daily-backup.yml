@@ -420,13 +420,12 @@ jobs:
                   ).execute()
                   print(f"Deleted duplicate latest snapshot: {item['id']}")
 
-          # Remove all old dated/legacy backup files only after the new snapshot
-          # has been successfully stored.
-          # Drive search does not support an SQL-style `id != ...` filter.
-          # List the folder contents and skip the one snapshot we just stored.
+          # Clean the dedicated Carmy backup folder only after the new snapshot
+          # has been successfully stored. Never delete the snapshot we just wrote.
           cleanup_query = f"'{folder_id}' in parents and trashed = false"
           page_token = None
-          deleted = 0
+          cleanup_files = []
+
           while True:
               response = drive.files().list(
                   q=cleanup_query,
@@ -438,17 +437,22 @@ jobs:
                   includeItemsFromAllDrives=True,
               ).execute()
 
-              for item in response.get("files", []):
-                  drive.files().delete(
-                      fileId=item["id"],
-                      supportsAllDrives=True,
-                  ).execute()
-                  deleted += 1
-                  print(f"Deleted legacy backup file: {item['name']}")
-
+              cleanup_files.extend(response.get("files", []))
               page_token = response.get("nextPageToken")
               if not page_token:
                   break
+
+          deleted = 0
+          for item in cleanup_files:
+              if item["id"] == keep_id:
+                  continue
+
+              drive.files().delete(
+                  fileId=item["id"],
+                  supportsAllDrives=True,
+              ).execute()
+              deleted += 1
+              print(f"Deleted legacy backup file: {item['name']}")
 
           print(f"Google Drive latest snapshot ready. Legacy files removed: {deleted}")
           PY
