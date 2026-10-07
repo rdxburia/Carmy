@@ -32,11 +32,20 @@ jobs:
       - name: Install backup tools
         run: |
           set -euo pipefail
+
+          # ubuntu-latest no longer provides the awscli package through apt.
+          # Install the official AWS CLI v2 instead; it is compatible with
+          # Cloudflare R2's S3 API.
           sudo apt-get update
-          sudo apt-get install -y awscli
+          sudo apt-get install -y unzip curl
+
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+          rm -rf /tmp/aws
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update
+
           docker --version
           aws --version
-
       - name: Validate required secrets
         env:
           SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
