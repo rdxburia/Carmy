@@ -594,10 +594,25 @@ async function archiveExpiredDocuments(){return}
 function renderDocFlipCard(d){
  const [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄';
  const meta=d.document_type==='insurance'?(car.insurance_number||'Policy number not recorded'):d.document_type==='puc'?((car.puc_state||'State')+' • '+(car.puc_validity_months?car.puc_validity_months+' months':'Validity not recorded')):d.document_type==='rc'?'Registration Certificate':(d.document_name||'Vehicle document');
- const pathArg=JSON.stringify(d.storage_path),nameArg=JSON.stringify(d.file_name),idArg=JSON.stringify(d.id),typeArg=JSON.stringify(d.document_type);
- const renew=(d.document_type==='insurance'||d.document_type==='puc')?'<button type="button" class="primary" onclick="event.stopPropagation();openDocUploader('+typeArg+')">Renew</button>':'';
- return '<div class="flip-card doc-flip-card" tabindex="0"><div class="flip-inner"><div class="flip-front"><div class="doc-card-top"><span class="doc-card-icon">'+icon+'</span><span class="doc-badge '+cls+'">'+status+'</span></div><b>'+esc(title)+'</b><small>'+esc(meta)+'</small><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'No expiry required')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><small>'+esc(d.file_name)+'</small><div class="doc-flip-actions"><button type="button" class="ghost" onclick="event.stopPropagation();openDocumentPreview('+idArg+','+pathArg+','+nameArg+')">Preview</button><button type="button" class="ghost" onclick="event.stopPropagation();downloadDoc('+idArg+','+pathArg+')">Download</button>'+renew+(!d.archived_at?'<button type="button" class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="event.stopPropagation();deleteDoc('+idArg+','+pathArg+','+(d.archived_at?'true':'false')+')">Delete</button>':'')+'</div></div></div></div>';
+ const renew=(d.document_type==='insurance'||d.document_type==='puc')?'<button type="button" class="primary doc-action" data-action="renew" data-id="'+esc(d.id)+'" data-type="'+esc(d.document_type)+'">Renew</button>':'';
+ return '<div class="flip-card doc-flip-card" tabindex="0"><div class="flip-inner"><div class="flip-front"><div class="doc-card-top"><span class="doc-card-icon">'+icon+'</span><span class="doc-badge '+cls+'">'+status+'</span></div><b>'+esc(title)+'</b><small>'+esc(meta)+'</small><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'No expiry required')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><small>'+esc(d.file_name)+'</small><div class="doc-flip-actions"><button type="button" class="ghost doc-action" data-action="preview" data-id="'+esc(d.id)+'">Preview</button><button type="button" class="ghost doc-action" data-action="download" data-id="'+esc(d.id)+'">Download</button>'+renew+(!d.archived_at?'<button type="button" class="danger doc-delete doc-action" '+(deletePasswordChanged()?'':'disabled')+' data-action="delete" data-id="'+esc(d.id)+'">Delete</button>':'')+'</div></div></div></div>';
 }
+function handleDocumentActionClick(event){
+ const button=event.target.closest('.doc-action');
+ if(!button)return;
+ event.preventDefault();
+ event.stopPropagation();
+ const id=button.dataset.id;
+ const action=button.dataset.action;
+ const doc=docs.find(x=>x.id===id);
+ if(!doc)return toast('Document was not found. Refresh and try again.','error');
+ if(action==='preview')return openDocumentPreview(doc.id,doc.storage_path,doc.file_name);
+ if(action==='download')return downloadDoc(doc.id,doc.storage_path);
+ if(action==='renew')return openDocUploader(doc.document_type);
+ if(action==='delete')return deleteDoc(doc.id,doc.storage_path,!!doc.archived_at);
+}
+document.addEventListener('click',handleDocumentActionClick,true);
+
 function renderDocRow(d){
  let [status,cls]=docStatus(d),title=docTypeLabel(d);
  return '<div class="doc-row '+cls+'"><div class="doc-icon">'+(d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄')+'</div><div class="doc-main"><b>'+esc(title)+'</b><span>'+esc(d.file_name)+'</span><small>Uploaded: '+new Date(d.created_at).toLocaleDateString()+'</small>'+(d.document_expiry?'<span class="doc-expiry">'+(status==='Expired'?'Expired on':'Expiry')+' '+esc(d.document_expiry)+'</span>':'')+'<span class="doc-badge '+cls+'">'+status+'</span>'+(d.archived_at?'<em>Archive: '+esc(d.archive_name||'Year Wise')+'</em>':'')+'</div><div class="doc-actions"><button type="button" class="ghost" onclick="openDocumentPreview(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\',\''+d.file_name.replace(/'/g,"\\'")+'\')">Preview</button><button type="button" class="ghost" onclick="downloadDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button><button type="button" class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\','+(d.archived_at?'true':'false')+')">Delete</button></div></div>';
