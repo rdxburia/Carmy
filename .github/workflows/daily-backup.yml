@@ -46,6 +46,10 @@ jobs:
 
           docker --version
           aws --version
+
+          # Google Drive backup steps use the official Google API Python clients.
+          python3 -m pip install --disable-pip-version-check --no-cache-dir \
+            google-auth google-api-python-client
       - name: Validate required secrets
         env:
           SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
