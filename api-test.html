@@ -85,13 +85,35 @@
           return;
         }
 
+        const documentsResponse = await fetch(
+          WORKER + "/api/documents?car_id=" + encodeURIComponent(carId),
+          { headers }
+        );
+        const documentsBody = await documentsResponse.json();
+
+        if (!documentsResponse.ok) {
+          show({
+            worker: "ok",
+            authentication: "ok",
+            vehicles_api: "ok",
+            vehicle_count: vehicles.length,
+            service_history_api: "ok",
+            service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null,
+            documents_http_status: documentsResponse.status,
+            documents_response: documentsBody
+          }, false);
+          return;
+        }
+
         show({
           worker: "ok",
           authentication: "ok",
           vehicles_api: "ok",
           vehicle_count: vehicles.length,
           service_history_api: "ok",
-          service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null
+          service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null,
+          documents_api: "ok",
+          document_count: Array.isArray(documentsBody.data) ? documentsBody.data.length : null
         });
       } catch (error) {
         show("TEST FAILED: " + (error?.message || error), false);
