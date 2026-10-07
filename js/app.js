@@ -94,6 +94,28 @@ function showOperationOverlay(title='Saving',subtitle='Please wait…'){
  document.body.appendChild(o);return o;
 }
 function hideOperationOverlay(){let o=document.getElementById('operationOverlay');if(o)o.remove()}
+function prepareLoginExperience(){
+ const auth=$('auth');if(!auth)return;
+ auth.classList.remove('auth-success','auth-mode-switching');
+ const brand=auth.querySelector('.auth-brand'),story=auth.querySelector('.auth-story-copy'),card=auth.querySelector('.auth-card');
+ [brand,story,card].forEach(el=>el?.classList.remove('auth-enter-brand','auth-enter-story','auth-enter-card'));
+ const start=()=>{[brand,story,card].forEach((el,i)=>el?.classList.add(['auth-enter-brand','auth-enter-story','auth-enter-card'][i]));auth.classList.add('auth-animated')};
+ const run=window.requestIdleCallback?()=>window.requestIdleCallback(start,{timeout:120}):()=>window.requestAnimationFrame(start);
+ requestAnimationFrame(run);
+}
+function loginSuccessTransition(){
+ const auth=$('auth');if(!auth||auth.classList.contains('auth-success'))return Promise.resolve();
+ auth.classList.add('auth-success');
+ return new Promise(resolve=>setTimeout(resolve,340));
+}
+function updateAuthModeUI(){
+ const title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),pass=$('password');
+ if(title)title.textContent=signup?'Create your account':'Private Car Manager';
+ if(kicker)kicker.textContent=signup?'NEW GARAGE':'SECURE GARAGE';
+ if(copy)copy.textContent=signup?'Create a private garage for your vehicle history and documents.':'Sign in to keep your vehicle history, documents and reports together.';
+ if(toggle)toggle.textContent=signup?'Back to login':'Create account';
+ if(pass)pass.setAttribute('autocomplete',signup?'new-password':'current-password');
+}
 function showAppLoading(){
  const existing=document.getElementById('appLoadingOverlay');if(existing)existing.remove();
  const o=document.createElement('div');
@@ -295,7 +317,11 @@ $('sideMenuBackdrop')?.addEventListener('click',closeSideMenu);
 $('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSideMenu()});
 
-$('toggleAuth').onclick=()=>{signup=!signup;$('authTitle').textContent=signup?'Create account':'Private Car Manager';$('authBtn').textContent=signup?'Create account':'Login';$('toggleAuth').textContent=signup?'Back to login':'Create account'};
+$('toggleAuth').onclick=()=>{
+ signup=!signup;
+ const auth=$('auth');auth.classList.add('auth-mode-switching');
+ setTimeout(()=>{updateAuthModeUI();auth.classList.remove('auth-mode-switching')},110);
+};
 async function handleAuthSubmit(ev){
  ev?.preventDefault();
  if(!db)return toast('Secure login is still connecting. Please wait a moment.','error');
@@ -321,10 +347,39 @@ async function handleAuthSubmit(ev){
 }
 $('authBtn').onclick=handleAuthSubmit;
 $('password')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleAuthSubmit(e)});
+$('passwordToggle')?.addEventListener('click',()=>{
+ const input=$('password'),btn=$('passwordToggle');if(!input||!btn)return;
+ const show=input.type==='password';input.type=show?'text':'password';
+ btn.textContent=show?'Hide':'Show';btn.setAttribute('aria-label',show?'Hide password':'Show password');btn.setAttribute('aria-pressed',String(show));
+ input.focus();
+});
 $('email')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('password')?.focus()});
 const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.signOut();
-async function boot(){let s=await db.auth.getSession();if(s.data.session)start(s.data.session.user);else showLogin();db.auth.onAuthStateChange((_e,s)=>{if(s)start(s.user);else{startedUserId=null;showLogin()}})}
-function showLogin(){let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}let ps=$('policeLogoutStyle');if(ps)ps.remove();$('auth').classList.remove('hidden');$('app').classList.add('hidden');let fab=document.getElementById('dashboardFab');if(fab)fab.remove();let mn=document.getElementById('mobileNav');if(mn)mn.classList.add('auth-hidden');const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}}
+async function boot(){
+ let s=await db.auth.getSession();
+ if(s.data.session)start(s.data.session.user);
+ else showLogin();
+ db.auth.onAuthStateChange(async(_e,s)=>{
+   if(s){
+     await loginSuccessTransition();
+     start(s.user);
+   }else{
+     startedUserId=null;
+     showLogin();
+   }
+ });
+}
+function showLogin(){
+ let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}
+ let ps=$('policeLogoutStyle');if(ps)ps.remove();
+ const auth=$('auth');auth.classList.remove('hidden','auth-session-pending','auth-success');
+ $('app').classList.add('hidden');
+ let fab=document.getElementById('dashboardFab');if(fab)fab.remove();
+ let mn=document.getElementById('mobileNav');if(mn)mn.classList.add('auth-hidden');
+ updateAuthModeUI();
+ prepareLoginExperience();
+ const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}
+}
 function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car';updateDrawerContext()}
 async function start(u){
  if(startedUserId===u.id)return;
