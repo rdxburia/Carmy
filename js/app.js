@@ -615,7 +615,6 @@ async function boot(){
  else showLogin();
  db.auth.onAuthStateChange(async(_e,s)=>{
    if(s){
-     await loginSuccessTransition();
      start(s.user);
    }else{
      startedUserId=null;
