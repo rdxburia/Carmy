@@ -13,7 +13,12 @@ export async function getCache(env, key) {
     return null;
   }
 
-  return JSON.parse(row.data_json);
+  try {
+    return JSON.parse(row.data_json);
+  } catch {
+    await env.DB.prepare("DELETE FROM cache_entries WHERE cache_key = ?1").bind(key).run();
+    return null;
+  }
 }
 
 export async function putCache(env, key, userId, resourceType, value, dataVersion = 1) {
@@ -43,5 +48,38 @@ export async function putCache(env, key, userId, resourceType, value, dataVersio
 }
 
 export async function invalidateCache(env, prefix) {
-  await env.DB.prepare("DELETE FROM cache_entries WHERE cache_key LIKE ?1").bind(`${prefix}%`).run();
+  await env.DB.prepare(
+    "DELETE FROM cache_entries WHERE cache_key LIKE ?1"
+  ).bind(`${prefix}%`).run();
+}
+
+export async function invalidateUserResource(env, resourceType, userId, carId = null) {
+  const user = String(userId || "");
+  if (!user) return;
+
+  const userKey = `${resourceType}:${user}`;
+  if (carId) {
+    await invalidateCache(env, `${userKey}:${String(carId)}`);
+    return;
+  }
+
+  await invalidateCache(env, userKey);
+}
+
+export async function invalidateVehicleCaches(env, userId, carId = null) {
+  const user = String(userId || "");
+  if (!user) return;
+
+  await invalidateCache(env, `vehicles:${user}`);
+  if (carId) {
+    await invalidateCache(env, `vehicle:${user}:${String(carId)}`);
+  } else {
+    await invalidateCache(env, `vehicle:${user}:`);
+  }
+}
+
+export function cacheKey(resourceType, userId, carId = null) {
+  return carId
+    ? `${resourceType}:${String(userId)}:${String(carId)}`
+    : `${resourceType}:${String(userId)}`;
 }
