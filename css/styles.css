@@ -82,7 +82,6 @@ button{-webkit-tap-highlight-color:transparent}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:650px){
  .toast{top:12px!important;min-width:0;width:calc(100% - 24px);justify-content:center;text-align:center}
- .app-loading-panel{padding:30px 20px}.app-loading-brand{font-size:21px}
 }
 
 /* ===== Automotive Dashboard Experience ===== */
@@ -297,7 +296,7 @@ button,input,select,textarea{min-width:0;max-width:100%}
  .mobile-nav button{min-width:0;width:100%;height:56px;padding:4px 1px;font-size:10px;line-height:1.15;overflow:hidden}
  .mobile-nav button br{display:block}
  #toast{left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));bottom:auto;width:auto;max-width:none;z-index:2147483646}
- #operationOverlay,#appLoadingOverlay,#documentPreviewModal{z-index:2147483645}
+ #operationOverlay,#documentPreviewModal{z-index:2147483645}
  .document-preview-card{width:100%;height:calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));max-height:none}
  .document-preview-head{padding:11px 12px}
  .document-preview-body{padding:7px}
