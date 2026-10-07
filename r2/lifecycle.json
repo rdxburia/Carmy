@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "id": "delete-pending-uploads",
+      "conditions": {
+        "prefix": "pending/"
+      },
+      "enabled": true,
+      "deleteObjectsTransition": {
+        "condition": {
+          "maxAge": 86400,
+          "type": "Age"
+        }
+      }
+    }
+  ]
+}
