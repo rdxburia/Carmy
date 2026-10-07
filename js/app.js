@@ -478,7 +478,7 @@ function hideAppLoading(){
  if(!o)return;
  const state=o._loadingState;
  const elapsed=performance.now()-(state?.visibleSince||performance.now());
- const wait=Math.max(0,900-elapsed);
+ const wait=Math.max(0,120-elapsed);
  const finish=()=>{
    if(!document.body.contains(o))return;
    if(state){
@@ -522,6 +522,7 @@ async function nav(v){
    const previous=document.querySelector('.view.active');
    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
    target.classList.add('active');
+   window.scrollTo({top:0,left:0,behavior:'auto'});
    try{
      if(v==='add')prefillRecordForm();
      if(v==='dashboard')dash();
@@ -693,6 +694,7 @@ async function start(u){
    }
    $('app').classList.remove('hidden');
    $('app').classList.add('app-ready');
+   window.scrollTo({top:0,left:0,behavior:'auto'});
    let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
    setAppLoadingProgress(100);
    hideAppLoading();
