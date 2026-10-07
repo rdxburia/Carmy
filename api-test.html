@@ -164,6 +164,33 @@
           return;
         }
 
+        const profileResponse = await fetch(WORKER + "/api/profile", { headers });
+        const profileBody = await profileResponse.json();
+        if (!profileResponse.ok) {
+          show({ profile_http_status: profileResponse.status, profile_response: profileBody }, false);
+          return;
+        }
+
+        const renewalsResponse = await fetch(
+          WORKER + "/api/renewals?car_id=" + encodeURIComponent(carId),
+          { headers }
+        );
+        const renewalsBody = await renewalsResponse.json();
+        if (!renewalsResponse.ok) {
+          show({ profile_api: "ok", renewals_http_status: renewalsResponse.status, renewals_response: renewalsBody }, false);
+          return;
+        }
+
+        const saleResponse = await fetch(
+          WORKER + "/api/sale-history?car_id=" + encodeURIComponent(carId),
+          { headers }
+        );
+        const saleBody = await saleResponse.json();
+        if (!saleResponse.ok) {
+          show({ profile_api: "ok", renewals_api: "ok", sale_history_http_status: saleResponse.status, sale_history_response: saleBody }, false);
+          return;
+        }
+
         show({
           worker: "ok",
           authentication: "ok",
@@ -176,7 +203,13 @@
           insurance_api: "ok",
           insurance_history_count: Array.isArray(insuranceBody.data) ? insuranceBody.data.length : null,
           puc_api: "ok",
-          puc_history_count: Array.isArray(pucBody.data) ? pucBody.data.length : null
+          puc_history_count: Array.isArray(pucBody.data) ? pucBody.data.length : null,
+          profile_api: "ok",
+          profile_present: !!profileBody.data,
+          renewals_api: "ok",
+          renewal_count: Array.isArray(renewalsBody.data) ? renewalsBody.data.length : null,
+          sale_history_api: "ok",
+          sale_history_count: Array.isArray(saleBody.data) ? saleBody.data.length : null
         });
       } catch (error) {
         show("TEST FAILED: " + (error?.message || error), false);
