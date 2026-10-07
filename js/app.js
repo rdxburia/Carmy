@@ -314,11 +314,12 @@ function handleAuthRedirectError(){
  try{history.replaceState(null,document.title,window.location.pathname+window.location.search)}catch(e){}
 }
 function updateAuthModeUI(){
- const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
+ const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),authBtn=$('authBtn'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
  if(title)title.textContent=signup?'Create your account':'Private Car Manager';
  if(kicker)kicker.textContent=signup?'NEW GARAGE':'SECURE GARAGE';
  if(copy)copy.textContent=signup?'Create a private garage for your vehicle history and documents.':'Sign in to keep your vehicle history, documents and reports together.';
  if(toggle)toggle.textContent=signup?'Back to login':'Create account';
+ if(authBtn&&!authBtn.disabled)authBtn.textContent=signup?'Create account':'Login';
  auth?.classList.toggle('auth-signup-active',signup);
  [name,mobile].forEach(el=>{if(el){el.disabled=!signup;el.setAttribute('aria-hidden',String(!signup));el.setAttribute('autocomplete',signup?(el.id==='fullName'?'name':'tel-national'):'off')}});
  if(pass)pass.setAttribute('autocomplete',signup?'new-password':'current-password');
