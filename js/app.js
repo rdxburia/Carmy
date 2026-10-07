@@ -1,11 +1,19 @@
 
 const U=APP_CONFIG.SUPABASE_URL,K=APP_CONFIG.SUPABASE_KEY;
 let db=null;
+let accessToken='';
+let pdfEnginePromise=null;
 const WORKER_API=APP_CONFIG.WORKER_API_URL||"https://carmy-api.mr-rny-buria.workers.dev";
-async function workerGet(path){
+async function getAccessToken(){
+  if(accessToken)return accessToken;
   if(!db)throw new Error('Secure API connection is not ready.');
   const session=await db.auth.getSession();
-  const token=session?.data?.session?.access_token;
+  accessToken=session?.data?.session?.access_token||'';
+  return accessToken;
+}
+async function workerGet(path){
+  if(!db)throw new Error('Secure API connection is not ready.');
+  const token=await getAccessToken();
   if(!token)throw new Error('Secure login session expired. Please login again.');
   const res=await fetch(WORKER_API+path,{method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
   let body=null;
@@ -15,7 +23,7 @@ async function workerGet(path){
 }
 async function workerPost(path,payload){
   if(!db)throw new Error('Secure API connection is not ready.');
-  const session=await db.auth.getSession();const token=session?.data?.session?.access_token;
+  const token=await getAccessToken();
   if(!token)throw new Error('Secure login session expired. Please login again.');
   const res=await fetch(WORKER_API+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload||{})});
   let body=null;try{body=await res.json()}catch(e){}
@@ -24,7 +32,7 @@ async function workerPost(path,payload){
 }
 async function workerDelete(path){
   if(!db)throw new Error('Secure API connection is not ready.');
-  const session=await db.auth.getSession();const token=session?.data?.session?.access_token;
+  const token=await getAccessToken();
   if(!token)throw new Error('Secure login session expired. Please login again.');
   const res=await fetch(WORKER_API+path,{method:'DELETE',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
   let body=null;try{body=await res.json()}catch(e){}
@@ -614,6 +622,7 @@ async function boot(){
  if(s.data.session)start(s.data.session.user);
  else showLogin();
  db.auth.onAuthStateChange(async(_e,s)=>{
+   accessToken=s?.access_token||'';
    if(s){
      start(s.user);
    }else{
@@ -660,8 +669,7 @@ async function start(u){
    await loadData();
    setAppLoadingProgress(70);
    updateIdentityUI();
-   setAppLoadingStatus('Checking vehicle compliance...','Calculating Insurance & PUC status');
-   if(car){dash();guard()}else{dash()}
+   setAppLoadingStatus('Preparing your garage...','Rendering your vehicle dashboard');
    setAppLoadingProgress(90);
    let lastView='dashboard';
    try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
@@ -682,7 +690,6 @@ async function start(u){
    }else{
      await nav('dashboard');
    }
-   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
    $('app').classList.remove('hidden');
    $('app').classList.add('app-ready');
    let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
@@ -707,33 +714,40 @@ async function loadCars(){
 async function loadStep5Data(){
  ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
  if(!user)return;
- try{
-   const profile=await workerGet('/api/profile');
-   ownerProfile=profile?.data||null;
- }catch(err){
-   console.warn('Worker profile load failed:',err?.message||err);
+ const requests=[workerGet('/api/profile')];
+ if(car){
+   const qs='?car_id='+encodeURIComponent(car.id);
+   requests.push(
+     workerGet('/api/insurance'+qs),
+     workerGet('/api/puc'+qs),
+     workerGet('/api/renewals'+qs),
+     workerGet('/api/sale-history'+qs)
+   );
  }
- if(!car)return;
- const qs='?car_id='+encodeURIComponent(car.id);
- const [ih,ph,rh,sh]=await Promise.all([
-   workerGet('/api/insurance'+qs),
-   workerGet('/api/puc'+qs),
-   workerGet('/api/renewals'+qs),
-   workerGet('/api/sale-history'+qs)
- ]);
- insuranceHistory=Array.isArray(ih?.data)?ih.data:[];
- pucHistory=Array.isArray(ph?.data)?ph.data:[];
- renewalHistory=Array.isArray(rh?.data)?rh.data:[];
- saleHistory=Array.isArray(sh?.data)?sh.data:[];
+ const results=await Promise.all(requests);
+ const profile=results[0];
+ ownerProfile=profile?.data||null;
+ if(car){
+   insuranceHistory=Array.isArray(results[1]?.data)?results[1].data:[];
+   pucHistory=Array.isArray(results[2]?.data)?results[2].data:[];
+   renewalHistory=Array.isArray(results[3]?.data)?results[3].data:[];
+   saleHistory=Array.isArray(results[4]?.data)?results[4].data:[];
+ }
 }
 async function loadData(){
- if(!car){records=[];docs=[];await loadStep5Data();dash();renderHistory();report();guard();return}
- const history=await workerGet('/api/service-history?car_id='+encodeURIComponent(car.id));
+ if(!car){
+   records=[];docs=[];
+   await loadStep5Data();
+   return;
+ }
+ const carId=encodeURIComponent(car.id);
+ const [history,documents]=await Promise.all([
+   workerGet('/api/service-history?car_id='+carId),
+   workerGet('/api/documents?car_id='+carId)
+ ]);
  records=Array.isArray(history?.data)?history.data:[];
- const documents=await workerGet('/api/documents?car_id='+encodeURIComponent(car.id));
  docs=Array.isArray(documents?.data)?documents.data:[];
  await loadStep5Data();
- dash();renderHistory();await docsView();report();guard()
 }
 const insuranceTypes=['Third Party','Comprehensive','Zero Depreciation','Own Damage','Standalone Own Damage'];
 const insuranceAddons=['Roadside Assistance','Engine Protection','Consumables Cover','Key Replacement','Tyre Protect','Return to Invoice','NCB Protect'];
@@ -1710,8 +1724,11 @@ function printVehicleReport(){
     return;
   }
 
-  if(typeof window.html2pdf !== 'function'){
-    toast('PDF engine is still loading. Please refresh once and try again.','error');
+  try{
+    await loadPdfEngine();
+  }catch(err){
+    console.error('PDF engine load error:',err);
+    toast('PDF engine could not be loaded. Check your connection and try again.','error');
     return;
   }
 
