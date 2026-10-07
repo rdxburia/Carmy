@@ -97,24 +97,139 @@ function hideOperationOverlay(){let o=document.getElementById('operationOverlay'
 function prepareLoginExperience(){
  const auth=$('auth');if(!auth)return;
  auth.classList.remove('auth-success','auth-mode-switching');
- const brand=auth.querySelector('.auth-brand'),story=auth.querySelector('.auth-story-copy'),card=auth.querySelector('.auth-card');
- [brand,story,card].forEach(el=>el?.classList.remove('auth-enter-brand','auth-enter-story','auth-enter-card'));
- const start=()=>{[brand,story,card].forEach((el,i)=>el?.classList.add(['auth-enter-brand','auth-enter-story','auth-enter-card'][i]));auth.classList.add('auth-animated')};
+ const story=auth.querySelector('.auth-story-copy'),card=auth.querySelector('.auth-card');
+ [story,card].forEach(el=>el?.classList.remove('auth-enter-story','auth-enter-card'));
+ const start=()=>{story?.classList.add('auth-enter-story');card?.classList.add('auth-enter-card');auth.classList.add('auth-animated')};
  const run=window.requestIdleCallback?()=>window.requestIdleCallback(start,{timeout:120}):()=>window.requestAnimationFrame(start);
  requestAnimationFrame(run);
 }
-function loginSuccessTransition(){
- const auth=$('auth');if(!auth||auth.classList.contains('auth-success'))return Promise.resolve();
- auth.classList.add('auth-success');
- return new Promise(resolve=>setTimeout(resolve,340));
+
+function setFieldState(id,message='',ok=false){
+ const input=$(id),field=input?.closest('.auth-field'),msg=$(id+'Message');
+ if(!input||!field)return;
+ field.classList.toggle('is-error',!!message);
+ field.classList.toggle('is-valid',ok&&!message);
+ input.setAttribute('aria-invalid',String(!!message));
+ if(msg){msg.textContent=message;msg.className='auth-message '+(message?'error':ok?'success':'');}
 }
+
+function normalizeMobile(value){
+ let v=String(value||'').trim().replace(/[\\s-]/g,'');
+ if(v.startsWith('+91'))v=v.slice(3);
+ else if(v.startsWith('91')&&v.length>10)v=v.slice(2);
+ else if(v.startsWith('0')&&v.length>10)v=v.slice(1);
+ return /^\\d{10}$/.test(v)&&/^[6-9]/.test(v)?v:'';
+}
+
+function validateName(show=true){
+ const v=$('fullName')?.value.trim()||'';
+ let err='';
+ if(v.length<2||v.length>50)err='Enter 2–50 characters.';
+ else if(!/^[A-Za-z .'-]+$/.test(v))err="Use letters, spaces, . ' and - only.";
+ if(show)setFieldState('fullName',err,!err);
+ return !err;
+}
+
+function validateEmail(show=true){
+ const v=$('email')?.value.trim()||'';
+ const ok=/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v);
+ const err=v?'Enter a valid email address.':'Enter your email address.';
+ if(show)setFieldState('email',ok?'':err,ok);
+ return ok;
+}
+
+function validateMobile(show=true){
+ const raw=$('mobile')?.value||'';
+ const normalized=normalizeMobile(raw);
+ const ok=!!normalized;
+ if(ok&&$('mobile'))$('mobile').value=normalized;
+ if(show)setFieldState('mobile',ok?'':'Enter a valid 10-digit Indian mobile number.',ok);
+ return ok;
+}
+
+function passwordRules(value){
+ return {
+   length:value.length>=8&&value.length<=16,
+   letter:/[A-Za-z]/.test(value),
+   number:/\\d/.test(value),
+   special:/[^A-Za-z0-9]/.test(value),
+   noSpace:!/[\\s]/.test(value)
+ };
+}
+
+function updatePasswordUI(showError=false){
+ const input=$('password'),list=$('passwordChecklist'),strength=$('passwordStrengthText');
+ if(!input||!list)return false;
+ const v=input.value||'',r=passwordRules(v);
+ const items=[
+  ['8–16 characters',r.length],
+  ['Letter',r.letter],
+  ['Number',r.number],
+  ['Special character',r.special]
+ ];
+ list.innerHTML=items.map(([label,ok])=>'<span class="auth-check '+(ok?'ok':'')+'"><b>'+(ok?'✓':'')+'</b>'+label+'</span>').join('');
+ let level=0,label='';
+ const passed=[r.length,r.letter,r.number,r.special,r.noSpace].filter(Boolean).length;
+ if(v){level=passed<=2?1:passed<5?2:3;label=level===1?'Weak':level===2?'Good':'Strong';}
+ const bar=input.closest('.auth-password-field')?.querySelector('.auth-strength');
+ if(bar){bar.className='auth-strength '+(level?'s'+level:'');if(strength)strength.textContent=label;}
+ const ok=r.length&&r.letter&&r.number&&r.special&&r.noSpace;
+ if(showError){
+   let err='';
+   if(v.length<8)err='Minimum 8 characters';
+   else if(v.length>16)err='Maximum 16 characters';
+   else if(!r.letter)err='Must contain a letter';
+   else if(!r.number)err='Must contain a number';
+   else if(!r.special)err='Must contain a special character';
+   else if(!r.noSpace)err='Spaces are not allowed';
+   setFieldState('password',ok?'':err,ok);
+ }
+ return ok;
+}
+
+function validateAuthForm(show=true){
+ const emailOk=validateEmail(show),passOk=updatePasswordUI(show);
+ if(!signup)return emailOk&&passOk;
+ const nameOk=validateName(show),mobileOk=validateMobile(show);
+ return nameOk&&emailOk&&mobileOk&&passOk;
+}
+
+function updateAuthSubmitState(){
+ const btn=$('authBtn');if(!btn)return;
+ const ok=validateAuthForm(false);
+ btn.classList.toggle('auth-submit-disabled',!ok);
+ btn.setAttribute('aria-disabled',String(!ok));
+}
+
+function bindAuthValidation(){
+ const fields=['fullName','email','mobile'];
+ fields.forEach(id=>$(id)?.addEventListener('blur',()=>{if(signup){id==='fullName'?validateName(true):id==='mobile'?validateMobile(true):validateEmail(true);updateAuthSubmitState()}}));
+ $('password')?.addEventListener('input',()=>{updatePasswordUI(false);updateAuthSubmitState()});
+ $('email')?.addEventListener('input',()=>{setFieldState('email');updateAuthSubmitState()});
+ $('fullName')?.addEventListener('input',()=>{if(signup){setFieldState('fullName');updateAuthSubmitState()}});
+ $('mobile')?.addEventListener('input',()=>{if(signup){setFieldState('mobile');updateAuthSubmitState()}});
+}
+
 function updateAuthModeUI(){
- const title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),pass=$('password');
+ const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
  if(title)title.textContent=signup?'Create your account':'Private Car Manager';
  if(kicker)kicker.textContent=signup?'NEW GARAGE':'SECURE GARAGE';
  if(copy)copy.textContent=signup?'Create a private garage for your vehicle history and documents.':'Sign in to keep your vehicle history, documents and reports together.';
  if(toggle)toggle.textContent=signup?'Back to login':'Create account';
+ auth?.classList.toggle('auth-signup-active',signup);
+ [name,mobile].forEach(el=>{if(el){el.disabled=!signup;el.setAttribute('aria-hidden',String(!signup));el.setAttribute('autocomplete',signup?(el.id==='fullName'?'name':'tel-national'):'off')}});
  if(pass)pass.setAttribute('autocomplete',signup?'new-password':'current-password');
+ if(meta)meta.hidden=!signup;
+ if(!signup){setFieldState('fullName');setFieldState('mobile');}
+ updateAuthSubmitState();
+}
+
+function bindAuthPasswordToggle(){
+ $('passwordToggle')?.addEventListener('click',()=>{
+  const input=$('password'),btn=$('passwordToggle');if(!input||!btn)return;
+  const show=input.type==='password';input.type=show?'text':'password';
+  btn.textContent=show?'Hide':'Show';btn.setAttribute('aria-label',show?'Hide password':'Show password');btn.setAttribute('aria-pressed',String(show));input.focus();
+ });
 }
 function showAppLoading(){
  const existing=document.getElementById('appLoadingOverlay');if(existing)existing.remove();
@@ -320,11 +435,14 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSideMenu()});
 $('toggleAuth').onclick=()=>{
  signup=!signup;
  const auth=$('auth');auth.classList.add('auth-mode-switching');
- setTimeout(()=>{updateAuthModeUI();auth.classList.remove('auth-mode-switching')},110);
+ setTimeout(()=>{updateAuthModeUI();auth.classList.remove('auth-mode-switching')},180);
 };
 async function handleAuthSubmit(ev){
  ev?.preventDefault();
  if(!db)return toast('Secure login is still connecting. Please wait a moment.','error');
+ const valid=validateAuthForm(true);
+ updateAuthSubmitState();
+ if(!valid)return toast('Please fix the highlighted fields.','error');
  const btn=$('authBtn'),emailEl=$('email'),passEl=$('password');
  const e=emailEl?.value.trim()||'',p=passEl?.value||'';
  if(!e)return toast('Enter your email address.','error');
@@ -332,7 +450,7 @@ async function handleAuthSubmit(ev){
  if(btn){btn.disabled=true;btn.dataset.loadingText=btn.textContent;btn.textContent=signup?'Creating account…':'Signing in…'}
  try{
    const r=signup
-     ? await db.auth.signUp({email:e,password:p})
+     ? await db.auth.signUp({email:e,password:p,options:{data:{full_name:$('fullName').value.trim(),phone:normalizeMobile($('mobile').value)}}})
      : await db.auth.signInWithPassword({email:e,password:p});
    if(r.error){toast(r.error.message||'Login failed. Please check your email and password.','error');return}
    if(signup){
@@ -343,16 +461,12 @@ async function handleAuthSubmit(ev){
    toast('Login failed: '+(err?.message||'Please try again.'),'error');
  }finally{
    if(btn){btn.disabled=false;btn.textContent=btn.dataset.loadingText|| (signup?'Create account':'Login')}
- }
+ } 
 }
 $('authBtn').onclick=handleAuthSubmit;
 $('password')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleAuthSubmit(e)});
-$('passwordToggle')?.addEventListener('click',()=>{
- const input=$('password'),btn=$('passwordToggle');if(!input||!btn)return;
- const show=input.type==='password';input.type=show?'text':'password';
- btn.textContent=show?'Hide':'Show';btn.setAttribute('aria-label',show?'Hide password':'Show password');btn.setAttribute('aria-pressed',String(show));
- input.focus();
-});
+bindAuthPasswordToggle();
+bindAuthValidation();
 $('email')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('password')?.focus()});
 const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.signOut();
 async function boot(){
