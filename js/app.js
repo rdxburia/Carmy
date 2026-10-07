@@ -1,6 +1,18 @@
 
 const U=APP_CONFIG.SUPABASE_URL,K=APP_CONFIG.SUPABASE_KEY;
 let db=null;
+const WORKER_API=APP_CONFIG.WORKER_API_URL||"https://carmy-api.mr-rny-buria.workers.dev";
+async function workerGet(path){
+  if(!db)throw new Error('Secure API connection is not ready.');
+  const session=await db.auth.getSession();
+  const token=session?.data?.session?.access_token;
+  if(!token)throw new Error('Secure login session expired. Please login again.');
+  const res=await fetch(WORKER_API+path,{method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
+  let body=null;
+  try{body=await res.json()}catch(e){}
+  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
+  return body;
+}
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K);return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
@@ -186,9 +198,9 @@ async function start(u){
  }
 }
 async function loadCars(){
- let r=await db.from('cars').select('*').order('registration_no');
- if(r.error)throw new Error('Vehicle profiles could not be loaded: '+r.error.message);
- cars=r.data||[];
+ const body=await workerGet('/api/vehicles');
+ cars=Array.isArray(body?.data)?body.data:[];
+ cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
 }
 async function loadStep5Data(){
  ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
