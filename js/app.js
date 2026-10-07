@@ -239,22 +239,53 @@ function updateDrawerContext(){
 async function nav(v){
  const validViews=['dashboard','cars','add','history','docs','report','owner'];
  if(!validViews.includes(v))v='dashboard';
- if(v==='add'&&car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Service logging is locked.','error');return}
- if(v==='add'&&!(await ensureRequiredCarDetails()))return;
- document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
- const target=$(v);if(!target)return;
- target.classList.add('active');
- try{ localStorage.setItem('carcare_last_view',v); }catch(e){}
- document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
- if(v==='add')prefillRecordForm();
- if(v==='dashboard')dash();
- if(v==='cars')carsView();
- if(v==='history')renderHistory();
- if(v==='docs')docsView();
- if(v==='report')report();
- if(v==='owner')ownerProfileView();
- closeSideMenu();
+ try{
+   if(v==='add'&&car?.vehicle_status==='sold'){
+     toast('Sold vehicle is read-only. Service logging is locked.','error');
+     return;
+   }
+   if(v==='add'&&!(await ensureRequiredCarDetails()))return;
+   const target=$(v);
+   if(!target){toast('Requested view is unavailable.','error');return}
+   const previous=document.querySelector('.view.active');
+   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+   target.classList.add('active');
+   try{
+     if(v==='add')prefillRecordForm();
+     if(v==='dashboard')dash();
+     if(v==='cars')carsView();
+     if(v==='history')renderHistory();
+     if(v==='docs')docsView();
+     if(v==='report')report();
+     if(v==='owner')ownerProfileView();
+   }catch(err){
+     console.error('View render error:',v,err);
+     target.classList.remove('active');
+     if(previous&&previous!==target)previous.classList.add('active');
+     toast('Unable to open '+(v==='owner'?'Owner Profile':v)+' right now. Please try again.','error');
+     if(v!=='dashboard'){
+       const dashboard=$('dashboard');
+       document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+       if(dashboard){
+         dashboard.classList.add('active');
+         try{dash()}catch(dashboardErr){console.error('Dashboard render error:',dashboardErr)}
+       }
+       try{localStorage.setItem('carcare_last_view','dashboard')}catch(e){}
+     }
+     return;
+   }
+   try{localStorage.setItem('carcare_last_view',v)}catch(e){}
+   document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
+   closeSideMenu();
+ }catch(err){
+   console.error('Navigation error:',err);
+   toast('Navigation failed. Please try again.','error');
+   try{localStorage.setItem('carcare_last_view','dashboard')}catch(e){}
+   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+   $('dashboard')?.classList.add('active');
+ }
 }
+
 document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.onclick=()=>nav(x.dataset.view));
 $('menuToggle')?.addEventListener('click',openSideMenu);
 $('brandHome')?.addEventListener('click',()=>nav('dashboard'));
@@ -317,9 +348,21 @@ async function start(u){
    if(car){dash();guard()}else{dash()}
    setAppLoadingProgress(90);
    let lastView='dashboard';
-   try{ lastView=localStorage.getItem('carcare_last_view')||'dashboard'; }catch(e){}
-   if(['dashboard','cars','add','history','docs','report','owner'].includes(lastView) && lastView!=='dashboard'){
-     await nav(lastView);
+   try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
+   const validViews=['dashboard','cars','add','history','docs','report','owner'];
+   if(!validViews.includes(lastView))lastView='dashboard';
+   if(lastView!=='dashboard'){
+     let restored=false;
+     try{
+       await nav(lastView);
+       restored=document.querySelector('#'+lastView+'.view.active')!==null;
+     }catch(err){
+       console.error('Last-view restore failed:',err);
+     }
+     if(!restored){
+       try{localStorage.removeItem('carcare_last_view')}catch(e){}
+       await nav('dashboard');
+     }
    }else{
      await nav('dashboard');
    }
@@ -331,6 +374,7 @@ async function start(u){
    hideAppLoading();
    ensureSecurityPassword();
  }catch(e){
+   console.error('Dashboard boot failed:',e);
    hideAppLoading();
    $('app').classList.add('hidden');
    $('auth').classList.remove('hidden');
@@ -338,6 +382,7 @@ async function start(u){
    startedUserId=null;
  }
 }
+
 async function loadCars(){
  const body=await workerGet('/api/vehicles');
  cars=Array.isArray(body?.data)?body.data:[];
@@ -587,23 +632,110 @@ async function openOdometerPrompt(){
  if(r.error)return toast('Failed to update odometer: '+r.error.message,'error');
  car.current_km=km;dash();toast('Odometer updated for '+car.registration_no+'!');
 }
+async function saveOwnerProfileValues(values){
+ const payload={
+   user_id:user.id,
+   full_name:String(values.full_name||'').trim(),
+   phone:String(values.phone||'').trim()||null,
+   address:String(values.address||'').trim()||null,
+   city:String(values.city||'').trim()||null,
+   state:String(values.state||'').trim()||null,
+   pincode:String(values.pincode||'').trim()||null,
+   updated_at:new Date().toISOString()
+ };
+ if(!payload.full_name)return {error:new Error('Full Name is required.')};
+ const r=await db.from('user_profiles').upsert(payload,{onConflict:'user_id'}).select().single();
+ if(r.error)return {error:r.error};
+ ownerProfile=r.data;
+ return {data:r.data};
+}
+function ownerProfileFields(p,meta){
+ return '<div class="form">'+
+   '<div class="field"><label>Full Name *</label><input id="opName" value="'+esc(p.full_name||meta.full_name||'')+'"></div>'+
+   '<div class="field"><label>Phone</label><input id="opPhone" inputmode="tel" value="'+esc(p.phone||meta.phone||'')+'"></div>'+
+   '<div class="field full"><label>Address</label><textarea id="opAddress">'+esc(p.address||meta.address||meta.full_address||'')+'</textarea></div>'+
+   '<div class="field"><label>City</label><input id="opCity" value="'+esc(p.city||'')+'"></div>'+
+   '<div class="field"><label>State</label><input id="opState" value="'+esc(p.state||'')+'"></div>'+
+   '<div class="field"><label>Pincode</label><input id="opPincode" inputmode="numeric" value="'+esc(p.pincode||'')+'"></div>'+
+   '<div class="full"><button class="primary" id="opSave">SAVE PROFILE</button></div>'+
+ '</div>';
+}
+function ownerProfileView(){
+ const el=$('ownerProfileContent');if(!el)return;
+ const p=ownerProfile||{},meta=user?.user_metadata||{};
+ const hasProfile=Boolean(p.full_name);
+ el.innerHTML='<div class="owner-profile-shell">'+
+   '<div class="owner-profile-head"><div class="toolbar"><div><span class="muted">OWNER &amp; IDENTITY</span><h2>Owner Profile</h2><p class="muted">This saved profile is reused for vehicle reports and ownership documents.</p></div>'+
+   (hasProfile?'<span class="status ok">PROFILE SAVED</span>':'<span class="status warn">NOT SAVED</span>')+
+   '</div></div>'+
+   '<div class="card owner-profile-card">'+
+   (hasProfile?'':'<div class="minimal-empty dangerbox"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>')+
+   '<div class="owner-profile-note" style="margin-bottom:18px;padding:12px 14px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-soft);color:var(--c-mute);font-size:12px">Form 29 &amp; 30 use the saved owner profile as the transferor name and address.</div>'+
+   ownerProfileFields(p,meta)+
+   '</div></div>';
+ const btn=$('opSave');
+ btn.onclick=async()=>{
+   if(btn.disabled)return;
+   btn.disabled=true;btn.textContent='SAVING...';
+   try{
+     const r=await saveOwnerProfileValues({
+       full_name:$('opName').value,
+       phone:$('opPhone').value,
+       address:$('opAddress').value,
+       city:$('opCity').value,
+       state:$('opState').value,
+       pincode:$('opPincode').value
+     });
+     if(r.error){
+       toast('Profile save failed. '+dbSetupHint(r.error),'error');
+     }else{
+       updateIdentityUI();
+       toast('Owner profile saved successfully.');
+       ownerProfileView();
+     }
+   }catch(err){
+     console.error('Owner profile save error:',err);
+     toast('Profile save failed. '+dbSetupHint(err),'error');
+   }finally{
+     if(document.getElementById('opSave')){
+       document.getElementById('opSave').disabled=false;
+       document.getElementById('opSave').textContent='SAVE PROFILE';
+     }
+   }
+ };
+}
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();
  const p=ownerProfile||{},meta=user?.user_metadata||{};
  let m=document.createElement('div');m.id='ownerProfileModal';
- m.innerHTML='<div class="step5-modal-card"><div class="toolbar"><div><h3>Owner Profile</h3><p class="muted">Saved once and reused for vehicle reports and ownership documents.</p></div><button class="ghost" id="ownerProfileClose">✕</button></div><div class="form"><div class="field"><label>Full Name *</label><input id="opName" value="'+esc(p.full_name||meta.full_name||'')+'"></div><div class="field"><label>Phone</label><input id="opPhone" inputmode="tel" value="'+esc(p.phone||meta.phone||'')+'"></div><div class="field full"><label>Address</label><textarea id="opAddress">'+esc(p.address||meta.address||meta.full_address||'')+'</textarea></div><div class="field"><label>City</label><input id="opCity" value="'+esc(p.city||'')+'"></div><div class="field"><label>State</label><input id="opState" value="'+esc(p.state||'')+'"></div><div class="field"><label>Pincode</label><input id="opPincode" inputmode="numeric" value="'+esc(p.pincode||'')+'"></div><div class="full"><button class="primary" id="opSave">SAVE PROFILE</button></div></div></div>';
+ m.innerHTML='<div class="step5-modal-card"><div class="toolbar"><div><h3>Owner Profile</h3><p class="muted">Saved once and reused for vehicle reports and ownership documents.</p></div><button class="ghost" id="ownerProfileClose">✕</button></div>'+ownerProfileFields(p,meta)+'</div>';
  document.body.appendChild(m);$('ownerProfileClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
  $('opSave').onclick=async()=>{
    const btn=$('opSave');if(btn.disabled)return;
-   const payload={user_id:user.id,full_name:$('opName').value.trim(),phone:$('opPhone').value.trim()||null,address:$('opAddress').value.trim()||null,city:$('opCity').value.trim()||null,state:$('opState').value.trim()||null,pincode:$('opPincode').value.trim()||null,updated_at:new Date().toISOString()};
-   if(!payload.full_name)return toast('Full Name is required.','error');
    btn.disabled=true;btn.textContent='SAVING...';
-   const r=await db.from('user_profiles').upsert(payload,{onConflict:'user_id'}).select().single();
-   btn.disabled=false;btn.textContent='SAVE PROFILE';
-   if(r.error)return toast('Profile save failed. '+dbSetupHint(r.error),'error');
-   ownerProfile=r.data;m.remove();toast('Owner profile saved successfully.');
+   try{
+     const r=await saveOwnerProfileValues({
+       full_name:$('opName').value,
+       phone:$('opPhone').value,
+       address:$('opAddress').value,
+       city:$('opCity').value,
+       state:$('opState').value,
+       pincode:$('opPincode').value
+     });
+     if(r.error)return toast('Profile save failed. '+dbSetupHint(r.error),'error');
+     m.remove();updateIdentityUI();toast('Owner profile saved successfully.');
+   }catch(err){
+     console.error('Owner profile save error:',err);
+     toast('Profile save failed. '+dbSetupHint(err),'error');
+   }finally{
+     if(document.getElementById('opSave')){
+       document.getElementById('opSave').disabled=false;
+       document.getElementById('opSave').textContent='SAVE PROFILE';
+     }
+   }
  };
 }
+
 async function openVehicleHistory(id=car?.id){
  const target=cars.find(x=>x.id===id)||car;if(!target)return;
  const qs='?car_id='+encodeURIComponent(target.id);
