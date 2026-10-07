@@ -35,6 +35,7 @@ function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
 let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
+let pendingVerificationEmail='',verificationTimer=null,verificationSeconds=0;
 let ownerProfile=null,insuranceHistory=[],pucHistory=[],renewalHistory=[],saleHistory=[];
 const serviceItems={
 'Regular Service':['Engine Oil','Oil Filter','Air Filter','AC / Cabin Filter','Brake Oil / Brake Fluid','Coolant','Spark Plugs','Brake Pads','Front Brake Disc','Rear Drum Brake / Brake Shoes','Wheel Alignment','Wheel Balancing','Drive Belt','Battery Check','AC Service / AC Gas','Suspension Check','Steering Check','General Inspection'],
@@ -219,6 +220,99 @@ function bindAuthValidation(){
  $('mobile')?.addEventListener('input',()=>{if(signup){setFieldState('mobile');updateAuthSubmitState()}});
 }
 
+function getAuthRedirectUrl(){
+ const path=window.location.pathname.endsWith('/')?window.location.pathname:window.location.pathname+'/';
+ return window.location.origin+path;
+}
+function maskEmail(email){
+ const v=String(email||'').trim();
+ const at=v.indexOf('@');
+ if(at<=0)return v;
+ const local=v.slice(0,at),domain=v.slice(at+1);
+ if(local.length<=2)return local[0]+'***@'+domain;
+ return local.slice(0,2)+'***'+local.slice(-1)+'@'+domain;
+}
+function stopVerificationCountdown(){
+ if(verificationTimer){clearInterval(verificationTimer);verificationTimer=null;}
+ verificationSeconds=0;
+}
+function startVerificationCountdown(seconds=60){
+ stopVerificationCountdown();
+ const timer=$('authVerificationTimer'),btn=$('authResendBtn');
+ verificationSeconds=Math.max(0,Number(seconds)||0);
+ const tick=()=>{
+   if(timer)timer.textContent=verificationSeconds>0?'Resend email in '+verificationSeconds+'s':'You can request a new verification email now.';
+   if(btn)btn.disabled=verificationSeconds>0;
+   if(verificationSeconds<=0){stopVerificationCountdown();if(btn)btn.disabled=false;return}
+   verificationSeconds-=1;
+ };
+ tick();
+ verificationTimer=setInterval(tick,1000);
+}
+function showVerificationView(email,message=''){
+ pendingVerificationEmail=String(email||'').trim();
+ if(pendingVerificationEmail){
+   try{sessionStorage.setItem('carmy_pending_verification_email',pendingVerificationEmail)}catch(e){}
+ }
+ const auth=$('auth'),body=document.querySelector('.auth-card-body'),foot=document.querySelector('.auth-card-foot'),view=$('authVerification'),emailEl=$('authVerificationEmail');
+ if(!auth||!view)return;
+ auth.classList.add('auth-verification-open');
+ body?.classList.add('hidden');foot?.classList.add('hidden');
+ view.classList.remove('hidden');
+ if(emailEl)emailEl.textContent=maskEmail(pendingVerificationEmail);
+ const note=$('authVerificationNote');
+ if(note&&message)note.textContent=message;
+ const actions=document.querySelector('.auth-mobile-actions');actions?.classList.add('hidden');
+ startVerificationCountdown(60);
+}
+function hideVerificationView(){
+ stopVerificationCountdown();
+ const auth=$('auth'),body=document.querySelector('.auth-card-body'),foot=document.querySelector('.auth-card-foot'),view=$('authVerification');
+ auth?.classList.remove('auth-verification-open');
+ body?.classList.remove('hidden');foot?.classList.remove('hidden');
+ view?.classList.add('hidden');
+ document.querySelector('.auth-mobile-actions')?.classList.remove('hidden');
+ try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
+ pendingVerificationEmail='';
+}
+async function resendVerificationEmail(){
+ if(!db)return toast('Secure login is still connecting. Please wait a moment.','error');
+ const email=pendingVerificationEmail||sessionStorage.getItem('carmy_pending_verification_email')||'';
+ if(!email)return toast('Verification email address is missing. Please create the account again.','error');
+ const btn=$('authResendBtn');if(btn)btn.disabled=true;
+ try{
+   const r=await db.auth.resend({type:'signup',email,options:{emailRedirectTo:getAuthRedirectUrl()}});
+   if(r.error)throw r.error;
+   startVerificationCountdown(60);
+   toast('New verification email sent.');
+ }catch(err){
+   console.error('Verification resend error:',err);
+   const msg=String(err?.message||'Unable to resend verification email.');
+   toast(msg,'error');
+   if(/rate|too many|limit/i.test(msg))startVerificationCountdown(60);
+   else if(btn)btn.disabled=false;
+ }
+}
+function restorePendingVerification(){
+ let email='';
+ try{email=sessionStorage.getItem('carmy_pending_verification_email')||''}catch(e){}
+ if(email&&!db?.auth)return;
+ if(email)showVerificationView(email);
+}
+function handleAuthRedirectError(){
+ const hash=window.location.hash||'';
+ if(!hash.includes('error='))return;
+ const p=new URLSearchParams(hash.replace(/^#/,''));
+ const code=p.get('error_code')||'';
+ const description=p.get('error_description')||'';
+ if(code==='otp_expired'||code==='access_denied'){
+   let email='';
+   try{email=sessionStorage.getItem('carmy_pending_verification_email')||''}catch(e){}
+   if(email)showVerificationView(email,'The previous verification link is invalid or expired. Use the latest verification email.');
+   else toast('The verification link is invalid or expired. Please request a new verification email.','error');
+ }
+ try{history.replaceState(null,document.title,window.location.pathname+window.location.search)}catch(e){}
+}
 function updateAuthModeUI(){
  const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
  if(title)title.textContent=signup?'Create your account':'Private Car Manager';
@@ -466,10 +560,18 @@ $('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSideMenu()});
 
 $('toggleAuth').onclick=()=>{
+ hideVerificationView();
  signup=!signup;
  const auth=$('auth');auth.classList.add('auth-mode-switching');
  setTimeout(()=>{updateAuthModeUI();auth.classList.remove('auth-mode-switching')},180);
 };
+$('authResendBtn')?.addEventListener('click',resendVerificationEmail);
+$('authVerificationBack')?.addEventListener('click',()=>{
+ hideVerificationView();
+ signup=false;
+ updateAuthModeUI();
+ $('email')?.focus();
+});
 async function handleAuthSubmit(ev){
  ev?.preventDefault();
  if(!db)return toast('Secure login is still connecting. Please wait a moment.','error');
@@ -483,11 +585,15 @@ async function handleAuthSubmit(ev){
  if(btn){btn.disabled=true;btn.dataset.loadingText=btn.textContent;btn.textContent=signup?'Creating account…':'Signing in…'}
  try{
    const r=signup
-     ? await db.auth.signUp({email:e,password:p,options:{data:{full_name:$('fullName').value.trim(),phone:normalizeMobile($('mobile').value)}}})
+     ? await db.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl(),data:{full_name:$('fullName').value.trim(),phone:normalizeMobile($('mobile').value)}}})
      : await db.auth.signInWithPassword({email:e,password:p});
    if(r.error){toast(r.error.message||'Login failed. Please check your email and password.','error');return}
    if(signup){
-     toast(r.data?.session?'Account created and signed in.':'Account created. Check your email if confirmation is enabled.');
+     if(r.data?.session){
+       toast('Account created and signed in.');
+     }else{
+       showVerificationView(e);
+     }
    }
  }catch(err){
    console.error('Authentication error:',err);
@@ -503,6 +609,7 @@ bindAuthValidation();
 $('email')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('password')?.focus()});
 const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.signOut();
 async function boot(){
+ handleAuthRedirectError();
  let s=await db.auth.getSession();
  if(s.data.session)start(s.data.session.user);
  else showLogin();
@@ -517,6 +624,8 @@ async function boot(){
  });
 }
 function showLogin(){
+ stopVerificationCountdown();
+ hideVerificationView();
  let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}
  let ps=$('policeLogoutStyle');if(ps)ps.remove();
  const auth=$('auth');
@@ -527,6 +636,7 @@ function showLogin(){
  updateAuthModeUI();
  bindMobileAuthTabs();
  prepareLoginExperience();
+ if(!document.querySelector('.auth-verification-open'))restorePendingVerification();
  const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}
 }
 function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car';updateDrawerContext()}
