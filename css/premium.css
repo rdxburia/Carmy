@@ -190,3 +190,320 @@ input[type=checkbox]{accent-color:var(--c-accent)}
   .history-import-text{min-height:280px}
   .history-import-status{align-items:flex-start;flex-direction:column}
 }
+
+/* ===== Post-login loading: CarCare Cloud boot progress ===== */
+#appLoadingOverlay{
+  position:fixed;
+  inset:0;
+  z-index:2147483646;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  background:#fff;
+  color:#141414;
+  opacity:1;
+  visibility:visible;
+  pointer-events:auto;
+  transition:opacity .34s ease,visibility .34s ease;
+}
+#appLoadingOverlay.loading-out{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+}
+.app-loading-panel{
+  width:min(760px,100%);
+  padding:clamp(24px,4vw,44px);
+  text-align:center;
+}
+.app-loading-brand{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  color:#141414;
+  font-size:clamp(18px,2.2vw,22px);
+  line-height:1;
+  font-weight:700;
+  letter-spacing:-.02em;
+}
+.app-loading-brand-mark{
+  display:grid;
+  place-items:center;
+  width:34px;
+  height:34px;
+  border-radius:9px;
+  background:#14352b;
+  color:#fff;
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:-.04em;
+}
+.app-loading-brand-name{white-space:nowrap}
+.app-loading-brand-name i{color:#14352b;font-style:normal}
+
+.app-loading-visual{
+  position:relative;
+  width:100%;
+  height:clamp(175px,24vw,220px);
+  margin:30px 0 14px;
+  overflow:hidden;
+  isolation:isolate;
+  perspective:900px;
+}
+.app-loading-sky{
+  position:absolute;
+  inset:0 0 48%;
+  overflow:hidden;
+  pointer-events:none;
+}
+.app-loading-hills{
+  position:absolute;
+  left:-5%;
+  bottom:-2px;
+  width:110%;
+  height:72px;
+  opacity:.72;
+  background:#f1f2ee;
+  border-radius:52% 48% 0 0/100% 100% 0 0;
+  transform:translate3d(0,0,0);
+}
+.app-loading-hills:after{
+  content:"";
+  position:absolute;
+  left:22%;
+  bottom:-22px;
+  width:58%;
+  height:58px;
+  background:#e8ebe5;
+  border-radius:48% 52% 0 0/100% 100% 0 0;
+  transform:translate3d(0,0,0);
+}
+.app-loading-road{
+  position:absolute;
+  left:4%;
+  right:4%;
+  bottom:18px;
+  height:92px;
+  overflow:hidden;
+  transform:rotateX(58deg) translateZ(0);
+  transform-origin:center bottom;
+  border:1px solid #dcded8;
+  border-radius:9px;
+  background:#f3f3ef;
+  box-shadow:0 15px 30px rgba(20,53,43,.08);
+}
+.app-loading-road:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:#ecece7;
+}
+.app-loading-road-markings{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  gap:34px;
+  width:220%;
+  transform:translate3d(0,0,0);
+  animation:loadingRoadScroll .85s linear infinite;
+  will-change:transform;
+}
+.app-loading-road-markings span{
+  display:block;
+  flex:0 0 54px;
+  height:3px;
+  border-radius:99px;
+  background:#c8cbc5;
+}
+.app-loading-finish{
+  position:absolute;
+  right:4%;
+  top:7px;
+  bottom:7px;
+  width:2px;
+  background:#14352b;
+  z-index:2;
+}
+.app-loading-finish:before{
+  content:"";
+  position:absolute;
+  top:-2px;
+  left:2px;
+  width:18px;
+  height:13px;
+  background:
+    linear-gradient(45deg,#14352b 25%,transparent 25% 75%,#14352b 75%),
+    linear-gradient(45deg,transparent 25%,#14352b 25% 75%,transparent 75%);
+  background-size:8px 8px;
+  transform:skewY(-4deg);
+}
+.app-loading-ground-shadow{
+  position:absolute;
+  left:8%;
+  right:8%;
+  bottom:27px;
+  height:22px;
+  border-radius:50%;
+  background:rgba(20,53,43,.13);
+  filter:blur(7px);
+  transform:translate3d(0,0,0);
+}
+
+.loading-car-position{
+  position:absolute;
+  left:0;
+  bottom:54px;
+  width:74px;
+  height:82px;
+  transform:translate3d(-50%,0,0);
+  transition:transform .12s linear;
+  z-index:4;
+  will-change:transform;
+}
+.loading-car-scene{
+  position:absolute;
+  inset:0;
+  transform:translate3d(0,0,0);
+}
+.loading-car-svg{
+  position:absolute;
+  left:0;
+  bottom:13px;
+  width:74px;
+  height:auto;
+  overflow:visible;
+}
+.loading-car-svg .car-body{fill:#14352b}
+.loading-car-svg .car-roof{fill:#1d4d3e}
+.loading-car-svg .car-window{fill:#e8eee9}
+.loading-car-svg .car-trim{fill:#d5d9d4}
+.loading-car-svg .car-wheel{fill:#202421;transform-box:fill-box;transform-origin:center;animation:loadingWheelSpin .5s linear infinite}
+.loading-car-svg .car-hub{fill:#b7bcb7}
+.loading-car-svg .car-light{fill:#f0c86a}
+.loading-car-svg .car-shadow-line{fill:#0e251e}
+
+.app-loading-smoke{
+  position:absolute;
+  left:-3px;
+  bottom:38px;
+  width:38px;
+  height:38px;
+  pointer-events:none;
+  z-index:3;
+}
+.app-loading-smoke-puff{
+  position:absolute;
+  left:0;
+  top:50%;
+  width:var(--puff-size,8px);
+  height:var(--puff-size,8px);
+  border-radius:50%;
+  background:#c9cdc8;
+  opacity:0;
+  transform:translate3d(0,-50%,0) scale(.65);
+  will-change:transform,opacity;
+}
+.app-loading-smoke-puff.is-live{
+  animation:loadingSmoke var(--puff-duration,900ms) ease-out forwards;
+}
+
+.app-loading-progress-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:min(650px,100%);
+  margin:0 auto;
+}
+.app-loading-progress-track{
+  position:relative;
+  flex:1;
+  height:6px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#e8e9e4;
+  border:1px solid #e1e2dc;
+}
+.app-loading-progress-fill{
+  width:0%;
+  height:100%;
+  border-radius:inherit;
+  background:#14352b;
+  transform:translate3d(0,0,0);
+  transition:width .12s linear;
+  will-change:width;
+}
+.app-loading-percent{
+  min-width:42px;
+  text-align:right;
+  color:#141414;
+  font-size:13px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.app-loading-title{
+  min-height:24px;
+  margin-top:17px;
+  color:#141414;
+  font-size:16px;
+  line-height:1.35;
+  font-weight:700;
+}
+.app-loading-sub{
+  min-height:20px;
+  margin-top:5px;
+  color:#6b6f6b;
+  font-size:13px;
+  line-height:1.45;
+}
+
+@keyframes loadingRoadScroll{
+  to{transform:translate3d(-88px,0,0)}
+}
+@keyframes loadingWheelSpin{
+  to{transform:rotate(360deg)}
+}
+@keyframes loadingSmoke{
+  0%{opacity:.32;transform:translate3d(0,-50%,0) scale(.65)}
+  100%{opacity:0;transform:translate3d(-34px,-62%,0) scale(1.55)}
+}
+@keyframes dashboardIn{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:none}
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#app.app-ready{animation:dashboardIn .42s ease both}
+
+#appLoadingOverlay.app-loading-paused *{animation-play-state:paused!important}
+
+@media(max-width:650px){
+  #appLoadingOverlay{padding:14px}
+  .app-loading-panel{padding:22px 4px}
+  .app-loading-visual{height:175px;margin-top:24px}
+  .app-loading-road{left:1%;right:1%;bottom:16px;height:82px}
+  .loading-car-position{bottom:49px}
+  .app-loading-ground-shadow{bottom:24px}
+}
+@media(max-width:380px){
+  .app-loading-brand{font-size:17px}
+  .app-loading-brand-mark{width:30px;height:30px}
+  .app-loading-visual{height:160px}
+  .app-loading-road{height:74px}
+  .loading-car-position{bottom:45px}
+  .app-loading-progress-row{gap:9px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  #appLoadingOverlay *{
+    animation:none!important;
+    transition:none!important;
+  }
+  .app-loading-road{transform:none!important;perspective:none!important}
+  .app-loading-hills,.app-loading-hills:after,.app-loading-ground-shadow{transform:none!important}
+  .app-loading-road-markings{transform:none!important}
+  .loading-car-position{transition:none!important}
+  .loading-car-svg .car-wheel{animation:none!important}
+  .app-loading-smoke{display:none!important}
+  .app-loading-progress-fill{transition:none!important}
+}
