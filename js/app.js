@@ -741,13 +741,23 @@ async function loadData(){
    return;
  }
  const carId=encodeURIComponent(car.id);
- const [history,documents]=await Promise.all([
+ const qs='?car_id='+carId;
+ const [history,documents,profile,insurance,puc,renewals,sales]=await Promise.all([
    workerGet('/api/service-history?car_id='+carId),
-   workerGet('/api/documents?car_id='+carId)
+   workerGet('/api/documents?car_id='+carId),
+   workerGet('/api/profile'),
+   workerGet('/api/insurance'+qs),
+   workerGet('/api/puc'+qs),
+   workerGet('/api/renewals'+qs),
+   workerGet('/api/sale-history'+qs)
  ]);
  records=Array.isArray(history?.data)?history.data:[];
  docs=Array.isArray(documents?.data)?documents.data:[];
- await loadStep5Data();
+ ownerProfile=profile?.data||null;
+ insuranceHistory=Array.isArray(insurance?.data)?insurance.data:[];
+ pucHistory=Array.isArray(puc?.data)?puc.data:[];
+ renewalHistory=Array.isArray(renewals?.data)?renewals.data:[];
+ saleHistory=Array.isArray(sales?.data)?sales.data:[];
 }
 const insuranceTypes=['Third Party','Comprehensive','Zero Depreciation','Own Damage','Standalone Own Damage'];
 const insuranceAddons=['Roadside Assistance','Engine Protection','Consumables Cover','Key Replacement','Tyre Protect','Return to Invoice','NCB Protect'];
@@ -924,9 +934,9 @@ async function generateSaleForms(){
  try{
    const wrapper=document.createElement('div');wrapper.id='salePdfPreview';wrapper.setAttribute('aria-hidden','true');wrapper.innerHTML=buildSaleFormsHtml(data);document.body.appendChild(wrapper);
    const pdfName='Form_29_30_'+buyerName.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+new Date(saleDate).getFullYear()+'.pdf';
-   if(typeof html2pdf==='undefined')throw new Error('PDF engine did not load. Please refresh and try again.');
+   const pdf=await loadPdfEngine();
    const opt={margin:0,filename:pdfName,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
-   const blob=await html2pdf().set(opt).from(wrapper).outputPdf('blob');
+   const blob=await pdf().set(opt).from(wrapper).outputPdf('blob');
    wrapper.remove();
    const path=user.id+'/'+car.id+'/archives/'+pdfName;
    const up=await db.storage.from('car-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});
