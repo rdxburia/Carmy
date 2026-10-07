@@ -205,27 +205,31 @@ async function loadCars(){
 async function loadStep5Data(){
  ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
  if(!user)return;
- const profile=await db.from('user_profiles').select('*').eq('user_id',user.id).maybeSingle();
- if(!profile.error)ownerProfile=profile.data||null;else console.warn('user_profiles load failed:',profile.error.message);
+ try{
+   const profile=await workerGet('/api/profile');
+   ownerProfile=profile?.data||null;
+ }catch(err){
+   console.warn('Worker profile load failed:',err?.message||err);
+ }
  if(!car)return;
+ const qs='?car_id='+encodeURIComponent(car.id);
  const [ih,ph,rh,sh]=await Promise.all([
-   db.from('insurance_history').select('*').eq('car_id',car.id).order('created_at',{ascending:false}),
-   db.from('puc_history').select('*').eq('car_id',car.id).order('created_at',{ascending:false}),
-   db.from('policy_renewals').select('*').eq('car_id',car.id).order('renewal_date',{ascending:false}),
-   db.from('sale_history').select('*').eq('car_id',car.id).order('sale_date',{ascending:false})
+   workerGet('/api/insurance'+qs),
+   workerGet('/api/puc'+qs),
+   workerGet('/api/renewals'+qs),
+   workerGet('/api/sale-history'+qs)
  ]);
- if(!ih.error)insuranceHistory=ih.data||[];
- if(!ph.error)pucHistory=ph.data||[];
- if(!rh.error)renewalHistory=rh.data||[];
- if(!sh.error)saleHistory=sh.data||[];
+ insuranceHistory=Array.isArray(ih?.data)?ih.data:[];
+ pucHistory=Array.isArray(ph?.data)?ph.data:[];
+ renewalHistory=Array.isArray(rh?.data)?rh.data:[];
+ saleHistory=Array.isArray(sh?.data)?sh.data:[];
 }
 async function loadData(){
  if(!car){records=[];docs=[];await loadStep5Data();dash();renderHistory();report();guard();return}
  const history=await workerGet('/api/service-history?car_id='+encodeURIComponent(car.id));
  records=Array.isArray(history?.data)?history.data:[];
- let d=await db.from('documents').select('*').eq('car_id',car.id).order('created_at',{ascending:false});
- if(d.error)throw new Error('Vehicle documents could not be loaded: '+d.error.message);
- docs=d.data||[];
+ const documents=await workerGet('/api/documents?car_id='+encodeURIComponent(car.id));
+ docs=Array.isArray(documents?.data)?documents.data:[];
  await loadStep5Data();
  dash();renderHistory();await docsView();report();guard()
 }
