@@ -58,12 +58,8 @@ export async function invalidateUserResource(env, resourceType, userId, carId = 
   if (!user) return;
 
   const userKey = `${resourceType}:${user}`;
-  if (carId) {
-    await invalidateCache(env, `${userKey}:${String(carId)}`);
-    return;
-  }
-
   await invalidateCache(env, userKey);
+  if (carId) await invalidateCache(env, `${userKey}:${String(carId)}`);
 }
 
 export async function invalidateVehicleCaches(env, userId, carId = null) {
