@@ -265,15 +265,14 @@ function showVerificationView(email,message=''){
  const actions=document.querySelector('.auth-mobile-actions');actions?.classList.add('hidden');
  startVerificationCountdown(60);
 }
-function hideVerificationView(){
+function hideVerificationView(clearPending=true){
  stopVerificationCountdown();
  const auth=$('auth'),body=document.querySelector('.auth-card-body'),foot=document.querySelector('.auth-card-foot'),view=$('authVerification');
  auth?.classList.remove('auth-verification-open');
  body?.classList.remove('hidden');foot?.classList.remove('hidden');
  view?.classList.add('hidden');
  document.querySelector('.auth-mobile-actions')?.classList.remove('hidden');
- try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
- pendingVerificationEmail='';
+ if(clearPending){try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}pendingVerificationEmail='';}
 }
 async function resendVerificationEmail(){
  if(!db)return toast('Secure login is still connecting. Please wait a moment.','error');
@@ -626,7 +625,7 @@ async function boot(){
 }
 function showLogin(){
  stopVerificationCountdown();
- hideVerificationView();
+ hideVerificationView(false);
  let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}
  let ps=$('policeLogoutStyle');if(ps)ps.remove();
  const auth=$('auth');
