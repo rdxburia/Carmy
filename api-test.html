@@ -113,7 +113,70 @@
           service_history_api: "ok",
           service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null,
           documents_api: "ok",
-          document_count: Array.isArray(documentsBody.data) ? documentsBody.data.length : null
+          document_count: Array.isArray(documentsBody.data) ? documentsBody.data.length : null,
+          insurance_api: "testing",
+          puc_api: "testing"
+        });
+
+        const insuranceResponse = await fetch(
+          WORKER + "/api/insurance?car_id=" + encodeURIComponent(carId),
+          { headers }
+        );
+        const insuranceBody = await insuranceResponse.json();
+
+        if (!insuranceResponse.ok) {
+          show({
+            worker: "ok",
+            authentication: "ok",
+            vehicles_api: "ok",
+            vehicle_count: vehicles.length,
+            service_history_api: "ok",
+            service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null,
+            documents_api: "ok",
+            document_count: Array.isArray(documentsBody.data) ? documentsBody.data.length : null,
+            insurance_http_status: insuranceResponse.status,
+            insurance_response: insuranceBody
+          }, false);
+          return;
+        }
+
+        const pucResponse = await fetch(
+          WORKER + "/api/puc?car_id=" + encodeURIComponent(carId),
+          { headers }
+        );
+        const pucBody = await pucResponse.json();
+
+        if (!pucResponse.ok) {
+          show({
+            worker: "ok",
+            authentication: "ok",
+            vehicles_api: "ok",
+            vehicle_count: vehicles.length,
+            service_history_api: "ok",
+            service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null,
+            documents_api: "ok",
+            document_count: Array.isArray(documentsBody.data) ? documentsBody.data.length : null,
+            insurance_api: "ok",
+            insurance_history_count: Array.isArray(insuranceBody.data) ? insuranceBody.data.length : null,
+            puc_http_status: pucResponse.status,
+            puc_response: pucBody
+          }, false);
+          return;
+        }
+
+        show({
+          worker: "ok",
+          authentication: "ok",
+          vehicles_api: "ok",
+          vehicle_count: vehicles.length,
+          service_history_api: "ok",
+          service_record_count: Array.isArray(historyBody.data) ? historyBody.data.length : null,
+          documents_api: "ok",
+          document_count: Array.isArray(documentsBody.data) ? documentsBody.data.length : null,
+          insurance_api: "ok",
+          insurance_history_count: Array.isArray(insuranceBody.data) ? insuranceBody.data.length : null,
+          puc_api: "ok",
+          puc_history_count: Array.isArray(pucBody.data) ? pucBody.data.length : null
         });
       } catch (error) {
         show("TEST FAILED: " + (error?.message || error), false);
