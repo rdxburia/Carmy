@@ -253,9 +253,21 @@ jobs:
               )
 
           keep_id = latest[0]["id"]
+          def is_carmy_backup_file(name):
+              return (
+                  name == "Carmy-LATEST.tar.gz"
+                  or name.startswith("Carmy-")
+                  or name in {"git-commit.txt", "SHA256SUMS.txt", "backup-manifest.json"}
+              )
+
           deleted = 0
+          skipped = 0
           for item in files:
               if item["id"] == keep_id:
+                  continue
+              if not is_carmy_backup_file(item["name"]):
+                  skipped += 1
+                  print(f"Preserved unrelated Drive file: {item['name']}")
                   continue
               drive.files().delete(
                   fileId=item["id"],
@@ -264,7 +276,8 @@ jobs:
               deleted += 1
               print(f"Deleted legacy backup file: {item['name']}")
 
-          print(f"Legacy Drive files removed: {deleted}")
+          print(f"Legacy Drive backup files removed: {deleted}")
+          print(f"Unrelated Drive files preserved: {skipped}")
           PY
 
       - name: Build complete latest snapshot
@@ -442,9 +455,21 @@ jobs:
               if not page_token:
                   break
 
+          def is_carmy_backup_file(name):
+              return (
+                  name == "Carmy-LATEST.tar.gz"
+                  or name.startswith("Carmy-")
+                  or name in {"git-commit.txt", "SHA256SUMS.txt", "backup-manifest.json"}
+              )
+
           deleted = 0
+          skipped = 0
           for item in cleanup_files:
               if item["id"] == keep_id:
+                  continue
+              if not is_carmy_backup_file(item["name"]):
+                  skipped += 1
+                  print(f"Preserved unrelated Drive file: {item['name']}")
                   continue
 
               drive.files().delete(
@@ -454,7 +479,8 @@ jobs:
               deleted += 1
               print(f"Deleted legacy backup file: {item['name']}")
 
-          print(f"Google Drive latest snapshot ready. Legacy files removed: {deleted}")
+          print(f"Google Drive latest snapshot ready. Legacy backup files removed: {deleted}")
+          print(f"Unrelated Drive files preserved: {skipped}")
           PY
 
       - name: Verify final Drive state
