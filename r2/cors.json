@@ -1,0 +1,21 @@
+{
+  "rules": [
+    {
+      "AllowedOrigins": [
+        "https://rdxburia.github.io"
+      ],
+      "AllowedMethods": [
+        "GET",
+        "PUT",
+        "HEAD"
+      ],
+      "AllowedHeaders": [
+        "Content-Type"
+      ],
+      "ExposeHeaders": [
+        "ETag"
+      ],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}
