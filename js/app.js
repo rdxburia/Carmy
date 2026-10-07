@@ -221,9 +221,8 @@ async function loadStep5Data(){
 }
 async function loadData(){
  if(!car){records=[];docs=[];await loadStep5Data();dash();renderHistory();report();guard();return}
- let r=await db.from('records').select('*,record_items(*)').eq('car_id',car.id).order('service_date',{ascending:false});
- if(r.error)throw new Error('Service history could not be loaded: '+r.error.message);
- records=r.data||[];
+ const history=await workerGet('/api/service-history?car_id='+encodeURIComponent(car.id));
+ records=Array.isArray(history?.data)?history.data:[];
  let d=await db.from('documents').select('*').eq('car_id',car.id).order('created_at',{ascending:false});
  if(d.error)throw new Error('Vehicle documents could not be loaded: '+d.error.message);
  docs=d.data||[];
