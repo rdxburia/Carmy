@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Carmy API Test</title>
+  <style>
+    body{font-family:Inter,system-ui,sans-serif;max-width:760px;margin:40px auto;padding:20px;background:#faf9f6;color:#123b34}
+    .card{background:#fff;border:1px solid #ddd;border-radius:14px;padding:24px;box-shadow:0 8px 30px #0000000d}
+    button{padding:12px 18px;border:0;border-radius:10px;background:#123b34;color:#fff;font-weight:700;cursor:pointer}
+    pre{white-space:pre-wrap;background:#f4f4f0;padding:16px;border-radius:10px}
+    .ok{color:#16734a}.bad{color:#b42318}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Carmy API Gateway Test</h1>
+    <p>This temporary diagnostic checks the logged-in session against the Cloudflare Worker. It never displays the access token.</p>
+    <button id="test">Run authenticated API test</button>
+    <pre id="out">Ready.</pre>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script>
+    const out = document.getElementById("out");
+    const WORKER = "https://carmy-api.mr-rny-buria.workers.dev";
+    const client = window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_KEY);
+
+    function show(value, ok = true) {
+      out.className = ok ? "ok" : "bad";
+      out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    }
+
+    document.getElementById("test").addEventListener("click", async () => {
+      show("Testing...");
+      try {
+        const { data: { session }, error: sessionError } = await client.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!session?.access_token) {
+          show("NO SESSION — login to Carmy first, then open this page again.", false);
+          return;
+        }
+
+        const response = await fetch(WORKER + "/api/vehicles", {
+          headers: { Authorization: "Bearer " + session.access_token }
+        });
+        const body = await response.json();
+
+        if (!response.ok) {
+          show({
+            worker_http_status: response.status,
+            worker_response: body
+          }, false);
+          return;
+        }
+
+        show({
+          worker: "ok",
+          authentication: "ok",
+          vehicles_api: "ok",
+          vehicle_count: Array.isArray(body.data) ? body.data.length : null
+        });
+      } catch (error) {
+        show("TEST FAILED: " + (error?.message || error), false);
+      }
+    });
+  </script>
+</body>
+</html>
