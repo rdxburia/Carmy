@@ -9,6 +9,7 @@ import { getProfile } from "./profile.js";
 import { listRenewals } from "./renewals.js";
 import { listSaleHistory } from "./sales.js";
 import { handleCacheWebhook } from "./cache-webhook.js";
+import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
 
 function originFor(request, env) {
   const origin = request.headers.get("Origin");
@@ -106,6 +107,13 @@ export default {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listDocuments(env, user, userToken, carId) }, 200, origin);
       }
+      if (request.method === "POST" && parts[0] === "files" && parts[1] === "presign-upload") { const input = await request.json(); return json({ ok: true, data: await presignUpload(env, user, userToken, input) }, 200, origin); }
+
+      if (request.method === "POST" && parts[0] === "files" && parts[1] === "finalize") { const input = await request.json(); return json({ ok: true, data: await finalizeUpload(env, user, userToken, input) }, 200, origin); }
+
+      if (request.method === "GET" && parts[0] === "files" && parts[1] === "presign-download") { const documentId = url.searchParams.get("document_id"); const carId = url.searchParams.get("car_id"); return json({ ok: true, data: await presignDownload(env, user, userToken, documentId, carId) }, 200, origin); }
+
+      if (request.method === "DELETE" && parts[0] === "files" && parts[1] === "object") { const documentId = url.searchParams.get("document_id"); const carId = url.searchParams.get("car_id"); return json({ ok: true, data: await deleteR2Document(env, user, userToken, documentId, carId) }, 200, origin); }
 
       if (request.method === "GET" && parts[0] === "insurance") {
         const carId = url.searchParams.get("car_id");
