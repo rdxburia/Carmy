@@ -38,6 +38,14 @@ export async function handleCacheWebhook(request, env, origin) {
     error: { code: "UNAUTHORIZED", message: "Invalid webhook secret." }
   }, 401, origin);
 
+  const contentLength = Number(request.headers.get("Content-Length") || 0);
+  if (contentLength > 64 * 1024) {
+    return response({
+      ok: false,
+      error: { code: "PAYLOAD_TOO_LARGE", message: "Webhook payload is too large." }
+    }, 413, origin);
+  }
+
   let payload;
   try {
     payload = await request.json();
@@ -57,6 +65,14 @@ export async function handleCacheWebhook(request, env, origin) {
     ok: false,
     error: { code: "INVALID_PAYLOAD", message: "Webhook table is required." }
   }, 400, origin);
+
+  const supportedTables = new Set(["cars", ...Object.keys(TABLE_RESOURCES)]);
+  if (!supportedTables.has(table)) {
+    return response({
+      ok: false,
+      error: { code: "UNSUPPORTED_TABLE", message: "Webhook table is not supported." }
+    }, 400, origin);
+  }
 
   if (table === "cars") {
     if (userId) await invalidateVehicleCaches(env, userId, row.id || carId || null);
