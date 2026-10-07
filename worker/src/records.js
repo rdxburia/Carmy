@@ -15,7 +15,7 @@ export async function listServiceHistory(env, user, userToken, carId = null) {
 
   const records = await supabaseRest(
     env,
-    `records?select=*&${filters.join("&")}`,
+    `records?select=*,record_items(*)&${filters.join("&")}`,
     { method: "GET" },
     userToken
   );
