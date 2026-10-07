@@ -1,47 +1,7 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#faf9f6"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23123b34%27/%3E%3Ctext x=%2732%27 y=%2739%27 text-anchor=%27middle%27 font-family=%27Arial,sans-serif%27 font-size=%2724%27 font-weight=%27700%27 fill=%27white%27%3ECC%3C/text%3E%3C/svg%3E"><link rel="shortcut icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23123b34%27/%3E%3Ctext x=%2732%27 y=%2739%27 text-anchor=%27middle%27 font-family=%27Arial,sans-serif%27 font-size=%2724%27 font-weight=%27700%27 fill=%27white%27%3ECC%3C/text%3E%3C/svg%3E"><link rel="preconnect" href="https://hlrmuvzmaegnbgzvvfsn.supabase.co"><title>CarCare Cloud</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/premium.css"><script src="js/config.js"></script><script src="js/app.js" defer></script></head><body>
 <div id="auth" class="login auth-session-pending" aria-label="CarCare Cloud sign in">
   <div class="auth-shell">
-    <section class="auth-card" aria-labelledby="authTitle">
-      <div class="auth-card-head">
-        <div class="auth-brand"><span class="auth-brand-mark" aria-hidden="true">CC</span><span>Car<i>Care</i> Cloud</span></div>
-        <span class="auth-private"><span aria-hidden="true">✓</span> Private to your account</span>
-      </div>
-      <div class="auth-card-body">
-        <p class="auth-kicker" id="authModeKicker">SECURE GARAGE</p>
-        <h1 id="authTitle">Private Car Manager</h1>
-        <p class="auth-card-copy" id="authModeCopy">Sign in to keep your vehicle history, documents and reports together.</p>
-        <div class="auth-form" id="authForm">
-          <div class="auth-field">
-            <label for="email">Email</label>
-            <input id="email" type="email" autocomplete="email" placeholder=" " required>
-          </div>
-          <div class="auth-field auth-password-field">
-            <label for="password">Password</label>
-            <input id="password" type="password" autocomplete="current-password" placeholder=" " required>
-            <button class="auth-password-toggle" id="passwordToggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
-          </div>
-          <button id="authBtn" class="primary auth-submit" type="button">Login</button>
-          <button id="toggleAuth" class="ghost auth-switch" type="button">Create account</button>
-        </div>
-      </div>
-      <p class="auth-card-foot">Your garage stays tied to your secure account.</p>
-    </section>
-
     <section class="auth-story" aria-label="CarCare Cloud features">
-      <div class="auth-story-art" aria-hidden="true">
-        <div class="auth-light auth-light-one"></div>
-        <div class="auth-light auth-light-two"></div>
-        <div class="auth-speedometer"></div>
-        <div class="auth-horizon"></div>
-        <div class="auth-road-line"></div>
-        <svg class="auth-car" viewBox="0 0 260 100" role="presentation">
-          <path class="auth-car-line" d="M35 63h190c5 0 9 4 9 9v6H26v-7c0-5 4-8 9-8Z"/>
-          <path class="auth-car-line" d="M72 63 94 34c3-4 8-6 13-6h51c6 0 11 3 15 8l20 27Z"/>
-          <path class="auth-car-line auth-car-window-line" d="M103 35 88 57h35V35Zm43 0v22h33l-16-22Z"/>
-          <circle class="auth-car-wheel" cx="76" cy="78" r="13"/>
-          <circle class="auth-car-wheel" cx="190" cy="78" r="13"/>
-        </svg>
-      </div>
       <div class="auth-story-copy">
         <p class="auth-kicker">YOUR DIGITAL GARAGE</p>
         <h2>Every kilometre,<br><span>on record.</span></h2>
@@ -55,6 +15,62 @@
         </ul>
         <div class="auth-story-footer">CarCare Cloud</div>
       </div>
+      <div class="auth-scene" aria-hidden="true">
+        <div class="auth-scene-glow"></div>
+        <div class="auth-speedometer"></div>
+        <div class="auth-horizon"></div>
+        <div class="auth-road-line"></div>
+        <svg class="auth-car" viewBox="0 0 260 100" role="presentation">
+          <path class="auth-car-line" d="M35 63h190c5 0 9 4 9 9v6H26v-7c0-5 4-8 9-8Z"/>
+          <path class="auth-car-line" d="M72 63 94 34c3-4 8-6 13-6h51c6 0 11 3 15 8l20 27Z"/>
+          <path class="auth-car-line auth-car-window-line" d="M103 35 88 57h35V35Zm43 0v22h33l-16-22Z"/>
+          <circle class="auth-car-wheel" cx="76" cy="78" r="13"/>
+          <circle class="auth-car-wheel" cx="190" cy="78" r="13"/>
+        </svg>
+      </div>
+    </section>
+
+    <section class="auth-card" aria-labelledby="authTitle">
+      <div class="auth-card-head">
+        <div class="auth-brand"><span class="auth-brand-mark" aria-hidden="true">CC</span><span>Car<i>Care</i> Cloud</span></div>
+        <span class="auth-private"><span aria-hidden="true">✓</span> Private to your account</span>
+      </div>
+      <div class="auth-card-body">
+        <p class="auth-kicker" id="authModeKicker">SECURE GARAGE</p>
+        <h1 id="authTitle">Private Car Manager</h1>
+        <p class="auth-card-copy" id="authModeCopy">Sign in to keep your vehicle history, documents and reports together.</p>
+        <div class="auth-form" id="authForm">
+          <div class="auth-field auth-signup-only" id="fullNameField">
+            <label for="fullName">Full name</label>
+            <input id="fullName" name="name" type="text" autocomplete="name" placeholder=" " aria-describedby="fullNameMessage">
+            <div class="auth-message" id="fullNameMessage" aria-live="polite"></div>
+          </div>
+          <div class="auth-field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" placeholder=" " aria-describedby="emailMessage">
+            <div class="auth-message" id="emailMessage" aria-live="polite"></div>
+          </div>
+          <div class="auth-field auth-signup-only" id="mobileField">
+            <label for="mobile">Mobile number</label>
+            <input id="mobile" name="tel-national" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder=" " aria-describedby="mobileHint mobileMessage">
+            <div class="auth-hint" id="mobileHint">Used only for your account</div>
+            <div class="auth-message" id="mobileMessage" aria-live="polite"></div>
+          </div>
+          <div class="auth-field auth-password-field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" placeholder=" " aria-describedby="passwordChecklist passwordMessage">
+            <button class="auth-password-toggle" id="passwordToggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+            <div class="auth-password-meta">
+              <div class="auth-checklist" id="passwordChecklist" aria-live="polite"></div>
+              <div class="auth-strength" aria-label="Password strength"><span class="auth-strength-bar"><i></i><i></i><i></i></span><b id="passwordStrengthText"></b></div>
+            </div>
+            <div class="auth-message" id="passwordMessage" aria-live="polite"></div>
+          </div>
+          <button id="authBtn" class="primary auth-submit" type="button">Login</button>
+          <button id="toggleAuth" class="ghost auth-switch" type="button">Create account</button>
+        </div>
+      </div>
+      <p class="auth-card-foot">Your garage stays tied to your secure account.</p>
     </section>
   </div>
 </div>
