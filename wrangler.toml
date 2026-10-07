@@ -1,0 +1,17 @@
+name = "carmy-api"
+main = "worker/src/index.js"
+compatibility_date = "2026-10-07"
+workers_dev = true
+
+[vars]
+SUPABASE_URL = "https://hlrmuvzmaegnbgzvvfsn.supabase.co"
+ALLOWED_ORIGIN = "https://rdxburia.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "carmy-cache"
+database_id = "57c85007-1cf7-470f-bb4d-3b28cbb555b7"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "carmy-files"
