@@ -527,7 +527,7 @@ async function nav(v){
      if(v==='dashboard')dash();
      if(v==='cars')carsView();
      if(v==='history')renderHistory();
-     if(v==='docs')docsView();
+     if(v==='docs')await docsView();
      if(v==='report')report();
      if(v==='owner')ownerProfileView();
    }catch(err){
@@ -619,6 +619,7 @@ const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.
 async function boot(){
  handleAuthRedirectError();
  let s=await db.auth.getSession();
+ accessToken=s.data.session?.access_token||'';
  if(s.data.session)start(s.data.session.user);
  else showLogin();
  db.auth.onAuthStateChange(async(_e,s)=>{
