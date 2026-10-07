@@ -99,7 +99,8 @@ function prepareLoginExperience(){
  auth.classList.remove('auth-success','auth-mode-switching');
  const story=auth.querySelector('.auth-story-copy'),card=auth.querySelector('.auth-card');
  [story,card].forEach(el=>el?.classList.remove('auth-enter-story','auth-enter-card'));
- const start=()=>{story?.classList.add('auth-enter-story');card?.classList.add('auth-enter-card');auth.classList.add('auth-animated')};
+ const start=()=>{story?.classList.add('auth-enter-story');card?.classList.add('auth-enter-card');auth.classList.add('auth-animated');
+ document.addEventListener('visibilitychange',()=>auth.classList.toggle('auth-paused',document.hidden),{once:false})};
  const run=window.requestIdleCallback?()=>window.requestIdleCallback(start,{timeout:120}):()=>window.requestAnimationFrame(start);
  requestAnimationFrame(run);
 }
@@ -188,8 +189,13 @@ function updatePasswordUI(showError=false){
 }
 
 function validateAuthForm(show=true){
- const emailOk=validateEmail(show),passOk=updatePasswordUI(show);
- if(!signup)return emailOk&&passOk;
+ const emailOk=validateEmail(show);
+ if(!signup){
+   const passOk=!!($('password')?.value);
+   if(show&&!passOk)setFieldState('password','Enter your password.',false);
+   return emailOk&&passOk;
+ }
+ const passOk=updatePasswordUI(show);
  const nameOk=validateName(show),mobileOk=validateMobile(show);
  return nameOk&&emailOk&&mobileOk&&passOk;
 }
@@ -202,6 +208,9 @@ function updateAuthSubmitState(){
 }
 
 function bindAuthValidation(){
+ const auth=$('auth');
+ if(auth?.dataset.validationBound)return;
+ if(auth)auth.dataset.validationBound='1';
  const fields=['fullName','email','mobile'];
  fields.forEach(id=>$(id)?.addEventListener('blur',()=>{if(signup){id==='fullName'?validateName(true):id==='mobile'?validateMobile(true):validateEmail(true);updateAuthSubmitState()}}));
  $('password')?.addEventListener('input',()=>{updatePasswordUI(false);updateAuthSubmitState()});
@@ -225,6 +234,9 @@ function updateAuthModeUI(){
 }
 
 function bindAuthPasswordToggle(){
+ const auth=$('auth');
+ if(auth?.dataset.passwordToggleBound)return;
+ if(auth)auth.dataset.passwordToggleBound='1';
  $('passwordToggle')?.addEventListener('click',()=>{
   const input=$('password'),btn=$('passwordToggle');if(!input||!btn)return;
   const show=input.type==='password';input.type=show?'text':'password';
