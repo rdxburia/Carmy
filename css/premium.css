@@ -265,7 +265,7 @@ input[type=checkbox]{accent-color:var(--c-accent)}
   opacity:.72;
   background:#f1f2ee;
   border-radius:52% 48% 0 0/100% 100% 0 0;
-  transform:translate3d(0,0,0);
+  transform:translate3d(var(--loading-parallax,0px),0,0);
 }
 .app-loading-hills:after{
   content:"";
@@ -276,7 +276,7 @@ input[type=checkbox]{accent-color:var(--c-accent)}
   height:58px;
   background:#e8ebe5;
   border-radius:48% 52% 0 0/100% 100% 0 0;
-  transform:translate3d(0,0,0);
+  transform:translate3d(calc(var(--loading-parallax,0px) * .55),0,0);
 }
 .app-loading-road{
   position:absolute;
