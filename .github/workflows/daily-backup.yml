@@ -2,16 +2,27 @@ name: Carmy Daily Backup
 
 on:
   schedule:
-    # 03:00 IST (21:30 UTC) every day
-    - cron: "30 21 * * *"
+    # 06:00 IST every day
+    - cron: "0 6 * * *"
+      timezone: "Asia/Kolkata"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: carmy-daily-backup
+  cancel-in-progress: false
+
+env:
+  R2_BUCKET: carmy-files
+  R2_S3_ENDPOINT: https://1bdda74ff7f93e7d176660d0e329b5ce.r2.cloudflarestorage.com
+  LATEST_NAME: Carmy-LATEST.tar.gz
+
 jobs:
   backup:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout full repository history
         uses: actions/checkout@v4
@@ -20,93 +31,128 @@ jobs:
 
       - name: Install backup tools
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y zip
+          sudo apt-get install -y awscli
           docker --version
+          aws --version
 
-      - name: Create code backup
-        shell: bash
+      - name: Validate required secrets
+        env:
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+          R2_BACKUP_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          R2_BACKUP_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         run: |
           set -euo pipefail
-          DATE_UTC="$(date -u +%Y-%m-%d)"
-          COMMIT_SHA="$(git rev-parse HEAD)"
-          mkdir -p backup-output
-          git bundle create "backup-output/Carmy-$DATE_UTC.bundle" --all
-          zip -qr "backup-output/Carmy-$DATE_UTC-source.zip" . -x ".git/*" "backup-output/*"
-          echo "$COMMIT_SHA" > "backup-output/git-commit.txt"
+          for name in             SUPABASE_BACKUP_DB_URL             R2_BACKUP_ACCESS_KEY_ID             R2_BACKUP_SECRET_ACCESS_KEY             GOOGLE_OAUTH_REFRESH_TOKEN             GOOGLE_OAUTH_CLIENT_ID             GOOGLE_OAUTH_CLIENT_SECRET             GOOGLE_DRIVE_FOLDER_ID
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required secret: $name"
+              exit 1
+            fi
+          done
+          echo "All required backup secrets are present."
 
       - name: Create Supabase PostgreSQL backup
         env:
           SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
-        shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$SUPABASE_BACKUP_DB_URL" ]]; then
-            echo "Missing SUPABASE_BACKUP_DB_URL secret."
-            exit 1
+          mkdir -p backup-work/db
+          docker run --rm             -v "$PWD/backup-work/db:/backup"             postgres:17-alpine             pg_dump "$SUPABASE_BACKUP_DB_URL"             --format=plain             --no-owner             --no-privileges             --file="/backup/Carmy-Supabase.sql"
+
+          docker run --rm             -v "$PWD/backup-work/db:/backup"             postgres:17-alpine             pg_dump "$SUPABASE_BACKUP_DB_URL"             --format=custom             --no-owner             --no-privileges             --file="/backup/Carmy-Supabase.dump"
+
+          gzip -9 backup-work/db/Carmy-Supabase.sql
+          test -s backup-work/db/Carmy-Supabase.sql.gz
+          test -s backup-work/db/Carmy-Supabase.dump
+          echo "Supabase backup created."
+
+      - name: Inventory Cloudflare R2 documents
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          mkdir -p backup-work/r2
+          aws s3api list-objects-v2             --bucket "$R2_BUCKET"             --prefix "documents/"             --endpoint-url "$R2_S3_ENDPOINT"             --output json > backup-work/r2/inventory.json
+
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("backup-work/r2/inventory.json").read_text())
+          objects = []
+          for item in data.get("Contents", []):
+              objects.append({
+                  "key": item["Key"],
+                  "etag": item.get("ETag", "").strip('"'),
+                  "size": int(item.get("Size", 0)),
+                  "last_modified": item.get("LastModified", ""),
+              })
+
+          objects.sort(key=lambda x: x["key"])
+          canonical = json.dumps(objects, separators=(",", ":"), sort_keys=True).encode()
+          fingerprint = hashlib.sha256(canonical).hexdigest()
+
+          Path("backup-work/r2/inventory-canonical.json").write_text(
+              json.dumps(objects, indent=2, sort_keys=True) + "\n"
+          )
+          Path("backup-work/r2/inventory.sha256").write_text(fingerprint + "\n")
+
+          total_bytes = sum(x["size"] for x in objects)
+          print(f"R2 documents: {len(objects)} objects, {total_bytes} bytes")
+          print(f"R2 inventory hash: {fingerprint}")
+          PY
+
+      - name: Download Cloudflare R2 documents
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          mkdir -p backup-work/r2/documents
+          if aws s3api list-objects-v2               --bucket "$R2_BUCKET"               --prefix "documents/"               --endpoint-url "$R2_S3_ENDPOINT"               --query 'Contents[0].Key'               --output text | grep -q '^documents/'; then
+            aws s3 sync               "s3://$R2_BUCKET/documents/"               "backup-work/r2/documents/"               --endpoint-url "$R2_S3_ENDPOINT"               --only-show-errors
+          else
+            echo "No R2 documents found."
           fi
-          DATE_UTC="$(date -u +%Y-%m-%d)"
-          docker run --rm -e PGPASSWORD="" -v "$PWD/backup-output:/backup" postgres:17-alpine pg_dump "$SUPABASE_BACKUP_DB_URL" --format=plain --no-owner --no-privileges --file="/backup/Carmy-Supabase-$DATE_UTC.sql"
-          docker run --rm -v "$PWD/backup-output:/backup" postgres:17-alpine pg_dump "$SUPABASE_BACKUP_DB_URL" --format=custom --no-owner --no-privileges --file="/backup/Carmy-Supabase-$DATE_UTC.dump"
-          gzip -9 "backup-output/Carmy-Supabase-$DATE_UTC.sql"
 
-      - name: Create backup manifest and checksums
-        shell: bash
+      - name: Calculate snapshot fingerprint
         run: |
           set -euo pipefail
-          DATE_UTC="$(date -u +%Y-%m-%d)"
           COMMIT_SHA="$(git rev-parse HEAD)"
-          sha256sum backup-output/* > backup-output/SHA256SUMS.txt
-          cat > "backup-output/backup-manifest.json" <<EOF
-          {
-            "backup_date_utc": "$DATE_UTC",
-            "repository": "$GITHUB_REPOSITORY",
-            "commit_sha": "$COMMIT_SHA",
-            "scope": {
-              "source_code": true,
-              "git_history": true,
-              "supabase_postgresql": true,
-              "r2_files": false,
-              "d1_cache": false
-            },
-            "next_backup_layers": [
-              "Cloudflare R2 files",
-              "Cloudflare D1 cache/schema"
-            ]
-          }
-          EOF
+          DB_HASH="$(sha256sum backup-work/db/Carmy-Supabase.dump | awk '{print $1}')"
+          R2_HASH="$(cat backup-work/r2/inventory.sha256)"
 
-      - name: Install Google Drive client
-        run: |
-          python -m pip install --upgrade pip
-          pip install google-api-python-client google-auth
+          printf '%s\n%s\n%s\n' "$COMMIT_SHA" "$DB_HASH" "$R2_HASH"             | sha256sum | awk '{print $1}' > backup-work/snapshot.sha256
 
-      - name: Upload backup to Google Drive
+          echo "Snapshot fingerprint: $(cat backup-work/snapshot.sha256)"
+
+      - name: Check Google Drive for unchanged snapshot
+        id: drive_check
         env:
           GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-        shell: bash
         run: |
           set -euo pipefail
-
-          for name in GOOGLE_OAUTH_REFRESH_TOKEN GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_DRIVE_FOLDER_ID; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing $name secret."
-              exit 1
-            fi
-          done
-
           python - <<'PY'
+          import json
           import os
-          from pathlib import Path
-
           from google.oauth2.credentials import Credentials
           from googleapiclient.discovery import build
-          from googleapiclient.http import MediaFileUpload
 
           folder_id = os.environ["GOOGLE_DRIVE_FOLDER_ID"]
+          fingerprint = open("backup-work/snapshot.sha256").read().strip()
 
           credentials = Credentials(
               token=None,
@@ -116,7 +162,127 @@ jobs:
               client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
               scopes=["https://www.googleapis.com/auth/drive"],
           )
+          drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
 
+          query = (
+              "name = 'Carmy-LATEST.tar.gz' and "
+              f"'{folder_id}' in parents and trashed = false"
+          )
+          response = drive.files().list(
+              q=query,
+              spaces="drive",
+              fields="files(id,name,appProperties,size,modifiedTime)",
+              pageSize=100,
+              supportsAllDrives=True,
+              includeItemsFromAllDrives=True,
+          ).execute()
+
+          latest = response.get("files", [])
+          unchanged = any(
+              f.get("appProperties", {}).get("snapshot_hash") == fingerprint
+              for f in latest
+          )
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"unchanged={'true' if unchanged else 'false'}\n")
+              out.write(f"latest_count={len(latest)}\n")
+
+          print(f"Existing latest files: {len(latest)}")
+          print(f"Snapshot unchanged: {unchanged}")
+          PY
+
+      - name: Stop when snapshot is unchanged
+        if: steps.drive_check.outputs.unchanged == 'true'
+        run: |
+          echo "No data/code/R2 change detected."
+          echo "Existing Carmy-LATEST.tar.gz remains untouched."
+          echo "No duplicate backup will be uploaded."
+
+      - name: Build complete latest snapshot
+        if: steps.drive_check.outputs.unchanged != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p backup-work/snapshot/source backup-work/snapshot/git backup-work/snapshot/r2 backup-work/snapshot/db
+
+          git bundle create backup-work/snapshot/git/Carmy.git.bundle --all
+
+          tar             --exclude="./.git"             --exclude="./backup-work"             --exclude="./backup-output"             -czf backup-work/snapshot/source/Carmy-source.tar.gz             .
+
+          cp backup-work/db/Carmy-Supabase.sql.gz backup-work/snapshot/db/
+          cp backup-work/db/Carmy-Supabase.dump backup-work/snapshot/db/
+          cp backup-work/r2/inventory-canonical.json backup-work/snapshot/r2/
+          cp -R backup-work/r2/documents backup-work/snapshot/r2/
+
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          SNAPSHOT_HASH="$(cat backup-work/snapshot.sha256)"
+          R2_COUNT="$(python -c 'import json; print(len(json.load(open("backup-work/r2/inventory-canonical.json"))))')"
+          R2_BYTES="$(python -c 'import json; print(sum(x["size"] for x in json.load(open("backup-work/r2/inventory-canonical.json"))))')"
+
+          cat > backup-work/snapshot/backup-manifest.json <<EOF
+          {
+            "backup_format": "Carmy latest complete snapshot",
+            "backup_time_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "repository": "$GITHUB_REPOSITORY",
+            "commit_sha": "$COMMIT_SHA",
+            "snapshot_hash": "$SNAPSHOT_HASH",
+            "scope": {
+              "source_code": true,
+              "git_history": true,
+              "supabase_postgresql": true,
+              "r2_documents": true,
+              "r2_pending_objects": false,
+              "d1_cache": false
+            },
+            "r2": {
+              "bucket": "$R2_BUCKET",
+              "document_object_count": $R2_COUNT,
+              "document_bytes": $R2_BYTES
+            },
+            "notes": [
+              "Supabase is the primary source of truth.",
+              "Cloudflare D1 is a derived cache and is intentionally not backed up.",
+              "Temporary R2 pending/ objects are excluded because lifecycle cleanup removes them."
+            ]
+          }
+          EOF
+
+          (
+            cd backup-work/snapshot
+            find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+
+          tar -czf backup-work/Carmy-LATEST.tar.gz -C backup-work/snapshot .
+
+          test -s backup-work/Carmy-LATEST.tar.gz
+          echo "Complete snapshot created:"
+          ls -lh backup-work/Carmy-LATEST.tar.gz
+
+      - name: Upload or replace latest snapshot in Google Drive
+        if: steps.drive_check.outputs.unchanged != 'true'
+        env:
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          folder_id = os.environ["GOOGLE_DRIVE_FOLDER_ID"]
+          fingerprint = open("backup-work/snapshot.sha256").read().strip()
+
+          credentials = Credentials(
+              token=None,
+              refresh_token=os.environ["GOOGLE_OAUTH_REFRESH_TOKEN"],
+              token_uri="https://oauth2.googleapis.com/token",
+              client_id=os.environ["GOOGLE_OAUTH_CLIENT_ID"],
+              client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
+              scopes=["https://www.googleapis.com/auth/drive"],
+          )
           drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
 
           folder = drive.files().get(
@@ -124,29 +290,156 @@ jobs:
               fields="id,name,mimeType",
               supportsAllDrives=True,
           ).execute()
-
           if folder.get("mimeType") != "application/vnd.google-apps.folder":
               raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID is not a Drive folder.")
 
-          for path in sorted(Path("backup-output").iterdir()):
-              metadata = {"name": path.name, "parents": [folder_id]}
-              media = MediaFileUpload(
-                  str(path),
-                  resumable=True,
-                  mimetype="application/octet-stream",
-              )
-              uploaded = drive.files().create(
+          query = (
+              "name = 'Carmy-LATEST.tar.gz' and "
+              f"'{folder_id}' in parents and trashed = false"
+          )
+          existing = drive.files().list(
+              q=query,
+              spaces="drive",
+              fields="files(id,name,appProperties,modifiedTime)",
+              pageSize=100,
+              supportsAllDrives=True,
+              includeItemsFromAllDrives=True,
+          ).execute().get("files", [])
+
+          media = MediaFileUpload(
+              "backup-work/Carmy-LATEST.tar.gz",
+              mimetype="application/gzip",
+              resumable=True,
+          )
+
+          metadata = {
+              "name": "Carmy-LATEST.tar.gz",
+              "appProperties": {
+                  "backup_type": "carmy-latest",
+                  "snapshot_hash": fingerprint,
+              },
+          }
+
+          if existing:
+              target = existing[0]
+              updated = drive.files().update(
+                  fileId=target["id"],
                   body=metadata,
                   media_body=media,
-                  fields="id,name,size",
+                  fields="id,name,size,appProperties,modifiedTime",
                   supportsAllDrives=True,
               ).execute()
-              print(f"Uploaded: {uploaded.get('name')} ({uploaded.get('size')} bytes)")
+              keep_id = updated["id"]
+              print(f"Updated existing latest snapshot: {keep_id}")
+          else:
+              metadata["parents"] = [folder_id]
+              created = drive.files().create(
+                  body=metadata,
+                  media_body=media,
+                  fields="id,name,size,appProperties,modifiedTime",
+                  supportsAllDrives=True,
+              ).execute()
+              keep_id = created["id"]
+              print(f"Created latest snapshot: {keep_id}")
 
-          print("Google Drive OAuth backup upload completed.")
+          # Remove duplicate latest files left by an older run/model.
+          for item in existing:
+              if item["id"] != keep_id:
+                  drive.files().delete(
+                      fileId=item["id"],
+                      supportsAllDrives=True,
+                  ).execute()
+                  print(f"Deleted duplicate latest snapshot: {item['id']}")
+
+          # Remove all old dated/legacy backup files only after the new snapshot
+          # has been successfully stored.
+          cleanup_query = (
+              f"'{folder_id}' in parents and trashed = false and "
+              f"id != '{keep_id}'"
+          )
+          page_token = None
+          deleted = 0
+          while True:
+              response = drive.files().list(
+                  q=cleanup_query,
+                  spaces="drive",
+                  fields="nextPageToken,files(id,name)",
+                  pageSize=100,
+                  pageToken=page_token,
+                  supportsAllDrives=True,
+                  includeItemsFromAllDrives=True,
+              ).execute()
+
+              for item in response.get("files", []):
+                  drive.files().delete(
+                      fileId=item["id"],
+                      supportsAllDrives=True,
+                  ).execute()
+                  deleted += 1
+                  print(f"Deleted legacy backup file: {item['name']}")
+
+              page_token = response.get("nextPageToken")
+              if not page_token:
+                  break
+
+          print(f"Google Drive latest snapshot ready. Legacy files removed: {deleted}")
+          PY
+
+      - name: Verify final Drive state
+        env:
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+
+          folder_id = os.environ["GOOGLE_DRIVE_FOLDER_ID"]
+          expected = open("backup-work/snapshot.sha256").read().strip()
+
+          credentials = Credentials(
+              token=None,
+              refresh_token=os.environ["GOOGLE_OAUTH_REFRESH_TOKEN"],
+              token_uri="https://oauth2.googleapis.com/token",
+              client_id=os.environ["GOOGLE_OAUTH_CLIENT_ID"],
+              client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
+              scopes=["https://www.googleapis.com/auth/drive"],
+          )
+          drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+          query = (
+              f"'{folder_id}' in parents and trashed = false"
+          )
+          files = drive.files().list(
+              q=query,
+              spaces="drive",
+              fields="files(id,name,appProperties,size)",
+              pageSize=100,
+              supportsAllDrives=True,
+              includeItemsFromAllDrives=True,
+          ).execute().get("files", [])
+
+          latest = [f for f in files if f["name"] == "Carmy-LATEST.tar.gz"]
+          if len(latest) != 1:
+              raise RuntimeError(f"Expected exactly 1 Carmy-LATEST.tar.gz, found {len(latest)}")
+
+          actual = latest[0].get("appProperties", {}).get("snapshot_hash")
+          if actual != expected:
+              raise RuntimeError("Drive snapshot fingerprint does not match the generated backup.")
+
+          print(f"Verified Drive snapshot: {latest[0]['name']} ({latest[0].get('size', 'unknown')} bytes)")
+          print(f"Verified snapshot hash: {actual}")
+          print(f"Files remaining in backup folder: {len(files)}")
           PY
 
       - name: Backup summary
         run: |
-          echo "Carmy code + Supabase database backup completed."
-          echo "R2 and D1 backup layers will be added after those services are configured."
+          echo "Carmy latest snapshot backup completed successfully."
+          echo "Schedule: 06:00 Asia/Kolkata"
+          echo "Drive target: Carmy-LATEST.tar.gz"
+          echo "R2 documents: included"
+          echo "D1 cache: excluded (derived data)"
