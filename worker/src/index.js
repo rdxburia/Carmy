@@ -3,6 +3,8 @@ import { error, json } from "./response.js";
 import { listVehicles, getVehicle } from "./vehicles.js";
 import { listServiceHistory } from "./records.js";
 import { listDocuments } from "./documents.js";
+import { listInsuranceHistory } from "./insurance.js";
+import { listPucHistory } from "./puc.js";
 
 function originFor(request, env) {
   const origin = request.headers.get("Origin");
@@ -94,6 +96,16 @@ export default {
       if (request.method === "GET" && parts[0] === "documents") {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listDocuments(env, user, userToken, carId) }, 200, origin);
+      }
+
+      if (request.method === "GET" && parts[0] === "insurance") {
+        const carId = url.searchParams.get("car_id");
+        return json({ ok: true, data: await listInsuranceHistory(env, user, userToken, carId) }, 200, origin);
+      }
+
+      if (request.method === "GET" && parts[0] === "puc") {
+        const carId = url.searchParams.get("car_id");
+        return json({ ok: true, data: await listPucHistory(env, user, userToken, carId) }, 200, origin);
       }
 
       return error("Route not found.", 404, origin, "NOT_FOUND");
