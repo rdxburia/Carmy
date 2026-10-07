@@ -755,16 +755,12 @@ async function deleteDoc(id,path,isArchived=false){
  let btns=[...document.querySelectorAll('.doc-delete')].filter(b=>b.offsetParent!==null);btns.forEach(b=>b.disabled=true);
  try{
    if((target.storage_backend||'supabase')==='r2'){
-     let r=await db.from('documents').delete().eq('id',target.id).eq('car_id',car.id).eq('user_id',user.id).select('id').maybeSingle();
-     if(r.error)throw new Error('Database authorization/deletion failed: '+r.error.message);
-     if(!r.data)throw new Error('Document could not be deleted. Server authorization rejected the request.');
-     try{await workerDelete('/api/files/object?document_id='+encodeURIComponent(target.id)+'&car_id='+encodeURIComponent(car.id))}
-     catch(err){
-       const restore=await db.from('documents').insert({id:target.id,user_id:target.user_id,car_id:target.car_id,file_name:target.file_name,storage_path:target.storage_path,storage_backend:'r2',mime_type:target.mime_type,file_size:target.file_size,document_type:target.document_type,document_name:target.document_name,document_expiry:target.document_expiry,archive_name:target.archive_name,archived_at:target.archived_at,active:target.active});
-       if(restore.error)throw new Error('R2 deletion failed and database restore failed. Verify the document before retrying.');
-       throw new Error('R2 deletion failed; document was restored safely. '+err.message);
-     }
-     toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');await loadData();return;
+     // R2 documents are deleted entirely by the Worker so the ownership
+     // check happens before the Supabase metadata row is removed.
+     await workerDelete('/api/files/object?document_id='+encodeURIComponent(target.id)+'&car_id='+encodeURIComponent(car.id));
+     toast((isArchived?'Archived document':'Document')+' deleted permanently from server!');
+     await loadData();
+     return;
    }
    let r=await db.from('documents').delete().eq('id',target.id).eq('car_id',car.id).eq('user_id',user.id).select('id').maybeSingle();
    if(r.error)throw new Error('Database authorization/deletion failed: '+r.error.message);
