@@ -5,6 +5,9 @@ import { listServiceHistory } from "./records.js";
 import { listDocuments } from "./documents.js";
 import { listInsuranceHistory } from "./insurance.js";
 import { listPucHistory } from "./puc.js";
+import { getProfile } from "./profile.js";
+import { listRenewals } from "./renewals.js";
+import { listSaleHistory } from "./sales.js";
 
 function originFor(request, env) {
   const origin = request.headers.get("Origin");
@@ -106,6 +109,20 @@ export default {
       if (request.method === "GET" && parts[0] === "puc") {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listPucHistory(env, user, userToken, carId) }, 200, origin);
+      }
+
+      if (request.method === "GET" && parts[0] === "profile") {
+        return json({ ok: true, data: await getProfile(env, user, userToken) }, 200, origin);
+      }
+
+      if (request.method === "GET" && parts[0] === "renewals") {
+        const carId = url.searchParams.get("car_id");
+        return json({ ok: true, data: await listRenewals(env, user, userToken, carId) }, 200, origin);
+      }
+
+      if (request.method === "GET" && parts[0] === "sale-history") {
+        const carId = url.searchParams.get("car_id");
+        return json({ ok: true, data: await listSaleHistory(env, user, userToken, carId) }, 200, origin);
       }
 
       return error("Route not found.", 404, origin, "NOT_FOUND");
