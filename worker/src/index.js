@@ -86,6 +86,11 @@ export default {
     }
 
     try {
+      const contentLength = Number(request.headers.get("Content-Length") || 0);
+      if (contentLength > 32 * 1024) {
+        return error("Request payload is too large.", 413, origin, "PAYLOAD_TOO_LARGE");
+      }
+
       const parts = route(url.pathname);
 
       if (request.method === "GET" && parts[0] === "vehicles" && parts.length === 1) {
