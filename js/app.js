@@ -95,13 +95,130 @@ function showOperationOverlay(title='Saving',subtitle='Please wait…'){
 }
 function hideOperationOverlay(){let o=document.getElementById('operationOverlay');if(o)o.remove()}
 function showAppLoading(){
- let o=document.getElementById('appLoadingOverlay');if(o)o.remove();
- o=document.createElement('div');o.id='appLoadingOverlay';
- o.innerHTML='<div class="app-loading-panel"><div class="app-loading-brand">CAR<span>CARE</span> CLOUD</div><div class="app-loading-visual"><div class="app-loading-glow"></div><svg class="loading-car-svg" viewBox="0 0 260 100" aria-hidden="true"><path class="car-body" d="M35 63h190c5 0 9 4 9 9v6H26v-7c0-5 4-8 9-8Z"/><path class="car-roof" d="M72 63 94 34c3-4 8-6 13-6h51c6 0 11 3 15 8l20 27Z"/><path class="car-window" d="M103 35 88 57h35V35Zm43 0v22h33l-16-22Z"/><circle class="car-wheel" cx="76" cy="78" r="13"/><circle class="car-wheel" cx="190" cy="78" r="13"/><circle class="car-hub" cx="76" cy="78" r="5"/><circle class="car-hub" cx="190" cy="78" r="5"/></svg><div class="road-line"></div></div><div class="app-loading-title" id="appLoadingTitle">Fetching your vehicle garage...</div><div class="app-loading-sub" id="appLoadingSub">Verifying secure session and loading your vehicles</div><div class="app-loading-dots"><span></span><span></span><span></span></div></div>';
- document.body.appendChild(o);return o;
+ const existing=document.getElementById('appLoadingOverlay');if(existing)existing.remove();
+ const o=document.createElement('div');
+ o.id='appLoadingOverlay';
+ o.setAttribute('role','progressbar');
+ o.setAttribute('aria-valuemin','0');
+ o.setAttribute('aria-valuemax','100');
+ o.setAttribute('aria-valuenow','0');
+ o.setAttribute('aria-label','Loading CarCare Cloud');
+ o.innerHTML='<div class="app-loading-panel">'+
+   '<div class="app-loading-brand" aria-label="CarCare Cloud">'+
+     '<span class="app-loading-brand-mark" aria-hidden="true">CC</span>'+
+     '<span class="app-loading-brand-name">Car<i>Care</i> Cloud</span>'+
+   '</div>'+
+   '<div class="app-loading-visual" aria-hidden="true">'+
+     '<div class="app-loading-sky"><div class="app-loading-hills"></div></div>'+
+     '<div class="app-loading-ground-shadow"></div>'+
+     '<div class="app-loading-road">'+
+       '<div class="app-loading-road-markings"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>'+
+       '<div class="app-loading-finish"></div>'+
+     '</div>'+
+     '<div class="loading-car-position" id="appLoadingCar">'+
+       '<div class="loading-car-scene">'+
+         '<div class="app-loading-smoke" id="appLoadingSmoke">'+
+           '<span class="app-loading-smoke-puff"></span><span class="app-loading-smoke-puff"></span><span class="app-loading-smoke-puff"></span><span class="app-loading-smoke-puff"></span>'+
+           '<span class="app-loading-smoke-puff"></span><span class="app-loading-smoke-puff"></span><span class="app-loading-smoke-puff"></span><span class="app-loading-smoke-puff"></span>'+
+         '</div>'+
+         '<svg class="loading-car-svg" viewBox="0 0 260 100" aria-hidden="true">'+
+           '<path class="car-body" d="M35 63h190c5 0 9 4 9 9v6H26v-7c0-5 4-8 9-8Z"/>'+
+           '<path class="car-roof" d="M72 63 94 34c3-4 8-6 13-6h51c6 0 11 3 15 8l20 27Z"/>'+
+           '<path class="car-window" d="M103 35 88 57h35V35Zm43 0v22h33l-16-22Z"/>'+
+           '<path class="car-trim" d="M31 68h198v5H31z"/>'+
+           '<circle class="car-wheel" cx="76" cy="78" r="13"/><circle class="car-wheel" cx="190" cy="78" r="13"/>'+
+           '<circle class="car-hub" cx="76" cy="78" r="5"/><circle class="car-hub" cx="190" cy="78" r="5"/>'+
+           '<circle class="car-light" cx="224" cy="68" r="3"/><path class="car-shadow-line" d="M53 84h159v3H53z"/>'+
+         '</svg>'+
+       '</div>'+
+     '</div>'+
+   '</div>'+
+   '<div class="app-loading-progress-row">'+
+     '<div class="app-loading-progress-track" aria-hidden="true"><div class="app-loading-progress-fill" id="appLoadingProgressFill"></div></div>'+
+     '<span class="app-loading-percent" id="appLoadingPercent" aria-hidden="true">0%</span>'+
+   '</div>'+
+   '<div class="app-loading-title" id="appLoadingTitle" aria-live="polite">Preparing your secure garage...</div>'+
+   '<div class="app-loading-sub" id="appLoadingSub" aria-live="polite">Verifying secure session and loading your vehicles</div>'+
+ '</div>';
+ document.body.appendChild(o);
+
+ const state={value:0,target:0,visibleSince:performance.now(),raf:0,smokeIndex:0,lastSmoke:0,lastFrame:performance.now(),slowTimer:0,visibilityHandler:null,stopped:false};
+ o._loadingState=state;
+ o._loadingSetProgress=(pct)=>{
+   const next=Math.max(0,Math.min(100,Number(pct)||0));
+   state.target=Math.max(state.target,next);
+   o.setAttribute('aria-valuenow',String(Math.round(state.target)));
+ };
+ o._loadingFrame=(now)=>{
+   if(state.stopped)return;
+   const dt=Math.min(64,now-state.lastFrame);state.lastFrame=now;
+   const diff=state.target-state.value;
+   if(diff>0)state.value=Math.min(state.target,state.value+Math.max(.045,diff*.075*(dt/16.67)));
+   const pct=Math.max(0,Math.min(100,state.value));
+   const carEl=document.getElementById('appLoadingCar');
+   if(carEl)carEl.style.left=pct+'%';
+   const fill=document.getElementById('appLoadingProgressFill');
+   if(fill)fill.style.width=pct+'%';
+   const percent=document.getElementById('appLoadingPercent');
+   if(percent)percent.textContent=Math.round(pct)+'%';
+   if(carEl){
+     const speed=Math.min(1,Math.max(0,(state.target-state.value)*.08));
+     carEl.dataset.speed=speed.toFixed(3);
+     if(speed>0.012 && !document.hidden && now-state.lastSmoke>(170-speed*115)){
+       const puffs=o.querySelectorAll('.app-loading-smoke-puff');
+       const puff=puffs[state.smokeIndex%puffs.length];
+       state.smokeIndex++;
+       state.lastSmoke=now;
+       puff.classList.remove('is-live');
+       puff.style.setProperty('--puff-size',(6+speed*8)+'px');
+       puff.style.setProperty('--puff-duration',(780-speed*220)+'ms');
+       puff.style.animationDelay='0ms';
+       void puff.offsetWidth;
+       puff.classList.add('is-live');
+     }
+   }
+   state.raf=requestAnimationFrame(o._loadingFrame);
+ };
+ state.visibilityHandler=()=>{
+   o.classList.toggle('app-loading-paused',document.hidden);
+   if(!document.hidden)state.lastFrame=performance.now();
+ };
+ document.addEventListener('visibilitychange',state.visibilityHandler);
+ state.slowTimer=setTimeout(()=>{
+   if(!state.stopped && !o.classList.contains('loading-out')){
+     setAppLoadingStatus('Taking longer than usual...','Your secure garage is still loading. Please keep this window open.');
+   }
+ },10000);
+ requestAnimationFrame(o._loadingFrame);
+ return o;
 }
-function setAppLoadingStatus(title,sub){if($('appLoadingTitle'))$('appLoadingTitle').textContent=title;if($('appLoadingSub'))$('appLoadingSub').textContent=sub}
-function hideAppLoading(){let o=document.getElementById('appLoadingOverlay');if(o){o.classList.add('loading-out');setTimeout(()=>o.remove(),380)}}
+function setAppLoadingStatus(title,sub){
+ if($('appLoadingTitle'))$('appLoadingTitle').textContent=title;
+ if($('appLoadingSub'))$('appLoadingSub').textContent=sub;
+}
+function setAppLoadingProgress(pct){
+ const o=document.getElementById('appLoadingOverlay');
+ if(o&&o._loadingSetProgress)o._loadingSetProgress(pct);
+}
+function hideAppLoading(){
+ const o=document.getElementById('appLoadingOverlay');
+ if(!o)return;
+ const state=o._loadingState;
+ const elapsed=performance.now()-(state?.visibleSince||performance.now());
+ const wait=Math.max(0,900-elapsed);
+ const finish=()=>{
+   if(!document.body.contains(o))return;
+   if(state){
+     state.stopped=true;
+     if(state.raf)cancelAnimationFrame(state.raf);
+     if(state.slowTimer)clearTimeout(state.slowTimer);
+     if(state.visibilityHandler)document.removeEventListener('visibilitychange',state.visibilityHandler);
+   }
+   o.classList.add('loading-out');
+   setTimeout(()=>o.remove(),380);
+ };
+ setTimeout(finish,wait);
+}
 function dateOnlyEnd(x){if(!x)return null;let p=String(x).split('-').map(Number);if(p.length!==3||p.some(Number.isNaN))return null;return new Date(p[0],p[1]-1,p[2],23,59,59,999)}
 function st(x){if(!x)return['MISSING','bad'];let d=dateOnlyEnd(x);if(!d)return['MISSING','bad'];let days=(d-Date.now())/86400000;return days<0?['EXPIRED','bad']:days<=30?['EXPIRING SOON','warn']:['VALID','ok']}
 function closeSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');$('menuToggle')?.setAttribute('aria-expanded','false');document.body.classList.remove('menu-open')}
@@ -186,14 +303,18 @@ async function start(u){
  showAppLoading();
  try{
    setAppLoadingStatus('Fetching your vehicle garage...','Loading vehicle profiles from your secure cloud');
+   setAppLoadingProgress(10);
    await loadCars();
    if(!car||!cars.some(x=>x.id===car.id))car=cars[0];
    updateCarTab();
+   setAppLoadingProgress(35);
    setAppLoadingStatus('Securing your vehicle files...','Loading service history and private documents');
    await loadData();
+   setAppLoadingProgress(70);
    updateIdentityUI();
    setAppLoadingStatus('Checking vehicle compliance...','Calculating Insurance & PUC status');
    if(car){dash();guard()}else{dash()}
+   setAppLoadingProgress(90);
    let lastView='dashboard';
    try{ lastView=localStorage.getItem('carcare_last_view')||'dashboard'; }catch(e){}
    if(['dashboard','cars','add','history','docs','report','owner'].includes(lastView) && lastView!=='dashboard'){
@@ -205,6 +326,7 @@ async function start(u){
    $('app').classList.remove('hidden');
    $('app').classList.add('app-ready');
    let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
+   setAppLoadingProgress(100);
    hideAppLoading();
    ensureSecurityPassword();
  }catch(e){
