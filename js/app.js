@@ -677,6 +677,8 @@ async function start(u){
    try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
    const validViews=['dashboard','cars','add','history','docs','report','owner'];
    if(!validViews.includes(lastView))lastView='dashboard';
+   $('app').classList.remove('hidden');
+   window.scrollTo({top:0,left:0,behavior:'auto'});
    if(lastView!=='dashboard'){
      let restored=false;
      try{
@@ -692,8 +694,6 @@ async function start(u){
    }else{
      await nav('dashboard');
    }
-   $('app').classList.remove('hidden');
-   $('app').classList.add('app-ready');
    window.scrollTo({top:0,left:0,behavior:'auto'});
    let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
    setAppLoadingProgress(100);
