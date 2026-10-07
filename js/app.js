@@ -231,8 +231,29 @@ function updateAuthModeUI(){
  if(meta)meta.hidden=!signup;
  if(!signup){setFieldState('fullName');setFieldState('mobile');}
  updateAuthSubmitState();
+ const loginTab=$('mobileLoginTab'),signupTab=$('mobileSignupTab');
+ loginTab?.classList.toggle('is-active',!signup);
+ signupTab?.classList.toggle('is-active',signup);
 }
 
+function bindMobileAuthTabs(){
+ const auth=$('auth');
+ if(auth?.dataset.mobileTabsBound)return;
+ if(auth)auth.dataset.mobileTabsBound='1';
+
+ const open=(mode)=>{
+   signup=mode;
+   auth?.classList.add('auth-mobile-open');
+   updateAuthModeUI();
+   requestAnimationFrame(()=>{
+     const card=$('authCard')||document.querySelector('.auth-card');
+     card?.scrollIntoView({behavior:'smooth',block:'start'});
+   });
+ };
+
+ $('mobileLoginTab')?.addEventListener('click',()=>open(false));
+ $('mobileSignupTab')?.addEventListener('click',()=>open(true));
+}
 function bindAuthPasswordToggle(){
  const auth=$('auth');
  if(auth?.dataset.passwordToggleBound)return;
@@ -498,11 +519,13 @@ async function boot(){
 function showLogin(){
  let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}
  let ps=$('policeLogoutStyle');if(ps)ps.remove();
- const auth=$('auth');auth.classList.remove('hidden','auth-session-pending','auth-success');
+ const auth=$('auth');
+ auth.classList.remove('hidden','auth-session-pending','auth-success','auth-mobile-open');
  $('app').classList.add('hidden');
  let fab=document.getElementById('dashboardFab');if(fab)fab.remove();
  let mn=document.getElementById('mobileNav');if(mn)mn.classList.add('auth-hidden');
  updateAuthModeUI();
+ bindMobileAuthTabs();
  prepareLoginExperience();
  const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}
 }
