@@ -1,34 +1,4 @@
-/* CarCare Cloud — minimal light theme. One font (Inter), white background, one green accent. Overrides styles.css. */
-:root{
-  --c-bg:#ffffff;--c-soft:#f7f7f5;--c-line:#e6e6e1;--c-ink:#141414;--c-mute:#6b6f6b;
-  --c-accent:#14352b;--c-accent-2:#1d4d3e;--c-ok:#1f7a54;--c-warn:#a8690f;--c-bad:#b83a2e;
-  --bg:var(--c-bg);--card:#fff;--ink:var(--c-ink);--muted:var(--c-mute);--line:var(--c-line);--b:var(--c-accent);
-  --auto-bg:var(--c-bg);--auto-cyan:var(--c-accent);--auto-blue:var(--c-accent);--auto-green:var(--c-ok);--auto-yellow:var(--c-warn);--auto-red:var(--c-bad);
-  --auto-text:var(--c-ink);--auto-muted:var(--c-mute);--auto-line:var(--c-line);--auto-surface:#fff;--auto-surface-2:var(--c-soft);
-  --premium-panel:#fff;--premium-ink:var(--c-ink);--premium-line:var(--c-line);--premium-soft:var(--c-soft);--premium-muted:var(--c-mute);
-  --premium-accent:var(--c-accent);--premium-accent-soft:var(--c-soft);--premium-deep:var(--c-accent);
-  --ok:var(--c-ok);--warn:var(--c-warn);--bad:var(--c-bad);color-scheme:light;
-}
-*,*::before,*::after{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif!important}
-html,body{background:#fff!important;color:var(--c-ink)!important}
-body{letter-spacing:0!important}
-h1,h2,h3,h4{font-weight:600!important;letter-spacing:-.01em!important;color:var(--c-ink)!important}
-.muted,small{color:var(--c-mute)!important}
-
-/* header */
-.top{background:#fff!important;backdrop-filter:none!important;border-bottom:1px solid var(--c-line)!important;box-shadow:none!important}
-.brand,.top .brand{font-size:16px!important;font-weight:700!important;letter-spacing:.02em!important;text-transform:none!important;color:var(--c-ink)!important}
-.brand i{color:var(--c-accent)!important;font-style:normal!important}
-.brand-mark{background:var(--c-accent)!important;color:#fff!important;border:0!important;border-radius:8px!important;box-shadow:none!important}
-.menu-toggle{background:#fff!important;border:1px solid var(--c-line)!important;border-radius:10px!important;box-shadow:none!important}
-.menu-toggle span{background:var(--c-ink)!important}
-#brandHome{cursor:pointer;user-select:none}#brandHome:focus-visible{outline:2px solid var(--c-accent);outline-offset:4px;border-radius:8px}
-
-/* surfaces */
-.card,.glass-panel,.glass-stat,.doc-col,.loginbox,.step5-toolbar,.edit-modal-card,.doc-upload-card,.step5-modal-card,.sale-modal-card,.sale-generated-card,.doc-popup{
-  background:#fff!important;color:var(--c-ink)!important;border:1px solid var(--c-line)!important;border-radius:12px!important;box-shadow:none!important;backdrop-filter:none!important}
-.dangerbox{background:#fdf3f1!important;color:#7a241b!important;border:1px solid #efc9c3!important;border-radius:10px!important}
-.edit-modal-card,.doc-upload-card,.step5-modal-card,.sale-modal-card,.sale-generated-card,.doc-popup{box-shadow:0 20px 60px rgba(0,0,0,.14)!important}
+/* CarCare Cloud — component-level premium styles. Global layout, typography and forms are owned by styles.css. */
 
 /* ===== dashboard: kill the old dark theme ===== */
 #dashboard#dashboard.active,#dashboard#dashboard.active .hero{background:transparent!important;border:0!important;box-shadow:none!important}
@@ -60,39 +30,10 @@ h1,h2,h3,h4{font-weight:600!important;letter-spacing:-.01em!important;color:var(
 #dashboard#dashboard.active .ghost{background:#fff!important;color:var(--c-accent)!important;border:1px solid var(--c-line)!important;box-shadow:none!important}
 #dashboard#dashboard.active .primary{background:var(--c-accent)!important;color:#fff!important}
 
-/* buttons */
-button{transition:background .15s,border-color .15s,transform .15s}
-button.primary,.primary{background:var(--c-accent)!important;color:#fff!important;border:1px solid var(--c-accent)!important;border-radius:10px!important;font-weight:600!important;font-size:13px!important;letter-spacing:.02em!important;text-transform:none!important;box-shadow:none!important}
-button.primary:hover{background:var(--c-accent-2)!important}
-button.ghost,.ghost{background:#fff!important;color:var(--c-accent)!important;border:1px solid var(--c-line)!important;border-radius:10px!important;box-shadow:none!important}
-button.ghost:hover{background:var(--c-soft)!important;border-color:#cfcfc8!important}
-button.danger,.danger{background:#fff!important;color:var(--c-bad)!important;border:1px solid #e8c3be!important;border-radius:10px!important;box-shadow:none!important}
-button:active{transform:scale(.98)}
 
-/* forms */
-label,.field label{color:var(--c-mute)!important;font-size:12px!important;letter-spacing:.02em!important;text-transform:none!important;font-weight:600!important}
-input,select,textarea{background:#fff!important;color:var(--c-ink)!important;border:1px solid #d9d9d3!important;border-radius:10px!important;box-shadow:none!important}
-input::placeholder,textarea::placeholder{color:#a3a7a3!important}
-input:focus,select:focus,textarea:focus{outline:none!important;border-color:var(--c-accent)!important;box-shadow:0 0 0 3px rgba(20,53,43,.12)!important}
-input[type=checkbox]{accent-color:var(--c-accent)}
-.choice-card{background:#fff!important;border:1px solid var(--c-line)!important;color:var(--c-ink)!important}
-.choice-card:hover{background:var(--c-soft)!important;border-color:#cfcfc8!important}
-.choice-card:has(input:checked){border-color:var(--c-accent)!important;background:#f1f6f3!important;box-shadow:none!important}
-.choice-check{background:#fff!important;border-color:#cfcfc8!important}
-.choice-card:has(input:checked) .choice-check{background:var(--c-accent)!important;border-color:var(--c-accent)!important;color:#fff!important}
+/* Service item component */
 .service-item-row{background:var(--c-soft)!important;border:1px solid var(--c-line)!important;border-radius:10px!important}
 .service-item-detail{border-top-color:var(--c-line)!important}
-
-/* tables + docs */
-.table th{color:var(--c-mute)!important;background:transparent!important;font-size:11px!important;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--c-line)!important}
-.table td{color:var(--c-ink)!important;border-bottom:1px solid var(--c-line)!important;background:transparent!important}
-.doc-row,.flip-front,.flip-back,.doc-empty{background:var(--c-soft)!important;border:1px solid var(--c-line)!important;color:var(--c-ink)!important;border-radius:10px!important}
-.doc-badge.active,.doc-badge.ok{color:var(--c-ok)!important;background:#eaf5ef!important}
-.doc-badge.soon,.doc-badge.warn{color:var(--c-warn)!important;background:#fbf1de!important}
-.doc-badge.expired,.doc-badge.bad{color:var(--c-bad)!important;background:#fbe9e6!important}
-
-
-
 /* ===== Login — clean split garage ===== */
 #auth.login{position:relative!important;z-index:100000!important;min-height:100dvh!important;padding:32px clamp(16px,4vw,56px)!important;overflow:auto!important;background:#f7f7f5!important;color:#141414!important;display:grid!important;place-items:center!important}
 #auth.auth-session-pending{visibility:hidden!important}
@@ -553,7 +494,6 @@ input[type=checkbox]{accent-color:var(--c-accent)}
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#app.app-ready{animation:dashboardIn .42s ease both}
 
 #appLoadingOverlay.app-loading-paused *{animation-play-state:paused!important}
 
