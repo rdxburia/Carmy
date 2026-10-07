@@ -115,11 +115,11 @@ function setFieldState(id,message='',ok=false){
 }
 
 function normalizeMobile(value){
- let v=String(value||'').trim().replace(/[\\s-]/g,'');
+ let v=String(value||'').trim().replace(/[\s-]/g,'');
  if(v.startsWith('+91'))v=v.slice(3);
  else if(v.startsWith('91')&&v.length>10)v=v.slice(2);
  else if(v.startsWith('0')&&v.length>10)v=v.slice(1);
- return /^\\d{10}$/.test(v)&&/^[6-9]/.test(v)?v:'';
+ return /^\d{10}$/.test(v)&&/^[6-9]/.test(v)?v:'';
 }
 
 function validateName(show=true){
@@ -133,7 +133,7 @@ function validateName(show=true){
 
 function validateEmail(show=true){
  const v=$('email')?.value.trim()||'';
- const ok=/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v);
+ const ok=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
  const err=v?'Enter a valid email address.':'Enter your email address.';
  if(show)setFieldState('email',ok?'':err,ok);
  return ok;
@@ -152,9 +152,9 @@ function passwordRules(value){
  return {
    length:value.length>=8&&value.length<=16,
    letter:/[A-Za-z]/.test(value),
-   number:/\\d/.test(value),
+   number:/\d/.test(value),
    special:[...value].some(ch=>{const n=ch.charCodeAt(0);return(n>=33&&n<=47)||(n>=58&&n<=64)||(n>=91&&n<=96)||(n>=123&&n<=126)}),
-   noSpace:!/[\\s]/.test(value)
+   noSpace:!/[\s]/.test(value)
  };
 }
 
