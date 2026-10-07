@@ -22,6 +22,7 @@ function route(pathname) {
   return parts;
 }
 
+// Carmy Worker API routes are deployed from this source-controlled entrypoint.
 export default {
   async fetch(request, env) {
     const origin = originFor(request, env);
