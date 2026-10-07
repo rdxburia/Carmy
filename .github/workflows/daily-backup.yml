@@ -422,10 +422,9 @@ jobs:
 
           # Remove all old dated/legacy backup files only after the new snapshot
           # has been successfully stored.
-          cleanup_query = (
-              f"'{folder_id}' in parents and trashed = false and "
-              f"id != '{keep_id}'"
-          )
+          # Drive search does not support an SQL-style `id != ...` filter.
+          # List the folder contents and skip the one snapshot we just stored.
+          cleanup_query = f"'{folder_id}' in parents and trashed = false"
           page_token = None
           deleted = 0
           while True:
