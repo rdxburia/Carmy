@@ -153,7 +153,7 @@ function passwordRules(value){
    length:value.length>=8&&value.length<=16,
    letter:/[A-Za-z]/.test(value),
    number:/\\d/.test(value),
-   special:/[^A-Za-z0-9]/.test(value),
+   special:[...value].some(ch=>{const n=ch.charCodeAt(0);return(n>=33&&n<=47)||(n>=58&&n<=64)||(n>=91&&n<=96)||(n>=123&&n<=126)}),
    noSpace:!/[\\s]/.test(value)
  };
 }
