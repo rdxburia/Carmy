@@ -612,6 +612,7 @@ $('brandHome')?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){
 $('menuClose')?.addEventListener('click',closeSideMenu);
 $('sideMenuBackdrop')?.addEventListener('click',closeSideMenu);
 $('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
+$('headerLogout')?.addEventListener('click',()=>db.auth.signOut());
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSideMenu()});
 
 $('toggleAuth').onclick=()=>{
