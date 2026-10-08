@@ -47,10 +47,22 @@ export async function putCache(env, key, userId, resourceType, value, dataVersio
   ).run();
 }
 
-export async function invalidateCache(env, prefix) {
+// D1 rejects the previous LIKE-based prefix deletion with
+// "LIKE or GLOB pattern too complex" for this workload. Cache keys are
+// short structured strings, so use exact equality for normal invalidation.
+export async function invalidateCache(env, key) {
   await env.DB.prepare(
-    "DELETE FROM cache_entries WHERE cache_key LIKE ?1"
-  ).bind(`${prefix}%`).run();
+    "DELETE FROM cache_entries WHERE cache_key = ?1"
+  ).bind(key).run();
+}
+
+// Prefix deletion is only needed when a vehicle id is unavailable and all
+// per-vehicle cache entries for a user must be removed. Use SUBSTR instead
+// of LIKE/GLOB so the query remains deterministic in D1.
+export async function invalidateCachePrefix(env, prefix) {
+  await env.DB.prepare(
+    "DELETE FROM cache_entries WHERE substr(cache_key, 1, length(?1)) = ?1"
+  ).bind(prefix).run();
 }
 
 export async function invalidateUserResource(env, resourceType, userId, carId = null) {
@@ -70,7 +82,7 @@ export async function invalidateVehicleCaches(env, userId, carId = null) {
   if (carId) {
     await invalidateCache(env, `vehicle:${user}:${String(carId)}`);
   } else {
-    await invalidateCache(env, `vehicle:${user}:`);
+    await invalidateCachePrefix(env, `vehicle:${user}:`);
   }
 }
 
