@@ -355,9 +355,12 @@ button,input,select,textarea{min-width:0;max-width:100%}
  .document-preview-foot{padding:9px 12px}
  .edit-modal-card{width:calc(100vw - 16px);max-width:none;max-height:calc(100dvh - 24px);padding:15px;border-radius:18px;overflow-y:auto}
  .report-sheet{width:100%;padding:14px;overflow:visible}
+ .report-head{grid-template-columns:1fr;gap:12px}
+ .report-brand{min-width:0}
  .report-grid{grid-template-columns:1fr!important}
+ .report-two{grid-template-columns:1fr!important}
  .report-head h1{font-size:23px}
- .report-reg{font-size:17px;max-width:100%;overflow-wrap:anywhere}
+ .report-reg{justify-self:start;font-size:17px;max-width:100%;overflow-wrap:anywhere}
 }
 @media(max-width:390px){
  .main{padding-left:9px;padding-right:9px}
