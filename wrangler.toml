@@ -16,3 +16,5 @@ database_id = "57c85007-1cf7-470f-bb4d-3b28cbb555b7"
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "carmy-files"
+
+[previews]
