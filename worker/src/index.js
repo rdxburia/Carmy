@@ -11,6 +11,8 @@ import { listSaleHistory } from "./sales.js";
 import { handleCacheWebhook } from "./cache-webhook.js";
 import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
 
+const RATE_LIMIT_RETRY_AFTER = "60";
+
 function originFor(request, env) {
   const allowedOrigin = String(env.ALLOWED_ORIGIN || "").trim();
   const requestOrigin = request.headers.get("Origin");
@@ -22,6 +24,24 @@ function originFor(request, env) {
 function route(pathname) {
   const parts = pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
   return parts;
+}
+
+async function enforceRateLimit(request, env, origin) {
+  if (!env.RATE_LIMITER) return null;
+
+  const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+  const result = await env.RATE_LIMITER.limit({ key: clientIp });
+
+  if (result?.success !== false) return null;
+
+  const response = error(
+    "Too many requests. Please try again later.",
+    429,
+    origin,
+    "RATE_LIMITED"
+  );
+  response.headers.set("retry-after", RATE_LIMIT_RETRY_AFTER);
+  return response;
 }
 
 // Carmy Worker API routes are deployed from this source-controlled entrypoint.
@@ -40,6 +60,16 @@ export default {
           "vary": "Origin",
         },
       });
+    }
+
+    try {
+      const rateLimitResponse = await enforceRateLimit(request, env, origin);
+      if (rateLimitResponse) return rateLimitResponse;
+    } catch (err) {
+      // Rate limiting must not become an application outage if the binding
+      // has a transient platform failure. The protected API still requires
+      // authentication below.
+      console.error("Rate limiter error", err);
     }
 
     const url = new URL(request.url);
@@ -112,13 +142,28 @@ export default {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listDocuments(env, user, userToken, carId) }, 200, origin);
       }
-      if (request.method === "POST" && parts[0] === "files" && parts[1] === "presign-upload") { const input = await request.json(); return json({ ok: true, data: await presignUpload(env, user, userToken, input) }, 200, origin); }
 
-      if (request.method === "POST" && parts[0] === "files" && parts[1] === "finalize") { const input = await request.json(); return json({ ok: true, data: await finalizeUpload(env, user, userToken, input) }, 200, origin); }
+      if (request.method === "POST" && parts[0] === "files" && parts[1] === "presign-upload") {
+        const input = await request.json();
+        return json({ ok: true, data: await presignUpload(env, user, userToken, input) }, 200, origin);
+      }
 
-      if (request.method === "GET" && parts[0] === "files" && parts[1] === "presign-download") { const documentId = url.searchParams.get("document_id"); const carId = url.searchParams.get("car_id"); return json({ ok: true, data: await presignDownload(env, user, userToken, documentId, carId) }, 200, origin); }
+      if (request.method === "POST" && parts[0] === "files" && parts[1] === "finalize") {
+        const input = await request.json();
+        return json({ ok: true, data: await finalizeUpload(env, user, userToken, input) }, 200, origin);
+      }
 
-      if (request.method === "DELETE" && parts[0] === "files" && parts[1] === "object") { const documentId = url.searchParams.get("document_id"); const carId = url.searchParams.get("car_id"); return json({ ok: true, data: await deleteR2Document(env, user, userToken, documentId, carId) }, 200, origin); }
+      if (request.method === "GET" && parts[0] === "files" && parts[1] === "presign-download") {
+        const documentId = url.searchParams.get("document_id");
+        const carId = url.searchParams.get("car_id");
+        return json({ ok: true, data: await presignDownload(env, user, userToken, documentId, carId) }, 200, origin);
+      }
+
+      if (request.method === "DELETE" && parts[0] === "files" && parts[1] === "object") {
+        const documentId = url.searchParams.get("document_id");
+        const carId = url.searchParams.get("car_id");
+        return json({ ok: true, data: await deleteR2Document(env, user, userToken, documentId, carId) }, 200, origin);
+      }
 
       if (request.method === "GET" && parts[0] === "insurance") {
         const carId = url.searchParams.get("car_id");
