@@ -106,6 +106,13 @@ Before merging, test these exact flows in a real browser:
 6. Confirm the dashboard remains usable after a hard refresh with an existing authenticated session.
 
 
+## R17 — Cloud auth token expiry recovery
+- `js/app.js`: added JWT-expiry-aware access-token reuse with a 30-second safety window.
+- Worker GET/POST/DELETE requests now retry exactly once after HTTP 401 using a freshly refreshed Supabase session.
+- Concurrent refreshes are deduplicated through `authRefreshPromise`, preventing multiple refresh calls from racing.
+- If the refresh session is unavailable/invalid, the request fails cleanly instead of reusing the expired token.
+- Supabase's documented session model supports short-lived access tokens with refresh-token based renewal.
+- Validation: GitHub source inspection confirms one token helper, one worker request path, one 401 retry path, and no duplicate helper definitions. Local browser/Chromium execution remains NOT RUN in this environment.
 ## R16 — syntax / lint / PDF acceptance
 
 - `js/app.js`: fixed the parse error by making `printVehicleReport()` async.
