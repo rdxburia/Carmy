@@ -174,7 +174,8 @@ button,input,select,textarea{max-width:100%}
   .itemgrid{grid-template-columns:1fr!important}
   .choice-grid{grid-template-columns:1fr!important}
   .choice-card{min-height:44px}
-  .doc-toolbar-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .doc-security-notice{margin-top:14px;padding:12px 14px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;border-radius:12px;font-weight:700}
+.doc-toolbar-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
   .doc-toolbar-actions .primary{grid-column:1/-1}
   .doc-grid{grid-template-columns:1fr!important}
   .doc-row{align-items:flex-start;flex-wrap:wrap;padding:10px;gap:9px}
