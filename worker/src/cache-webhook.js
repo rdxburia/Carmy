@@ -1,4 +1,4 @@
-import { invalidateCache, invalidateVehicleCaches, invalidateUserResource } from "./cache.js";
+import { invalidateVehicleCaches, invalidateUserResource } from "./cache.js";
 
 const TABLE_RESOURCES = {
   records: "service-history",
@@ -74,18 +74,36 @@ export async function handleCacheWebhook(request, env, origin) {
     }, 400, origin);
   }
 
-  if (table === "cars") {
-    if (userId) await invalidateVehicleCaches(env, userId, row.id || carId || null);
-  } else if (table === "user_profiles") {
-    if (userId) await invalidateUserResource(env, "profile", userId);
-  } else {
-    const resource = TABLE_RESOURCES[table];
-    if (resource && userId) {
-      await invalidateUserResource(env, resource, userId, carId);
-      if (table === "records" && carId) {
-        await invalidateUserResource(env, "service-history", userId);
+  try {
+    if (table === "cars") {
+      if (userId) await invalidateVehicleCaches(env, userId, row.id || carId || null);
+    } else if (table === "user_profiles") {
+      if (userId) await invalidateUserResource(env, "profile", userId);
+    } else {
+      const resource = TABLE_RESOURCES[table];
+      if (resource && userId) {
+        await invalidateUserResource(env, resource, userId, carId);
+        if (table === "records" && carId) {
+          await invalidateUserResource(env, "service-history", userId);
+        }
       }
     }
+  } catch (err) {
+    console.error("Cache invalidation failed", {
+      table,
+      hasUserId: Boolean(userId),
+      hasCarId: Boolean(carId),
+      error: err?.message || String(err),
+      stack: err?.stack || null,
+    });
+
+    return response({
+      ok: false,
+      error: {
+        code: "CACHE_INVALIDATION_FAILED",
+        message: "Cache invalidation failed.",
+      },
+    }, 500, origin);
   }
 
   return response({
