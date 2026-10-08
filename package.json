@@ -1,0 +1,13 @@
+{
+  "name": "carmy",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler preview"
+  },
+  "devDependencies": {
+    "wrangler": "4.68.0"
+  }
+}
