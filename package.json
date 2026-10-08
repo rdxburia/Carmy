@@ -8,6 +8,6 @@
     "preview": "wrangler preview"
   },
   "devDependencies": {
-    "wrangler": "4.68.0"
+    "wrangler": "4.135.0"
   }
 }
