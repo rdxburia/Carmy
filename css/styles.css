@@ -558,9 +558,10 @@ body.menu-open{overflow:hidden}
   font-size:19px!important;letter-spacing:-.045em;
 }
 .brand-mark{
-  width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
-  background:#111827;color:#fff;font-size:9px;font-weight:950;letter-spacing:.08em;
-  box-shadow:0 5px 14px rgba(17,24,39,.15);
+  width:30px;height:30px;flex:0 0 30px;display:block;
+  background:transparent;color:var(--c-accent);border-radius:0;
+  box-shadow:none;font-size:inherit;font-weight:inherit;letter-spacing:normal;
+  user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none;
 }
 .top-actions{display:flex!important;align-items:center;gap:16px}
 .top-actions #userEmail{font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -676,7 +677,7 @@ button{border-radius:11px!important}
 .side-menu-shell{
   position:fixed;inset:0;z-index:8999;pointer-events:none;visibility:hidden;
 }
-.side-menu-shell.open{pointer-events:auto;visibility:visible}
+.side-menu-shell[aria-hidden="false"]{pointer-events:auto;visibility:visible}
 .side-menu-backdrop{
   position:absolute;inset:0;background:rgba(7,12,20,.38);
   backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
@@ -692,8 +693,8 @@ button{border-radius:11px!important}
   transition:transform .36s cubic-bezier(.22,.8,.2,1);
   display:flex;flex-direction:column;
 }
-.side-menu-shell.open .side-menu-backdrop{opacity:1}
-.side-menu-shell.open .side-drawer{transform:translateX(0)}
+.side-menu-shell[aria-hidden="false"] .side-menu-backdrop{opacity:1}
+.side-menu-shell[aria-hidden="false"] .side-drawer{transform:translateX(0)}
 .drawer-head{
   display:flex;justify-content:space-between;align-items:flex-start;
   padding:2px 2px 20px;border-bottom:1px solid #e7e9ed;

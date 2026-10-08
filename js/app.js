@@ -540,8 +540,8 @@ function hideAppLoading(){
 }
 function dateOnlyEnd(x){if(!x)return null;let p=String(x).split('-').map(Number);if(p.length!==3||p.some(Number.isNaN))return null;return new Date(p[0],p[1]-1,p[2],23,59,59,999)}
 function st(x){if(!x)return['MISSING','bad'];let d=dateOnlyEnd(x);if(!d)return['MISSING','bad'];let days=(d-Date.now())/86400000;return days<0?['EXPIRED','bad']:days<=30?['EXPIRING SOON','warn']:['VALID','ok']}
-function closeSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');$('menuToggle')?.setAttribute('aria-expanded','false');document.body.classList.remove('menu-open')}
-function openSideMenu(){const m=$('sideMenu');if(!m)return;m.classList.add('open');m.setAttribute('aria-hidden','false');$('menuToggle')?.setAttribute('aria-expanded','true');document.body.classList.add('menu-open');updateDrawerContext()}
+function closeSideMenu(){const m=$('sideMenu');if(!m)return;m.setAttribute('aria-hidden','true');$('menuToggle')?.setAttribute('aria-expanded','false');document.body.classList.remove('menu-open')}
+function openSideMenu(){const m=$('sideMenu');if(!m||$('app')?.classList.contains('hidden'))return;m.setAttribute('aria-hidden','false');$('menuToggle')?.setAttribute('aria-expanded','true');document.body.classList.add('menu-open');updateDrawerContext()}
 function updateIdentityUI(){
  const owner=(ownerProfile?.full_name||user?.user_metadata?.full_name||'').trim();
  const display=owner||'Owner';
@@ -555,6 +555,7 @@ function updateDrawerContext(){
  updateIdentityUI();
 }
 async function nav(v){
+ closeSideMenu();
  const validViews=['dashboard','cars','add','history','docs','report','owner'];
  if(!validViews.includes(v))v='dashboard';
  try{
@@ -612,7 +613,7 @@ $('brandHome')?.addEventListener('click',e=>{
   nav('dashboard');
 });
 $('brandHome')?.addEventListener('dragstart',e=>e.preventDefault());
-$('drawerBrandHome')?.addEventListener('click',()=>{nav('dashboard');closeSideMenu?.()});
+$('drawerBrandHome')?.addEventListener('click',()=>nav('dashboard'));
 $('menuClose')?.addEventListener('click',closeSideMenu);
 $('sideMenuBackdrop')?.addEventListener('click',closeSideMenu);
 $('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
@@ -686,6 +687,7 @@ async function boot(){
  });
 }
 function showLogin(){
+ closeSideMenu();
  stopVerificationCountdown();
  hideVerificationView(false);
  let o=$('policeLogoutOverlay');if(o){if(o._timer)clearTimeout(o._timer);o.remove()}
@@ -705,6 +707,7 @@ function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.regis
 async function start(u){
  if(startedUserId===u.id)return;
  startedUserId=u.id;user=u;
+ closeSideMenu();
  stopVerificationCountdown();
  pendingVerificationEmail='';
  try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
