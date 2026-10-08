@@ -552,5 +552,5 @@
 .drawer-brand{display:flex;align-items:center;gap:10px;min-width:0;padding:0;background:transparent!important;color:inherit!important;border:0!important;text-align:left!important;box-shadow:none!important;cursor:pointer!important;user-select:none;-webkit-user-select:none}
 .drawer-brand:focus-visible{outline:2px solid #14352b;outline-offset:4px;border-radius:12px}
 .drawer-brand-mark{width:32px;height:32px;flex:0 0 32px;color:#14352b;display:block;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none}
-.report-brand{display:flex;align-items:flex-start;gap:10px}.report-brand-mark{width:30px;height:30px;flex:0 0 30px;color:#14352b;display:block;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none}
+
 .cc-logo{overflow:visible}

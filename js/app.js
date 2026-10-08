@@ -1853,11 +1853,13 @@ async function printVehicleReport(){
     '#vehicleReportPdfStage *{box-sizing:border-box!important}',
     '#vehicleReportPdfStage .report-grid{width:100%!important;max-width:100%!important}',
     '#vehicleReportPdfStage .report-two{width:100%!important;max-width:100%!important}',
-    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important}',
+    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important;break-inside:auto!important;page-break-inside:auto!important}',
+    '#vehicleReportPdfStage .report-table thead{display:table-header-group!important}',
+    '#vehicleReportPdfStage .report-table tr{break-inside:avoid!important;page-break-inside:avoid!important}',
     '#vehicleReportPdfStage .report-table th,#vehicleReportPdfStage .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
-    '#vehicleReportPdfStage img{max-width:100%!important;height:auto!important}',
-    '#vehicleReportPdfStage .report-section{break-inside:avoid!important}',
-    '@media(max-width:760px){#vehicleReportPdfStage .report-grid{grid-template-columns:repeat(3,1fr)!important}#vehicleReportPdfStage .report-two{grid-template-columns:1fr 1fr!important}}'
+    '#vehicleReportPdfStage .report-grid,#vehicleReportPdfStage .report-two,#vehicleReportPdfStage .report-panel,#vehicleReportPdfStage .report-total,#vehicleReportPdfStage .report-footer{break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-head{break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage img{max-width:100%!important;height:auto!important}'
   ].join('');
 
   stage.appendChild(css);
@@ -1892,7 +1894,7 @@ async function printVehicleReport(){
     },
     pagebreak:{
       mode:['css','legacy'],
-      avoid:['.report-section']
+      avoid:['.report-head','.report-grid','.report-two','.report-panel','.report-total','.report-footer']
     }
   };
 
