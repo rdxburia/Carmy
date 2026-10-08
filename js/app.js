@@ -1,35 +1,89 @@
 
 const U=APP_CONFIG.SUPABASE_URL,K=APP_CONFIG.SUPABASE_KEY;
 let db=null;
+let accessToken='';
+let authRefreshPromise=null;
+let pdfEnginePromise=null;
 const WORKER_API=APP_CONFIG.WORKER_API_URL||"https://carmy-api.mr-rny-buria.workers.dev";
-async function workerGet(path){
+const PDF_ENGINE_URL='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+const PDF_ENGINE_INTEGRITY='sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==';
+function loadPdfEngine(){
+  if(typeof window.html2pdf==='function')return Promise.resolve(window.html2pdf);
+  if(pdfEnginePromise)return pdfEnginePromise;
+  pdfEnginePromise=new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-carmy-pdf-engine="html2pdf"]');
+    const script=existing||document.createElement('script');
+    const fail=()=>reject(new Error('PDF engine failed to load from cdnjs. Check your network connection and Content Security Policy.'));
+    const ready=()=>{
+      if(typeof window.html2pdf==='function')resolve(window.html2pdf);
+      else fail();
+    };
+    script.addEventListener('load',ready,{once:true});
+    script.addEventListener('error',fail,{once:true});
+    if(!existing){
+      script.async=true;
+      script.src=PDF_ENGINE_URL;
+      script.integrity=PDF_ENGINE_INTEGRITY;
+      script.crossOrigin='anonymous';
+      script.referrerPolicy='no-referrer';
+      script.dataset.carmyPdfEngine='html2pdf';
+      document.head.appendChild(script);
+    }
+  });
+  return pdfEnginePromise;
+}
+function tokenExpiresSoon(token,skewSeconds=30){
+  try{
+    const part=String(token||'').split('.')[1];
+    if(!part)return true;
+    const base64=part.replace(/-/g,'+').replace(/_/g,'/');
+    const padded=base64+'='.repeat((4-(base64.length%4))%4);
+    const payload=JSON.parse(atob(padded));
+    return !Number.isFinite(payload.exp)||payload.exp<=Math.floor(Date.now()/1000)+skewSeconds;
+  }catch(e){
+    return true;
+  }
+}
+async function getAccessToken(forceRefresh=false){
   if(!db)throw new Error('Secure API connection is not ready.');
-  const session=await db.auth.getSession();
-  const token=session?.data?.session?.access_token;
-  if(!token)throw new Error('Secure login session expired. Please login again.');
-  const res=await fetch(WORKER_API+path,{method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
+  if(!forceRefresh&&accessToken&&!tokenExpiresSoon(accessToken))return accessToken;
+  if(authRefreshPromise)return authRefreshPromise;
+  authRefreshPromise=(async()=>{
+    const session=await db.auth.getSession();
+    const nextToken=session?.data?.session?.access_token||'';
+    accessToken=nextToken;
+    if(!nextToken)throw new Error('Secure login session expired. Please login again.');
+    return nextToken;
+  })().finally(()=>{authRefreshPromise=null});
+  return authRefreshPromise;
+}
+async function workerRequest(path,options={},retry=true){
+  if(!db)throw new Error('Secure API connection is not ready.');
+  let token=await getAccessToken();
+  let res=await fetch(WORKER_API+path,{
+    ...options,
+    headers:{...(options.headers||{}),Authorization:'Bearer '+token,Accept:'application/json'}
+  });
+  if(res.status===401&&retry){
+    token=await getAccessToken(true);
+    res=await fetch(WORKER_API+path,{
+      ...options,
+      headers:{...(options.headers||{}),Authorization:'Bearer '+token,Accept:'application/json'}
+    });
+  }
   let body=null;
   try{body=await res.json()}catch(e){}
   if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
   return body;
 }
+async function workerGet(path){
+  return workerRequest(path,{method:'GET'});
+}
 async function workerPost(path,payload){
-  if(!db)throw new Error('Secure API connection is not ready.');
-  const session=await db.auth.getSession();const token=session?.data?.session?.access_token;
-  if(!token)throw new Error('Secure login session expired. Please login again.');
-  const res=await fetch(WORKER_API+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload||{})});
-  let body=null;try{body=await res.json()}catch(e){}
-  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
-  return body;
+  return workerRequest(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
 }
 async function workerDelete(path){
-  if(!db)throw new Error('Secure API connection is not ready.');
-  const session=await db.auth.getSession();const token=session?.data?.session?.access_token;
-  if(!token)throw new Error('Secure login session expired. Please login again.');
-  const res=await fetch(WORKER_API+path,{method:'DELETE',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
-  let body=null;try{body=await res.json()}catch(e){}
-  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
-  return body;
+  return workerRequest(path,{method:'DELETE'});
 }
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K);return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
@@ -470,7 +524,7 @@ function hideAppLoading(){
  if(!o)return;
  const state=o._loadingState;
  const elapsed=performance.now()-(state?.visibleSince||performance.now());
- const wait=Math.max(0,900-elapsed);
+ const wait=Math.max(0,120-elapsed);
  const finish=()=>{
    if(!document.body.contains(o))return;
    if(state){
@@ -514,12 +568,13 @@ async function nav(v){
    const previous=document.querySelector('.view.active');
    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
    target.classList.add('active');
+   window.scrollTo({top:0,left:0,behavior:'auto'});
    try{
      if(v==='add')prefillRecordForm();
      if(v==='dashboard')dash();
      if(v==='cars')carsView();
      if(v==='history')renderHistory();
-     if(v==='docs')docsView();
+     if(v==='docs')await docsView();
      if(v==='report')report();
      if(v==='owner')ownerProfileView();
    }catch(err){
@@ -611,12 +666,15 @@ const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.
 async function boot(){
  handleAuthRedirectError();
  let s=await db.auth.getSession();
+ accessToken=s.data.session?.access_token||'';
  if(s.data.session)start(s.data.session.user);
  else showLogin();
  db.auth.onAuthStateChange(async(_e,s)=>{
+   accessToken=s?.access_token||'';
    if(s){
      start(s.user);
    }else{
+     accessToken='';
      startedUserId=null;
      showLogin();
    }
@@ -660,13 +718,14 @@ async function start(u){
    await loadData();
    setAppLoadingProgress(70);
    updateIdentityUI();
-   setAppLoadingStatus('Checking vehicle compliance...','Calculating Insurance & PUC status');
-   if(car){dash();guard()}else{dash()}
+   setAppLoadingStatus('Preparing your garage...','Rendering your vehicle dashboard');
    setAppLoadingProgress(90);
    let lastView='dashboard';
    try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
    const validViews=['dashboard','cars','add','history','docs','report','owner'];
    if(!validViews.includes(lastView))lastView='dashboard';
+   $('app').classList.remove('hidden');
+   window.scrollTo({top:0,left:0,behavior:'auto'});
    if(lastView!=='dashboard'){
      let restored=false;
      try{
@@ -682,9 +741,7 @@ async function start(u){
    }else{
      await nav('dashboard');
    }
-   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-   $('app').classList.remove('hidden');
-   $('app').classList.add('app-ready');
+   window.scrollTo({top:0,left:0,behavior:'auto'});
    let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
    setAppLoadingProgress(100);
    hideAppLoading();
@@ -707,33 +764,50 @@ async function loadCars(){
 async function loadStep5Data(){
  ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
  if(!user)return;
- try{
-   const profile=await workerGet('/api/profile');
-   ownerProfile=profile?.data||null;
- }catch(err){
-   console.warn('Worker profile load failed:',err?.message||err);
+ const requests=[workerGet('/api/profile')];
+ if(car){
+   const qs='?car_id='+encodeURIComponent(car.id);
+   requests.push(
+     workerGet('/api/insurance'+qs),
+     workerGet('/api/puc'+qs),
+     workerGet('/api/renewals'+qs),
+     workerGet('/api/sale-history'+qs)
+   );
  }
- if(!car)return;
- const qs='?car_id='+encodeURIComponent(car.id);
- const [ih,ph,rh,sh]=await Promise.all([
+ const results=await Promise.all(requests);
+ const profile=results[0];
+ ownerProfile=profile?.data||null;
+ if(car){
+   insuranceHistory=Array.isArray(results[1]?.data)?results[1].data:[];
+   pucHistory=Array.isArray(results[2]?.data)?results[2].data:[];
+   renewalHistory=Array.isArray(results[3]?.data)?results[3].data:[];
+   saleHistory=Array.isArray(results[4]?.data)?results[4].data:[];
+ }
+}
+async function loadData(){
+ if(!car){
+   records=[];docs=[];
+   await loadStep5Data();
+   return;
+ }
+ const carId=encodeURIComponent(car.id);
+ const qs='?car_id='+carId;
+ const [history,documents,profile,insurance,puc,renewals,sales]=await Promise.all([
+   workerGet('/api/service-history?car_id='+carId),
+   workerGet('/api/documents?car_id='+carId),
+   workerGet('/api/profile'),
    workerGet('/api/insurance'+qs),
    workerGet('/api/puc'+qs),
    workerGet('/api/renewals'+qs),
    workerGet('/api/sale-history'+qs)
  ]);
- insuranceHistory=Array.isArray(ih?.data)?ih.data:[];
- pucHistory=Array.isArray(ph?.data)?ph.data:[];
- renewalHistory=Array.isArray(rh?.data)?rh.data:[];
- saleHistory=Array.isArray(sh?.data)?sh.data:[];
-}
-async function loadData(){
- if(!car){records=[];docs=[];await loadStep5Data();dash();renderHistory();report();guard();return}
- const history=await workerGet('/api/service-history?car_id='+encodeURIComponent(car.id));
  records=Array.isArray(history?.data)?history.data:[];
- const documents=await workerGet('/api/documents?car_id='+encodeURIComponent(car.id));
  docs=Array.isArray(documents?.data)?documents.data:[];
- await loadStep5Data();
- dash();renderHistory();await docsView();report();guard()
+ ownerProfile=profile?.data||null;
+ insuranceHistory=Array.isArray(insurance?.data)?insurance.data:[];
+ pucHistory=Array.isArray(puc?.data)?puc.data:[];
+ renewalHistory=Array.isArray(renewals?.data)?renewals.data:[];
+ saleHistory=Array.isArray(sales?.data)?sales.data:[];
 }
 const insuranceTypes=['Third Party','Comprehensive','Zero Depreciation','Own Damage','Standalone Own Damage'];
 const insuranceAddons=['Roadside Assistance','Engine Protection','Consumables Cover','Key Replacement','Tyre Protect','Return to Invoice','NCB Protect'];
@@ -910,9 +984,9 @@ async function generateSaleForms(){
  try{
    const wrapper=document.createElement('div');wrapper.id='salePdfPreview';wrapper.setAttribute('aria-hidden','true');wrapper.innerHTML=buildSaleFormsHtml(data);document.body.appendChild(wrapper);
    const pdfName='Form_29_30_'+buyerName.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+new Date(saleDate).getFullYear()+'.pdf';
-   if(typeof html2pdf==='undefined')throw new Error('PDF engine did not load. Please refresh and try again.');
+   const pdf=await loadPdfEngine();
    const opt={margin:0,filename:pdfName,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
-   const blob=await html2pdf().set(opt).from(wrapper).outputPdf('blob');
+   const blob=await pdf().set(opt).from(wrapper).outputPdf('blob');
    wrapper.remove();
    const path=user.id+'/'+car.id+'/archives/'+pdfName;
    const up=await db.storage.from('car-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});
@@ -1701,7 +1775,7 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
    rules during native window.print().
    ========================================================= */
 
-function printVehicleReport(){
+async function printVehicleReport(){
   const source = document.getElementById('reportArea');
   const original = source?.querySelector('.report-sheet');
 
@@ -1710,8 +1784,11 @@ function printVehicleReport(){
     return;
   }
 
-  if(typeof window.html2pdf !== 'function'){
-    toast('PDF engine is still loading. Please refresh once and try again.','error');
+  try{
+    await loadPdfEngine();
+  }catch(err){
+    console.error('PDF engine load error:',err);
+    toast('PDF engine could not be loaded. Check your connection and try again.','error');
     return;
   }
 
