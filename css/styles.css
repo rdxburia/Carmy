@@ -84,7 +84,37 @@ button:focus-visible{outline:2px solid var(--c-accent);outline-offset:3px}
 }
 
 /* ===== Documents + A4 Vehicle Report components ===== */
-.report-sheet{width:210mm;min-height:297mm;margin:0 auto;background:#fff;color:#172033;padding:15mm;box-shadow:0 18px 60px rgba(15,23,42,.12);border-radius:4px}.report-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding-bottom:18px;border-bottom:2px solid #172033}.report-kicker{font-size:11px;letter-spacing:3px;font-weight:900;color:#2563eb}.report-head h1{margin:5px 0 3px;font-size:28px;letter-spacing:-.6px}.report-head p{margin:0;color:#6b7280}.report-reg{font-size:22px;font-weight:950;letter-spacing:1px;padding:10px 14px;border:1px solid #dbe3f0;border-radius:12px;background:#f8fafc}.report-section{margin-top:20px}.report-section-title{font-size:10px;letter-spacing:2px;font-weight:900;color:#64748b;margin-bottom:10px}.report-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#e7ebf2;border:1px solid #e7ebf2;border-radius:12px;overflow:hidden}.report-grid>div{background:#fff;padding:12px}.report-grid span,.report-line span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#7b8798;margin-bottom:4px}.report-grid b,.report-line b{font-size:12px;line-height:1.4}.report-two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}.report-panel{border:1px solid #e7ebf2;border-radius:14px;padding:14px;background:linear-gradient(180deg,#fff,#f9fbff)}.report-line{display:flex;justify-content:space-between;gap:15px;padding:9px 0;border-bottom:1px solid #edf0f5}.report-line:last-child{border-bottom:0}.report-line b{text-align:right}.report-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e7ebf2;border-radius:12px;overflow:hidden;font-size:10px}.report-table th{background:#172033;color:#fff;text-align:left;padding:9px}.report-table td{padding:8px;border-bottom:1px solid #edf0f5;vertical-align:top}.report-table tr:last-child td{border-bottom:0}.report-table small{display:block;color:#64748b;margin-top:3px}.report-total{display:flex;justify-content:flex-end;gap:18px;align-items:center;margin-top:12px;padding:12px 14px;border-radius:12px;background:#f1f5ff}.report-total span{font-size:11px;color:#64748b}.report-total b{font-size:18px;color:#1d4ed8}.report-footer{display:flex;justify-content:space-between;margin-top:25px;padding-top:12px;border-top:1px solid #e7ebf2;color:#94a3b8;font-size:9px}
+/* ===== A4 Vehicle Report — canonical screen/PDF layout ===== */
+.report-sheet{width:210mm;min-height:297mm;margin:0 auto;padding:15mm;box-sizing:border-box;overflow:hidden;background:#fff;color:#172033;box-shadow:0 18px 60px rgba(15,23,42,.12);border-radius:4px}
+.report-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:20px;padding-bottom:18px;border-bottom:2px solid #172033}
+.report-brand{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.report-brand-mark{width:30px;height:30px;flex:0 0 30px;display:block;color:#14352b;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none}
+.report-kicker{font-size:11px;letter-spacing:3px;font-weight:900;color:#2563eb}
+.report-head h1{margin:5px 0 3px;font-size:28px;letter-spacing:-.6px}
+.report-head p{margin:0;color:#6b7280}
+.report-reg{min-width:0;max-width:100%;font-size:22px;font-weight:950;letter-spacing:1px;padding:10px 14px;border:1px solid #dbe3f0;border-radius:12px;background:#f8fafc;overflow-wrap:anywhere}
+.report-section{margin-top:20px}
+.report-section-title{font-size:10px;letter-spacing:2px;font-weight:900;color:#64748b;margin-bottom:10px}
+.report-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#e7ebf2;border:1px solid #e7ebf2;border-radius:12px;overflow:hidden}
+.report-grid>div{min-width:0;background:#fff;padding:12px}
+.report-grid span,.report-line span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#7b8798;margin-bottom:4px}
+.report-grid b,.report-line b{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.report-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:20px}
+.report-panel{min-width:0;border:1px solid #e7ebf2;border-radius:14px;padding:14px;background:linear-gradient(180deg,#fff,#f9fbff);break-inside:avoid;page-break-inside:avoid}
+.report-line{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:start;gap:15px;padding:9px 0;border-bottom:1px solid #edf0f5}
+.report-line:last-child{border-bottom:0}
+.report-line b{text-align:right;overflow-wrap:anywhere;word-break:break-word}
+.report-table{width:100%;max-width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid #e7ebf2;border-radius:12px;overflow:hidden;font-size:10px}
+.report-table thead{display:table-header-group}
+.report-table tr{break-inside:avoid;page-break-inside:avoid}
+.report-table th{background:#172033;color:#fff;text-align:left;padding:9px;overflow-wrap:anywhere}
+.report-table th:nth-child(1){width:12%}.report-table th:nth-child(2){width:10%}.report-table th:nth-child(3){width:16%}.report-table th:nth-child(4){width:47%}.report-table th:nth-child(5){width:15%}
+.report-table td{padding:8px;border-bottom:1px solid #edf0f5;vertical-align:top;overflow-wrap:anywhere;word-break:break-word}
+.report-table tr:last-child td{border-bottom:0}
+.report-table small{display:block;color:#64748b;margin-top:3px}
+.report-total{display:flex;justify-content:flex-end;gap:18px;align-items:center;margin-top:12px;padding:12px 14px;border-radius:12px;background:#f1f5ff;break-inside:avoid;page-break-inside:avoid}
+.report-total span{font-size:11px;color:#64748b}.report-total b{font-size:18px;color:#1d4ed8}
+.report-footer{display:flex;justify-content:space-between;gap:15px;margin-top:25px;padding-top:12px;border-top:1px solid #e7ebf2;color:#94a3b8;font-size:9px;break-inside:avoid;page-break-inside:avoid}
 .doc-toolbar-actions{display:flex;gap:8px;flex-wrap:wrap}.doc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.doc-col{background:#f8fafc;border:1px solid #e5e7eb;border-radius:18px;padding:12px}.doc-col-head{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 12px}.doc-col-head>div{display:flex;align-items:center;gap:9px}.doc-col-head>span{font-size:12px;font-weight:800;background:#e5e7eb;padding:4px 8px;border-radius:999px}.doc-col-icon{font-size:22px}.doc-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e8edf4;border-radius:14px;padding:12px;margin-top:8px}.doc-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#eef4ff;font-size:21px;flex:none}.doc-main{min-width:0;flex:1;display:grid;gap:2px}.doc-main>b{font-size:14px}.doc-main>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.doc-main small{color:#7b8798}.doc-main em{font-style:normal;font-size:11px;color:#7c3aed}.doc-expiry{font-size:11px;font-weight:800;color:#15803d}.doc-expiry.expired{color:#b91c1c}.doc-archived{opacity:.82}.doc-actions{display:flex;gap:6px}.doc-actions button{padding:8px 10px}.doc-archive{margin-top:16px;border:1px solid #e5e7eb;border-radius:18px;background:#fff;padding:14px}.doc-archive-head{font-weight:900;font-size:15px;margin-bottom:8px}.doc-archive details{border-top:1px solid #eef2f7;padding:10px 0}.doc-archive summary{cursor:pointer;font-weight:800;list-style:none}.doc-archive summary span{float:right;background:#eef2ff;padding:3px 8px;border-radius:999px;font-size:11px}.doc-popup,.doc-upload-card{background:#fff;border-radius:22px;padding:24px;width:min(560px,calc(100% - 28px));box-shadow:0 30px 90px rgba(15,23,42,.28);border:1px solid #e5e7eb}.doc-popup{text-align:center}.doc-popup-icon{font-size:44px}.doc-popup p{color:#64748b;line-height:1.55}.doc-popup button{margin:5px}#docExpiryPopup,#docUploadModal{position:fixed;inset:0;z-index:9990;background:rgba(15,23,42,.52);backdrop-filter:blur(7px);display:grid;place-items:center;padding:14px}.doc-upload-card .toolbar{margin-bottom:18px}.doc-empty{padding:14px;color:#94a3b8;text-align:center;border:1px dashed #dbe3ef;border-radius:12px}@media(max-width:760px){.doc-grid{grid-template-columns:1fr}.doc-toolbar-actions{width:100%}.doc-toolbar-actions button{flex:1}.doc-row{align-items:flex-start}.doc-actions{flex-direction:column}.doc-popup,.doc-upload-card{padding:20px}}
 
 .doc-row.active{border-color:#bbf7d0;background:#f0fdf4}.doc-row.soon{border-color:#fde68a;background:#fffbeb;animation:docPulse 1.8s ease-in-out infinite}.doc-row.expired{border-color:#fecaca;background:#fff1f2}.doc-badge{display:inline-block;width:max-content;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:900}.doc-badge.active{background:#dcfce7;color:#166534}.doc-badge.soon{background:#fef3c7;color:#92400e}.doc-badge.expired{background:#fee2e2;color:#991b1b}.doc-badge.archived{background:#ede9fe;color:#6d28d9}.doc-security-notice{margin-top:14px;padding:12px 14px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;border-radius:12px;font-weight:700}@keyframes docPulse{50%{box-shadow:0 0 0 4px rgba(245,158,11,.08)}}.doc-actions button:disabled{opacity:.45;cursor:not-allowed}
@@ -833,148 +863,18 @@ button{border-radius:11px!important}
 }
 
 /* =========================================================
-   A4 VEHICLE REPORT - PRINT FIX
-   Keep only the report visible in browser print preview.
-   This avoids blank pages caused by hidden .view/layout states.
+   A4 VEHICLE REPORT — PRINT
    ========================================================= */
-
 @media print{
-  html,
-  body{
-    width:100%!important;
-    min-height:100%!important;
-    margin:0!important;
-    padding:0!important;
-    background:#fff!important;
-    color:#172033!important;
-  }
-
-  body *{
-    visibility:hidden!important;
-  }
-
-  #report,
-  #report *{
-    visibility:visible!important;
-  }
-
-  #report{
-    display:block!important;
-    position:static!important;
-    width:100%!important;
-    height:auto!important;
-    min-height:0!important;
-    margin:0!important;
-    padding:0!important;
-    overflow:visible!important;
-    background:#fff!important;
-    color:#172033!important;
-  }
-
-  #reportArea{
-    display:block!important;
-    position:static!important;
-    width:100%!important;
-    height:auto!important;
-    min-height:0!important;
-    margin:0!important;
-    padding:0!important;
-    overflow:visible!important;
-    background:#fff!important;
-  }
-
-  #report .toolbar,
-  #report .no-print{
-    display:none!important;
-  }
-
-  #report .report-sheet{
-    display:block!important;
-    visibility:visible!important;
-    width:100%!important;
-    max-width:none!important;
-    min-height:277mm!important;
-    height:auto!important;
-    margin:0!important;
-    padding:0!important;
-    background:#fff!important;
-    color:#172033!important;
-    box-shadow:none!important;
-    border:0!important;
-    border-radius:0!important;
-    transform:none!important;
-    animation:none!important;
-  }
-
-  #report .report-section,
-  #report .report-head,
-  #report .report-grid,
-  #report .report-two,
-  #report .report-panel,
-  #report .report-table,
-  #report .report-total,
-  #report .report-footer{
-    visibility:visible!important;
-  }
-
-  @page{
-    size:A4 portrait;
-    margin:10mm;
-  }
-}
-
-
-/* =========================================================
-   A4 REPORT DEDICATED PRINT PORTAL
-   ========================================================= */
-
-#vehicleReportPrintPortal{
-  display:none;
-}
-
-@media print{
-  /* Hide the application completely. */
-  body > *:not(#vehicleReportPrintPortal){
-    display:none!important;
-  }
-
-  html,
-  body{
-    width:100%!important;
-    min-height:0!important;
-    margin:0!important;
-    padding:0!important;
-    background:#fff!important;
-  }
-
-  #vehicleReportPrintPortal{
-    display:block!important;
-    visibility:visible!important;
-    width:100%!important;
-    margin:0!important;
-    padding:0!important;
-    background:#fff!important;
-    color:#172033!important;
-  }
-
-  #vehicleReportPrintPortal .report-sheet{
-    display:block!important;
-    width:100%!important;
-    max-width:none!important;
-    min-height:277mm!important;
-    margin:0!important;
-    padding:0!important;
-    box-shadow:none!important;
-    border:0!important;
-    border-radius:0!important;
-    background:#fff!important;
-    color:#172033!important;
-    transform:none!important;
-    animation:none!important;
-  }
-
-  @page{
-    size:A4 portrait;
-    margin:10mm;
-  }
+ html,body{width:100%!important;min-height:0!important;margin:0!important;padding:0!important;background:#fff!important;color:#172033!important}
+ body>*{display:none!important}
+ #app{display:block!important;visibility:visible!important}
+ #app *{visibility:hidden!important}
+ #report,#report *{visibility:visible!important}
+ #report{display:block!important;position:static!important;width:100%!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;background:#fff!important;color:#172033!important}
+ #reportArea{display:block!important;position:static!important;width:100%!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;background:#fff!important}
+ #report .toolbar,#report .no-print{display:none!important}
+ #report .report-sheet{display:block!important;visibility:visible!important;width:100%!important;max-width:none!important;min-height:277mm!important;height:auto!important;margin:0!important;padding:0!important;overflow:visible!important;background:#fff!important;color:#172033!important;box-shadow:none!important;border:0!important;border-radius:0!important;transform:none!important;animation:none!important}
+ #report .report-head,#report .report-brand,#report .report-section,#report .report-grid,#report .report-two,#report .report-panel,#report .report-table,#report .report-total,#report .report-footer{visibility:visible!important}
+ @page{size:A4 portrait;margin:10mm}
 }
