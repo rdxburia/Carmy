@@ -70,3 +70,46 @@ with check (bucket_id='car-documents' and (storage.foldername(name))[1]=(select 
 
 create policy storage_delete_own on storage.objects for delete to authenticated
 using (bucket_id='car-documents' and (storage.foldername(name))[1]=(select auth.uid())::text);
+
+-- Performance hardening: avoid per-row auth evaluation in RLS policies.
+drop policy if exists "Users can insert own security" on public.user_security;
+create policy "Users can insert own security" on public.user_security
+for insert to authenticated
+with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can update own security" on public.user_security;
+create policy "Users can update own security" on public.user_security
+for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can view own security" on public.user_security;
+create policy "Users can view own security" on public.user_security
+for select to authenticated
+using ((select auth.uid()) = user_id);
+
+drop policy if exists insurance_claims_owner on public.insurance_claims;
+create policy insurance_claims_owner on public.insurance_claims
+for all to authenticated
+using (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1 from public.cars c
+    where c.id = insurance_claims.car_id
+      and c.user_id = (select auth.uid())
+  )
+)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1 from public.cars c
+    where c.id = insurance_claims.car_id
+      and c.user_id = (select auth.uid())
+  )
+);
+
+-- Remove the duplicate records(car_id, service_date) index.
+drop index if exists public.records_car_date_idx;
+drop index if exists public.records_car_id_service_date_idx;
+create index if not exists records_car_id_service_date_idx
+on public.records(car_id, service_date desc);
