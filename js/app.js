@@ -607,8 +607,11 @@ async function nav(v){
 
 document.querySelectorAll('aside button,.mobile-nav button,.drawer-link,.drawer-utility[data-view]').forEach(x=>x.onclick=()=>nav(x.dataset.view));
 $('menuToggle')?.addEventListener('click',openSideMenu);
-$('brandHome')?.addEventListener('click',()=>nav('dashboard'));
-$('brandHome')?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();nav('dashboard')}});
+$('brandHome')?.addEventListener('click',e=>{
+  e.preventDefault();
+  nav('dashboard');
+});
+$('brandHome')?.addEventListener('dragstart',e=>e.preventDefault());
 $('menuClose')?.addEventListener('click',closeSideMenu);
 $('sideMenuBackdrop')?.addEventListener('click',closeSideMenu);
 $('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
