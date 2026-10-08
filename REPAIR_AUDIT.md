@@ -104,3 +104,16 @@ Before merging, test these exact flows in a real browser:
 4. Resize desktop → tablet → mobile and confirm headings, labels, cards and controls remain in normal flow with no text overlap.
 5. Open/close drawer, document modal and report modal.
 6. Confirm the dashboard remains usable after a hard refresh with an existing authenticated session.
+
+
+## R16 — syntax / lint / PDF acceptance
+
+- `js/app.js`: fixed the parse error by making `printVehicleReport()` async.
+- `loadPdfEngine()`: defined once with a cached Promise, pinned to html2pdf.js 0.10.1, Subresource Integrity and `crossorigin="anonymous"`.
+- Form 29/30 and Vehicle Report both call the same loader.
+- `index.html`: removed the empty script tag and retained one non-blocking Google Fonts preload/onload mechanism.
+- SRI source: the html2pdf.js project's official README documents the exact cdnjs 0.10.1 URL and SHA-512 integrity value used here. 
+- Node `--check` across every JS file: **NOT RUN in this execution environment** because the GitHub connector exposes repository contents but the container cannot clone/fetch GitHub over its network. A V8 parser check was not substituted for the required Node command.
+- ESLint browser-env no-undef: **NOT RUN** because ESLint is not installed in the available runtime and installing it would require external package access. No false-positive exceptions are being claimed.
+- Real Chromium PDF acceptance (Form 29/30 + Vehicle Report): **NOT RUN**. No authenticated live browser session is available in this execution environment. No PDF success is claimed.
+- Therefore R16 is **OPEN / NOT PASSED** and Phase 1 remains blocked.
