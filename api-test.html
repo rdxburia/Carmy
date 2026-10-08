@@ -88,9 +88,8 @@
         }
 
         const carId = vehicles[0].id;
-        const historyResponse = await fetch(
-          WORKER + "/api/service-history?car_id=" + encodeURIComponent(carId),
-          { headers }
+        const historyResponse = await authFetch(
+          WORKER + "/api/service-history?car_id=" + encodeURIComponent(carId)
         );
         const historyBody = await historyResponse.json();
 
@@ -106,9 +105,8 @@
           return;
         }
 
-        const documentsResponse = await fetch(
-          WORKER + "/api/documents?car_id=" + encodeURIComponent(carId),
-          { headers }
+        const documentsResponse = await authFetch(
+          WORKER + "/api/documents?car_id=" + encodeURIComponent(carId)
         );
         const documentsBody = await documentsResponse.json();
 
@@ -139,9 +137,8 @@
           puc_api: "testing"
         });
 
-        const insuranceResponse = await fetch(
-          WORKER + "/api/insurance?car_id=" + encodeURIComponent(carId),
-          { headers }
+        const insuranceResponse = await authFetch(
+          WORKER + "/api/insurance?car_id=" + encodeURIComponent(carId)
         );
         const insuranceBody = await insuranceResponse.json();
 
@@ -161,9 +158,8 @@
           return;
         }
 
-        const pucResponse = await fetch(
-          WORKER + "/api/puc?car_id=" + encodeURIComponent(carId),
-          { headers }
+        const pucResponse = await authFetch(
+          WORKER + "/api/puc?car_id=" + encodeURIComponent(carId)
         );
         const pucBody = await pucResponse.json();
 
@@ -192,9 +188,8 @@
           return;
         }
 
-        const renewalsResponse = await fetch(
-          WORKER + "/api/renewals?car_id=" + encodeURIComponent(carId),
-          { headers }
+        const renewalsResponse = await authFetch(
+          WORKER + "/api/renewals?car_id=" + encodeURIComponent(carId)
         );
         const renewalsBody = await renewalsResponse.json();
         if (!renewalsResponse.ok) {
@@ -202,9 +197,8 @@
           return;
         }
 
-        const saleResponse = await fetch(
-          WORKER + "/api/sale-history?car_id=" + encodeURIComponent(carId),
-          { headers }
+        const saleResponse = await authFetch(
+          WORKER + "/api/sale-history?car_id=" + encodeURIComponent(carId)
         );
         const saleBody = await saleResponse.json();
         if (!saleResponse.ok) {
