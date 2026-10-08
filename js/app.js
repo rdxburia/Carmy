@@ -612,6 +612,7 @@ $('brandHome')?.addEventListener('click',e=>{
   nav('dashboard');
 });
 $('brandHome')?.addEventListener('dragstart',e=>e.preventDefault());
+$('drawerBrandHome')?.addEventListener('click',()=>{nav('dashboard');closeSideMenu?.()});
 $('menuClose')?.addEventListener('click',closeSideMenu);
 $('sideMenuBackdrop')?.addEventListener('click',closeSideMenu);
 $('drawerLogout')?.addEventListener('click',()=>db.auth.signOut());
