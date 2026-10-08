@@ -237,10 +237,6 @@ button,input,select,textarea{max-width:100%}
   .doc-actions button{width:100%;padding:9px 5px;font-size:11px}
   .doc-flip-actions{display:grid;grid-template-columns:1fr 1fr}
   .doc-flip-actions button{width:100%;min-width:0}
-  .report-sheet{width:100%;overflow:visible}
-  .report-grid{grid-template-columns:1fr 1fr}
-  .report-head h1{font-size:22px}
-  .report-reg{font-size:17px;max-width:100%;overflow-wrap:anywhere}
   .table-wrap,.table,.table-wrap table{max-width:100%}
   .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .mobile-nav{
