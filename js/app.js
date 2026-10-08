@@ -2,6 +2,7 @@
 const U=APP_CONFIG.SUPABASE_URL,K=APP_CONFIG.SUPABASE_KEY;
 let db=null;
 let accessToken='';
+let authRefreshPromise=null;
 let pdfEnginePromise=null;
 const WORKER_API=APP_CONFIG.WORKER_API_URL||"https://carmy-api.mr-rny-buria.workers.dev";
 const PDF_ENGINE_URL='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
@@ -31,40 +32,56 @@ function loadPdfEngine(){
   });
   return pdfEnginePromise;
 }
-async function getAccessToken(){
-  if(accessToken)return accessToken;
-  if(!db)throw new Error('Secure API connection is not ready.');
-  const session=await db.auth.getSession();
-  accessToken=session?.data?.session?.access_token||'';
-  return accessToken;
+function tokenExpiresSoon(token,skewSeconds=30){
+  try{
+    const part=String(token||'').split('.')[1];
+    if(!part)return true;
+    const payload=JSON.parse(atob(part.replace(/-/g,'+').replace(/_/g,'/')));
+    return !Number.isFinite(payload.exp)||payload.exp<=Math.floor(Date.now()/1000)+skewSeconds;
+  }catch(e){
+    return true;
+  }
 }
-async function workerGet(path){
+async function getAccessToken(forceRefresh=false){
   if(!db)throw new Error('Secure API connection is not ready.');
-  const token=await getAccessToken();
-  if(!token)throw new Error('Secure login session expired. Please login again.');
-  const res=await fetch(WORKER_API+path,{method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
+  if(!forceRefresh&&accessToken&&!tokenExpiresSoon(accessToken))return accessToken;
+  if(authRefreshPromise)return authRefreshPromise;
+  authRefreshPromise=(async()=>{
+    const session=await db.auth.getSession();
+    const nextToken=session?.data?.session?.access_token||'';
+    accessToken=nextToken;
+    if(!nextToken)throw new Error('Secure login session expired. Please login again.');
+    return nextToken;
+  })().finally(()=>{authRefreshPromise=null});
+  return authRefreshPromise;
+}
+async function workerRequest(path,options={},retry=true){
+  if(!db)throw new Error('Secure API connection is not ready.');
+  let token=await getAccessToken();
+  let res=await fetch(WORKER_API+path,{
+    ...options,
+    headers:{...(options.headers||{}),Authorization:'Bearer '+token,Accept:'application/json'}
+  });
+  if(res.status===401&&retry){
+    token=await getAccessToken(true);
+    res=await fetch(WORKER_API+path,{
+      ...options,
+      headers:{...(options.headers||{}),Authorization:'Bearer '+token,Accept:'application/json'}
+    });
+  }
   let body=null;
   try{body=await res.json()}catch(e){}
   if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
   return body;
 }
+async function workerGet(path){
+  return workerRequest(path,{method:'GET'});
+}
 async function workerPost(path,payload){
-  if(!db)throw new Error('Secure API connection is not ready.');
-  const token=await getAccessToken();
-  if(!token)throw new Error('Secure login session expired. Please login again.');
-  const res=await fetch(WORKER_API+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload||{})});
-  let body=null;try{body=await res.json()}catch(e){}
-  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
-  return body;
+  return workerRequest(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
 }
 async function workerDelete(path){
-  if(!db)throw new Error('Secure API connection is not ready.');
-  const token=await getAccessToken();
-  if(!token)throw new Error('Secure login session expired. Please login again.');
-  const res=await fetch(WORKER_API+path,{method:'DELETE',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
-  let body=null;try{body=await res.json()}catch(e){}
-  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
-  return body;
+  return workerRequest(path,{method:'DELETE'});
 }
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K);return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
@@ -655,6 +672,7 @@ async function boot(){
    if(s){
      start(s.user);
    }else{
+     accessToken='';
      startedUserId=null;
      showLogin();
    }
