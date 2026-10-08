@@ -1,4 +1,4 @@
-export function json(data, status = 200, origin = "*") {
+export function json(data, status = 200, origin = "null") {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
@@ -12,6 +12,6 @@ export function json(data, status = 200, origin = "*") {
   });
 }
 
-export function error(message, status = 400, origin = "*", code = "BAD_REQUEST") {
+export function error(message, status = 400, origin = "null", code = "BAD_REQUEST") {
   return json({ ok: false, error: { code, message } }, status, origin);
 }
