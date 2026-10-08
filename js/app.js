@@ -36,7 +36,9 @@ function tokenExpiresSoon(token,skewSeconds=30){
   try{
     const part=String(token||'').split('.')[1];
     if(!part)return true;
-    const payload=JSON.parse(atob(part.replace(/-/g,'+').replace(/_/g,'/')));
+    const base64=part.replace(/-/g,'+').replace(/_/g,'/');
+    const padded=base64+'='.repeat((4-(base64.length%4))%4);
+    const payload=JSON.parse(atob(padded));
     return !Number.isFinite(payload.exp)||payload.exp<=Math.floor(Date.now()/1000)+skewSeconds;
   }catch(e){
     return true;
