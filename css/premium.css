@@ -554,3 +554,12 @@
 .drawer-brand-mark{width:32px;height:32px;flex:0 0 32px;color:#14352b;display:block;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none}
 
 .cc-logo{overflow:visible}
+
+
+/* Temporary CarCareCloud branding test — preserve existing layout and typography. */
+.top-brand-spacer{width:1px;height:1px;flex:0 0 1px}
+.auth-main-logo{display:block;width:min(210px,100%);height:auto;max-height:46px;object-fit:contain;object-position:left center}
+.drawer-brand-mark{width:32px!important;height:32px!important;flex:0 0 32px!important;object-fit:contain!important;border-radius:8px!important;background:#fff!important}
+.app-loading-brand-mark{display:block!important;width:34px!important;height:34px!important;flex:0 0 34px!important;border-radius:9px!important;background:#fff!important;object-fit:contain!important;padding:0!important}
+.report-brand-logo{display:block;width:150px;max-width:150px;height:auto;flex:0 0 auto;object-fit:contain;object-position:left center}
+@media(max-width:600px){.auth-main-logo{width:min(190px,100%);max-height:42px}.report-brand-logo{width:125px;max-width:125px}}
