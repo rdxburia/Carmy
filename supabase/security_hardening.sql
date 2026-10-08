@@ -113,3 +113,12 @@ drop index if exists public.records_car_date_idx;
 drop index if exists public.records_car_id_service_date_idx;
 create index if not exists records_car_id_service_date_idx
 on public.records(car_id, service_date desc);
+
+
+-- Performance: cover foreign-key columns used for deletes/joins.
+create index if not exists insurance_claims_user_id_idx on public.insurance_claims(user_id);
+create index if not exists insurance_history_user_id_idx on public.insurance_history(user_id);
+create index if not exists policy_renewals_user_id_idx on public.policy_renewals(user_id);
+create index if not exists puc_history_user_id_idx on public.puc_history(user_id);
+create index if not exists sale_history_form_document_id_idx on public.sale_history(form_document_id);
+create index if not exists sale_history_user_id_idx on public.sale_history(user_id);
