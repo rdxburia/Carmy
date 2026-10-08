@@ -12,11 +12,11 @@ import { handleCacheWebhook } from "./cache-webhook.js";
 import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
 
 function originFor(request, env) {
-  const origin = request.headers.get("Origin");
-  if (!origin) return env.ALLOWED_ORIGIN || "*";
-  if (origin === env.ALLOWED_ORIGIN) return origin;
-  if (origin === "http://localhost:3000" || origin === "http://localhost:5173") return origin;
-  return env.ALLOWED_ORIGIN || "*";
+  const allowedOrigin = String(env.ALLOWED_ORIGIN || "").trim();
+  const requestOrigin = request.headers.get("Origin");
+  if (!allowedOrigin) return "null";
+  if (requestOrigin && requestOrigin === allowedOrigin) return requestOrigin;
+  return allowedOrigin;
 }
 
 function route(pathname) {
@@ -73,7 +73,7 @@ export default {
       } catch {}
 
       const ok = Object.values(checks).every((v) => v === "ok");
-      return json({ ok, service: "carmy-api", checks }, ok ? 200 : 503, origin);
+      return json({ ok, service: "carmy-api" }, ok ? 200 : 503, origin);
     }
 
     let user;
