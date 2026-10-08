@@ -2,7 +2,9 @@
 -- The webhook secret is stored in Supabase Vault and is never embedded
 -- in trigger definitions or repository source.
 
-create or replace function public.carmy_cache_invalidation_request()
+create schema if not exists private;
+
+create or replace function private.carmy_cache_invalidation_request()
 returns trigger
 language plpgsql
 security definer
@@ -52,45 +54,51 @@ begin
 end
 $function$;
 
-revoke all on function public.carmy_cache_invalidation_request() from public;
-grant execute on function public.carmy_cache_invalidation_request() to postgres;
+revoke all on function private.carmy_cache_invalidation_request() from public;
+revoke all on function private.carmy_cache_invalidation_request() from anon;
+revoke all on function private.carmy_cache_invalidation_request() from authenticated;
+revoke all on function private.carmy_cache_invalidation_request() from service_role;
+grant execute on function private.carmy_cache_invalidation_request() to postgres;
 
 drop trigger if exists carmy_cars_cache_invalidation on public.cars;
 create trigger carmy_cars_cache_invalidation
 after insert or delete or update on public.cars
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_records_cache_invalidation on public.records;
 create trigger carmy_records_cache_invalidation
 after insert or delete or update on public.records
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_documents_cache_invalidation on public.documents;
 create trigger carmy_documents_cache_invalidation
 after insert or delete or update on public.documents
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_insurance_history_cache_invalidation on public.insurance_history;
 create trigger carmy_insurance_history_cache_invalidation
 after insert or delete or update on public.insurance_history
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_puc_history_cache_invalidation on public.puc_history;
 create trigger carmy_puc_history_cache_invalidation
 after insert or delete or update on public.puc_history
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_policy_renewals_cache_invalidation on public.policy_renewals;
 create trigger carmy_policy_renewals_cache_invalidation
 after insert or delete or update on public.policy_renewals
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_sale_history_cache_invalidation on public.sale_history;
 create trigger carmy_sale_history_cache_invalidation
 after insert or delete or update on public.sale_history
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
 
 drop trigger if exists carmy_user_profiles_cache_invalidation on public.user_profiles;
 create trigger carmy_user_profiles_cache_invalidation
 after insert or delete or update on public.user_profiles
-for each row execute function public.carmy_cache_invalidation_request();
+for each row execute function private.carmy_cache_invalidation_request();
+
+
+drop function if exists public.carmy_cache_invalidation_request();
