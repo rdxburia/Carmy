@@ -808,6 +808,7 @@ async function loadData(){
  pucHistory=Array.isArray(puc?.data)?puc.data:[];
  renewalHistory=Array.isArray(renewals?.data)?renewals.data:[];
  saleHistory=Array.isArray(sales?.data)?sales.data:[];
+ if(document.getElementById('docs')?.classList.contains('active'))await docsView();
 }
 const insuranceTypes=['Third Party','Comprehensive','Zero Depreciation','Own Damage','Standalone Own Damage'];
 const insuranceAddons=['Roadside Assistance','Engine Protection','Consumables Cover','Key Replacement','Tyre Protect','Return to Invoice','NCB Protect'];
