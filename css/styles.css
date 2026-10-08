@@ -558,9 +558,10 @@ body.menu-open{overflow:hidden}
   font-size:19px!important;letter-spacing:-.045em;
 }
 .brand-mark{
-  width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
-  background:#111827;color:#fff;font-size:9px;font-weight:950;letter-spacing:.08em;
-  box-shadow:0 5px 14px rgba(17,24,39,.15);
+  width:30px;height:30px;flex:0 0 30px;display:block;
+  background:transparent;color:var(--c-accent);border-radius:0;
+  box-shadow:none;font-size:inherit;font-weight:inherit;letter-spacing:normal;
+  user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none;
 }
 .top-actions{display:flex!important;align-items:center;gap:16px}
 .top-actions #userEmail{font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
