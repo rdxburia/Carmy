@@ -34,9 +34,9 @@ h1,h2,h3,h4,h5,h6,p,ul,ol{margin-block-start:0}
 h1,h2,h3,h4,h5,h6{color:var(--c-ink);line-height:1.25;font-weight:600;letter-spacing:-.01em}
 p,li,small,label,span{line-height:1.5}p{margin:0 0 1em}.hidden{display:none!important}
 .top{height:72px;min-height:72px;background:#fff;border-bottom:1px solid var(--c-line);display:flex;justify-content:space-between;align-items:center;padding:0 clamp(18px,3vw,38px);position:sticky;top:0;z-index:9000}
-.top .brand,.brand{display:flex;align-items:center;gap:10px;color:var(--c-ink);font-size:16px;font-weight:700;letter-spacing:.02em;text-decoration:none;cursor:pointer;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-user-drag:none}
+.top .brand,.brand{display:flex;align-items:center;gap:10px;color:var(--c-ink);font-size:16px;font-weight:700;letter-spacing:.02em;text-decoration:none;cursor:pointer;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-user-drag:none}.brand:focus-visible{outline:2px solid var(--c-accent);outline-offset:4px;border-radius:12px}
 .brand i{color:var(--c-accent);font-style:normal}
-.brand-mark{width:30px;height:30px;flex:0 0 30px;border-radius:9px;display:grid;place-items:center;background:var(--c-accent);color:#fff;font-size:9px;font-weight:950;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+.brand-mark{width:30px;height:30px;flex:0 0 30px;display:block;color:var(--c-accent);user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none}.brand-wordmark{user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
 .top-actions{display:flex;align-items:center;gap:16px;min-width:0}.top-actions #userEmail{font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .layout{display:flex;width:100%;min-width:0;min-height:calc(100dvh - 72px)}
 .layout>aside{flex:0 0 220px;width:220px;min-width:0;background:#101827;padding:14px}
