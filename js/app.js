@@ -4,6 +4,33 @@ let db=null;
 let accessToken='';
 let pdfEnginePromise=null;
 const WORKER_API=APP_CONFIG.WORKER_API_URL||"https://carmy-api.mr-rny-buria.workers.dev";
+const PDF_ENGINE_URL='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+const PDF_ENGINE_INTEGRITY='sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==';
+function loadPdfEngine(){
+  if(typeof window.html2pdf==='function')return Promise.resolve(window.html2pdf);
+  if(pdfEnginePromise)return pdfEnginePromise;
+  pdfEnginePromise=new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-carmy-pdf-engine="html2pdf"]');
+    const script=existing||document.createElement('script');
+    const fail=()=>reject(new Error('PDF engine failed to load from cdnjs. Check your network connection and Content Security Policy.'));
+    const ready=()=>{
+      if(typeof window.html2pdf==='function')resolve(window.html2pdf);
+      else fail();
+    };
+    script.addEventListener('load',ready,{once:true});
+    script.addEventListener('error',fail,{once:true});
+    if(!existing){
+      script.async=true;
+      script.src=PDF_ENGINE_URL;
+      script.integrity=PDF_ENGINE_INTEGRITY;
+      script.crossOrigin='anonymous';
+      script.referrerPolicy='no-referrer';
+      script.dataset.carmyPdfEngine='html2pdf';
+      document.head.appendChild(script);
+    }
+  });
+  return pdfEnginePromise;
+}
 async function getAccessToken(){
   if(accessToken)return accessToken;
   if(!db)throw new Error('Secure API connection is not ready.');
@@ -1728,7 +1755,7 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
    rules during native window.print().
    ========================================================= */
 
-function printVehicleReport(){
+async function printVehicleReport(){
   const source = document.getElementById('reportArea');
   const original = source?.querySelector('.report-sheet');
 
