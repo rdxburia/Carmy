@@ -17,13 +17,15 @@ database_id = "57c85007-1cf7-470f-bb4d-3b28cbb555b7"
 binding = "R2"
 bucket_name = "carmy-files"
 
-[rate_limits]
 # Cloudflare Workers rate limiting: 120 requests per client IP per 60 seconds.
 # This protects public endpoints, auth attempts, cache-webhook brute force,
 # and the authenticated API without changing application authorization.
-[[rate_limits.bindings]]
+[[ratelimits]]
 name = "RATE_LIMITER"
-namespace_id = "carmy-api"
-simple = { limit = 120, period = 60 }
+namespace_id = "2601008"
+
+[ratelimits.simple]
+limit = 120
+period = 60
 
 [previews]
