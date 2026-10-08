@@ -41,8 +41,29 @@
           return;
         }
 
-        const headers = { Authorization: "Bearer " + session.access_token };
-        const response = await fetch(WORKER + "/api/vehicles", { headers });
+        let token = session.access_token;
+        const refreshToken = async () => {
+          const { data: { session: freshSession }, error } = await client.auth.getSession();
+          if (error) throw error;
+          token = freshSession?.access_token || "";
+          if (!token) throw new Error("Secure login session expired. Please login again.");
+          return token;
+        };
+        const authFetch = async (url, options = {}) => {
+          let response = await fetch(url, {
+            ...options,
+            headers: { ...(options.headers || {}), Authorization: "Bearer " + token }
+          });
+          if (response.status === 401) {
+            await refreshToken();
+            response = await fetch(url, {
+              ...options,
+              headers: { ...(options.headers || {}), Authorization: "Bearer " + token }
+            });
+          }
+          return response;
+        };
+        const response = await authFetch(WORKER + "/api/vehicles");
         const body = await response.json();
 
         if (!response.ok) {
@@ -164,7 +185,7 @@
           return;
         }
 
-        const profileResponse = await fetch(WORKER + "/api/profile", { headers });
+        const profileResponse = await authFetch(WORKER + "/api/profile");
         const profileBody = await profileResponse.json();
         if (!profileResponse.ok) {
           show({ profile_http_status: profileResponse.status, profile_response: profileBody }, false);
