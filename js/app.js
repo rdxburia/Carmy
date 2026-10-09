@@ -1948,6 +1948,33 @@ async function printVehicleReport(selection=null){
 
   stage.appendChild(css);
   stage.appendChild(clone);
+  const chosen=[];
+  const activeDocs=Array.isArray(docs)?docs:[];
+  const curIns=(insuranceHistory||[]).find(x=>x.car_id===car?.id&&x.policy_status==='current');
+  const curPuc=(pucHistory||[]).find(x=>x.car_id===car?.id&&x.puc_status==='current');
+  const pickDoc=(id,type)=>activeDocs.find(d=>id&&d.id===id)||activeDocs.find(d=>d.document_type===type&&d.active&&!d.archived_at);
+  if(selection.rc){const d=pickDoc(null,'rc');if(d)chosen.push({doc:d,label:'Registration Certificate',number:car?.registration_no,validity:car?.rc_validity})}
+  if(selection.insurance){const d=pickDoc(curIns?.source_document_id,'insurance');if(d)chosen.push({doc:d,label:'Current Insurance',number:curIns?.policy_number||car?.insurance_number,validity:curIns?.expiry_date||car?.insurance_expiry})}
+  if(selection.puc){const d=pickDoc(curPuc?.source_document_id,'puc');if(d)chosen.push({doc:d,label:'Current PUC',number:curPuc?.certificate_number||car?.puc_certificate_no,validity:curPuc?.expiry_date||car?.puc_expiry})}
+  const archives=[];
+  if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived Insurance',number:d.file_name,validity:d.document_expiry}));
+  if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived PUC',number:d.file_name,validity:d.document_expiry}));
+  chosen.push(...archives);
+  if(chosen.length){
+    const status=document.createElement('div');status.className='report-document-print-page';status.innerHTML='<h3>Preparing documents...</h3><p>Loading selected document files. Please wait.</p>';stage.appendChild(status);
+    const getUrl=async d=>{if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);if(r.error)throw r.error;return r.data.signedUrl};
+    const ensurePdfJs=async()=>{if(window.pdfjsLib)return window.pdfjsLib;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=resolve;s.onerror=()=>reject(new Error('PDF renderer failed to load'));document.head.appendChild(s)});window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';return window.pdfjsLib};
+    let failed=[];
+    for(const item of chosen){try{
+      const url=await getUrl(item.doc),ext=(item.doc.file_name||'').split('.').pop().toLowerCase(),header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
+      if(ext==='pdf'){
+        const pdfjs=await ensurePdfJs(),resp=await fetch(url);if(!resp.ok)throw new Error('Document download failed');const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
+        for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),vp=page.getViewport({scale:1.4}),canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);stage.appendChild(wrap)}
+      }else{const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+'</h3>';const img=document.createElement('img');img.src=url;await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});wrap.appendChild(img);stage.appendChild(wrap)}
+    }catch(err){console.error('Document print load failed',item.doc?.id,err);failed.push(item.label)}}
+    status.remove();
+    if(failed.length&&!confirm('Could not load: '+failed.join(', ')+'. Print without these documents?')){stage.remove();return}
+  }
   document.body.appendChild(stage);
 
   const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
