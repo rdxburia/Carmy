@@ -58,7 +58,7 @@ function parseInsurance(ps,text){
  const known=[
   [/ROYAL\s+SUNDARAM\s+GENERAL\s+INSURANCE(?:\s+CO\.?\s+LIMITED|\s+COMPANY\s+LIMITED)?/i,'Royal Sundaram General Insurance Co. Limited'],
   [/RELIANCE\s+GENERAL\s+INSURANCE(?:\s+COMPANY\s+LIMITED|\s+CO\.?\s+LTD\.?)?/i,'Reliance General Insurance Co. Ltd.'],
-  [/CHOLAMANDALAM\s+MS\s+GENERAL\s+INSURANCE\s+CO\.?\s+LTD\.?/i,'Cholamandalam MS General Insurance Co. Ltd.'],
+  [/CHOLAMANDALAM\s+MS\s+GENERAL\s+INSURANCE\s+(?:CO\.?|COMPANY)\s+(?:LTD\.?|LIMITED)/i,'Cholamandalam MS General Insurance Co. Ltd.'],
   [/NATIONAL\s+INSURANCE\s+COMPANY\s+LIMITED/i,'National Insurance Company Limited'],
   [/THE\s+NEW\s+INDIA\s+ASSURANCE\s+CO\.?\s+LTD\.?/i,'The New India Assurance Co. Ltd.'],
   [/THE\s+ORIENTAL\s+INSURANCE\s+CO\.?\s+LTD\.?/i,'The Oriental Insurance Co. Ltd.'],
