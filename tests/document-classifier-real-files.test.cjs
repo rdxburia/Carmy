@@ -17,6 +17,6 @@ for(const fixture of FILES){
    assert.equal(fields.chassis_no,'MALA851CLJM866196','Royal Sundaram chassis number should be extracted from document text');
   }
   assert.ok(result.pageCount>=1,'Page count must be logged');
-  assert.equal(result.pageLengths.length,fixture.name.endsWith('.pdf')&&result.ocrUsed?1:result.pageCount,'Page-length output must correspond to extracted pages (OCR fallback is first-page only, matching the browser fallback)');
+  assert.equal(result.pageLengths.length,result.pageCount,'Page-length output must include every PDF page, including OCR fallback pages');
  });
 }
