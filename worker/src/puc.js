@@ -3,7 +3,7 @@ import { supabaseRest } from "./supabase.js";
 function today(){return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())}
 function clean(v){const s=String(v??"").trim();return s||null}
 function key(v){return clean(v)?.toUpperCase().replace(/[^A-Z0-9]/g,"")||null}
-function isoDate(v){const s=clean(v);if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(s||""))return null;const d=new Date(s+'T00:00:00Z');return d.toISOString().slice(0,10)===s?s:null}
+function isoDate(v){const s=clean(v);if(!/^\d{4}-\d{2}-\d{2}$/.test(s||""))return null;const d=new Date(s+'T00:00:00Z');return d.toISOString().slice(0,10)===s?s:null}
 function err(message,status=400,code="BAD_REQUEST"){const e=new Error(message);e.status=status;e.code=code;return e}
 async function ownedCar(env,user,token,carId){const rows=await supabaseRest(env,`cars?select=id,registration_no&id=eq.${encodeURIComponent(carId)}&user_id=eq.${encodeURIComponent(user.id)}&limit=1`,{method:"GET"},token);return rows?.[0]||null}
 function decorate(rows){const now=today();const valid=rows.filter(r=>r.expiry_date).sort((a,b)=>String(b.expiry_date).localeCompare(String(a.expiry_date)));const current=valid.find(r=>String(r.expiry_date)>=now)||null;return rows.map(r=>({...r,puc_status:current?.id===r.id?"current":"archive"})).sort((a,b)=>String(b.expiry_date||"").localeCompare(String(a.expiry_date||"")))}
