@@ -1,9 +1,9 @@
 import { requireUser, handleAuthError } from "./auth.js";
 import { error, json } from "./response.js";
-import { listVehicles, getVehicle } from "./vehicles.js";
+import { listVehicles, getVehicle, patchVehicleRc } from "./vehicles.js";
 import { listServiceHistory } from "./records.js";
 import { listDocuments } from "./documents.js";
-import { listInsuranceHistory } from "./insurance.js";
+import { listInsuranceHistory, createInsurancePolicy } from "./insurance.js";
 import { listPucHistory } from "./puc.js";
 import { getProfile } from "./profile.js";
 import { listRenewals } from "./renewals.js";
@@ -133,6 +133,11 @@ export default {
         return json({ ok: true, data: vehicle }, 200, origin);
       }
 
+      if (request.method === "PATCH" && parts[0] === "vehicles" && parts.length === 3 && parts[2] === "rc") {
+        const input = await request.json();
+        return json({ ok: true, data: await patchVehicleRc(env, user, userToken, parts[1], input) }, 200, origin);
+      }
+
       if (request.method === "GET" && parts[0] === "service-history") {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listServiceHistory(env, user, userToken, carId) }, 200, origin);
@@ -163,6 +168,11 @@ export default {
         const documentId = url.searchParams.get("document_id");
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await deleteR2Document(env, user, userToken, documentId, carId) }, 200, origin);
+      }
+
+      if (request.method === "POST" && parts[0] === "insurance" && parts.length === 1) {
+        const input = await request.json();
+        return json({ ok: true, data: await createInsurancePolicy(env, user, userToken, input) }, 201, origin);
       }
 
       if (request.method === "GET" && parts[0] === "insurance") {
