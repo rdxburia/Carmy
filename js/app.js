@@ -1358,7 +1358,6 @@ function openDocUploader(preselectedType=''){
        const scoreRedirect=classification.redirect&&detectedSlot&&detectedSlot!==expected;
        if(scoreRedirect)return gate(detected==='puc'?'This file looks like a PUC. Upload it in the PUC section.':detected==='rc'?'This file looks like an RC. Upload it in the RC section.':'This file looks like insurance. Upload it in the Insurance section.',detectedSlot);
        if(classification.ambiguous||detected==='other'||(detectedSlot&&detectedSlot!==expected))return gate('This file looks like '+(detectedSlot==='insurance'?'Insurance':detectedSlot==='rc'?'an RC':detectedSlot==='puc'?'a PUC':'an unclassified document')+' (confidence '+classification.confidence+'). Continue as '+(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+' or open in the detected section?',detectedSlot||expected,'choice');
-       const initial=extracted.data;
        const preValidation=CarmyExtraction.validate(initial,car,t);
        const vehicleMismatch=preValidation.errors.some(x=>/does not match|different vehicle|selected RC/i.test(x));
        if(vehicleMismatch)return gate(t==='puc'?'This PUC belongs to a different vehicle.':'This policy belongs to a different vehicle.','');
