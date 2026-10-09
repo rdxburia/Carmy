@@ -671,6 +671,7 @@ $('email')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('password')?.foc
 const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.signOut();
 async function boot(){
  wireDateInputs(document);
+ if(!document.body.dataset.dateMaskWired){document.body.dataset.dateMaskWired='1';document.addEventListener('input',e=>{const el=e.target;if(!el?.matches?.('input[data-date-input]'))return;let s=el.value.replace(/[^0-9]/g,'').slice(0,8);if(s.length>4)s=s.slice(0,2)+'-'+s.slice(2,4)+'-'+s.slice(4);else if(s.length>2)s=s.slice(0,2)+'-'+s.slice(2);el.value=s})}
  if($('date')&&!$('date').value)$('date').value=formatDateNice(istTodayClient());
  handleAuthRedirectError();
  let s=await db.auth.getSession();
