@@ -6,7 +6,7 @@ function addDays(iso,days){const d=new Date(String(iso)+"T00:00:00Z");d.setUTCDa
 function clean(v){const s=String(v??"").trim();return s||null}
 function eqKey(v){return clean(v)?.toLowerCase().replace(/\s+/g,"")||null}
 function err(message,status=400,code="BAD_REQUEST"){const e=new Error(message);e.status=status;e.code=code;return e}
-function validIsoDate(v){if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(v||'')))return false;const d=new Date(v+'T00:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v}
+function validIsoDate(v){if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(v||'')))return false;const d=new Date(v+'T00:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v}
 function key(v){return clean(v)?.toUpperCase().replace(/[^A-Z0-9]/g,'')||null}
 
 async function ownedCar(env,user,token,carId){
