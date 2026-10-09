@@ -86,7 +86,7 @@ async function workerDelete(path){
   return workerRequest(path,{method:'DELETE'});
 }
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K);return true}return false}
-function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>Supabase connection library load nahi hui. Browser extension/ad-blocker ya network CDN ko block kar raha ho sakta hai.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
+function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
 let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
 let pendingVerificationEmail='',verificationTimer=null,verificationSeconds=0;
@@ -831,9 +831,9 @@ function selectedChoices(id){
 }
 const insuranceCompanies=['Not Available','Acko General Insurance','Bajaj General Insurance','Cholamandalam MS General Insurance','Generali Central Insurance','Go Digit General Insurance','HDFC ERGO General Insurance','ICICI Lombard General Insurance','IFFCO Tokio General Insurance','Zurich Kotak General Insurance','Kshema General Insurance','Liberty General Insurance','Magma General Insurance','National Insurance Company','Navi General Insurance','Raheja QBE General Insurance','Reliance General Insurance','Royal Sundaram General Insurance','SBI General Insurance','Shriram General Insurance','Tata AIG General Insurance','The New India Assurance','The Oriental Insurance','United India Insurance','Universal Sompo General Insurance','Zuno General Insurance'];
 const pucStates=['AP','AR','AS','BR','CG','GA','GJ','HR','HP','JH','KA','KL','MP','MH','MN','ML','MZ','NL','OD','PB','RJ','SK','TN','TS','TR','UP','UK','WB','AN','CH','DN','DL','JK','LA','LD','PY'];
-const logoutJokes=['Insurance nahi? Car boli: mujhe risk management bhi chahiye 😄','PUC nahi? Car ka suggestion: pehle pollution check, phir full speed! 😂','Documents incomplete hain—car ne bola, “Bhai paperwork bhi maintenance hai!” 😄','Insurance/PUC missing: dashboard ne aaj driving se zyada paperwork choose kiya 😅'];
-const insuranceJokes=['Insurance missing hai — car boli: pehle mujhe insured karo, phir road trip! 😄','Insurance available nahi hai. Car ka kehna hai: risk lo mat, insurance karao! 🚗🛡️','Car ready hai, bas insurance protection missing hai. Pehle insurance karao! 😅'];
-const pucJokes=['PUC nahi hai — car boli: pehle pollution check, phir full speed! 😂','PUC pending hai. Car ka message: mujhe clean-air certificate dilwao! 😄','PUC ke bina ride nahi — pehle PUC karao, phir safar enjoy karo! 🚗💨'];
+const logoutJokes=['Insurance is missing. Protect your vehicle before driving.','PUC is missing. Complete an emissions test before driving.','Documents incomplete hain—car ne bola, Vehicle paperwork is part of maintenance.','Insurance/PUC missing: dashboard ne aaj driving se zyada paperwork choose kiya 😅'];
+const insuranceJokes=['Insurance is missing. Add a valid policy before driving.','Insurance is not available. Please add a valid policy.','Insurance protection is missing. Add a valid policy before driving.'];
+const pucJokes=['PUC is missing. Complete an emissions test before driving.','PUC is pending. Add a valid pollution certificate.','A valid PUC certificate is required before driving.'];
 function randomJoke(){return logoutJokes[Math.floor(Math.random()*logoutJokes.length)]}
 function randomInsuranceJoke(){return insuranceJokes[Math.floor(Math.random()*insuranceJokes.length)]}
 function randomPucJoke(){return pucJokes[Math.floor(Math.random()*pucJokes.length)]}
@@ -841,7 +841,7 @@ function policeLogoutAnimation(type){
   let old=document.getElementById('policeLogoutOverlay');if(old)old.remove();
   let title=type==='both'?'INSURANCE + PUC MISSING':type==='insurance'?'INSURANCE NOT AVAILABLE':'PUC NOT AVAILABLE';
   let amount=type==='both'?'₹7,000':type==='insurance'?'₹2,000':'₹5,000';
-  let joke=type==='both'?'Bhai, Insurance + PUC dono missing? HP police style mein ₹7,000 ka compounding amount! 😂🚔':type==='insurance'?'Insurance nahi? HP first-offence compounding ₹2,000 — police boli, pehle insurance karao! 😂🚔':'PUC nahi? HP first-offence compounding ₹5,000 — police boli, pehle PUC karao! 😂🚔';
+  let joke=type==='both'?'Bhai, Insurance + PUC dono missing? HP police style mein ₹7,000 ka compounding amount! 😂🚔':type==='insurance'?'Insurance may be required by law. Check the current official penalty for your state.':'A valid PUC may be required by law. Check the current official penalty for your state.';
   let o=document.createElement('div');o.id='policeLogoutOverlay';o.innerHTML='<div class="police-light blue"></div><div class="police-light red"></div><div class="police-box"><div class="police-badge">🚨</div><div class="police-title">'+title+'</div><div class="police-sub">VEHICLE ACCESS STOPPED</div><div class="police-fine">'+amount+'</div><div class="police-joke">'+esc(joke)+'</div><div class="police-note">Valid Insurance & PUC required to continue</div><button class="police-try" id="policeTryAgain">TRY AGAIN / GO TO LOGIN</button></div>';
   o.style='position:fixed;inset:0;z-index:999999;background:#050914;color:#fff;display:grid;place-items:center;overflow:hidden;font-family:inherit';
   let s=document.createElement('style');s.id='policeLogoutStyle';s.textContent='#policeLogoutOverlay:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 30% 50%,rgba(30,110,255,.32),transparent 35%),radial-gradient(circle at 70% 50%,rgba(255,30,50,.32),transparent 35%);animation:policePulse .55s infinite alternate}#policeLogoutOverlay .police-light{position:absolute;top:0;width:50%;height:12px;filter:blur(5px);animation:policeFlash .55s infinite alternate}.police-light.blue{left:0;background:#168cff;box-shadow:0 0 45px 18px #168cff}.police-light.red{right:0;background:#ff2038;box-shadow:0 0 45px 18px #ff2038;animation-delay:.275s}.police-box{position:relative;text-align:center;width:min(560px,90vw);padding:42px 24px;border:1px solid rgba(255,255,255,.18);border-radius:24px;background:rgba(7,13,27,.92);box-shadow:0 30px 100px rgba(0,0,0,.65);animation:policeIn .45s ease-out}.police-badge{font-size:58px;animation:policeShake .45s infinite alternate}.police-title{font-size:clamp(26px,6vw,48px);font-weight:950;letter-spacing:1px;margin-top:10px}.police-sub{font-size:14px;font-weight:800;letter-spacing:3px;color:#ff4054;margin-top:8px}.police-fine{display:inline-block;margin-top:18px;padding:10px 16px;border:1px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,40,55,.12);font-size:20px;font-weight:900;letter-spacing:.5px}.police-joke{font-size:18px;font-weight:750;margin:22px auto 12px;max-width:500px}.police-note{font-size:13px;color:#aeb9cf}.police-try{margin-top:24px;border:0;border-radius:12px;padding:13px 22px;background:#fff;color:#111827;font-weight:900;cursor:pointer;box-shadow:0 8px 25px rgba(0,0,0,.25)}.police-try:hover{transform:translateY(-1px)}@keyframes policeFlash{from{opacity:.3}to{opacity:1}}@keyframes policePulse{from{opacity:.45}to{opacity:1}}@keyframes policeShake{from{transform:rotate(-4deg)}to{transform:rotate(4deg)}}@keyframes policeIn{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}';
@@ -1347,18 +1347,20 @@ function openDocUploader(preselectedType=''){
        label.innerHTML='<span class="inline-spinner"></span> EXTRACTING...';
        extracted=await CarmyExtraction.extract(f,t,(p,s)=>{label.textContent=(s||'EXTRACTING')+' '+Math.round((p||0)*100)+'%';});
        const detected=extracted.detected_type;
-       const expected=t==='rc'?'rc':t==='puc'?'puc':'insurance-car';
-       const details=t==='insurance'?('Detected Reg: '+(extracted.data.reg_no||'Not read')+' • Chassis: '+(extracted.data.chassis_no||'Not read')+' • Insured: '+(extracted.data.insured_name||'Not read')):t==='puc'?('Detected Reg: '+(extracted.data.registration_no||'Not read')):'Detected Reg: '+(extracted.data.registration_no||'Not read');
-       const gate=(message,next)=>{m.querySelector('.doc-upload-card').innerHTML='<div class="ex-review-card" style="max-width:620px"><div class="ex-review-head"><div><div class="ex-review-kicker">DOCUMENT TYPE CHECK</div><h2>'+esc(message)+'</h2><p>'+esc(details)+'</p></div><button class="ghost" id="gateClose" type="button">Cancel</button></div><div class="ex-review-footer"><span></span><div><button class="primary" id="gateNext" type="button">'+esc(next?'OPEN '+next.toUpperCase()+' SECTION':'CLOSE')+'</button></div></div></div>';wireDateInputs(m);document.getElementById('gateClose').onclick=()=>m.remove();document.getElementById('gateNext').onclick=()=>{m.remove();if(next)openDocUploader(next)}};
-       if(t==='insurance'&&detected==='insurance-two-wheeler')return gate('Ye policy is gaadi ki nahi hai','');
-       if(t!=='puc'&&detected==='puc')return gate('Ye PUC lag raha hai, PUC section me upload karo','puc');
-       if(t==='puc'&&detected!=='puc')return gate(detected==='insurance-two-wheeler'||detected==='insurance-car'?'Ye Insurance lag raha hai, Insurance section me upload karo':'Ye document PUC nahi lag raha hai','insurance');
-       if(t==='rc'&&detected!=='rc')return gate(detected==='insurance-car'?'Ye Insurance lag raha hai, Insurance section me upload karo':detected==='puc'?'Ye PUC lag raha hai, PUC section me upload karo':'Ye RC nahi lag raha hai',detected==='insurance-car'?'insurance':detected==='puc'?'puc':'');
-       if(t==='insurance'&&detected!=='insurance-car')return gate(detected==='rc'?'Ye RC lag raha hai, RC section me upload karo':'Ye document car insurance nahi lag raha hai',detected==='rc'?'rc':'');
+       const expected=t==='rc'?'rc':t==='puc'?'puc':'insurance';
        const initial=extracted.data;
+       const details=t==='insurance'?('Registration: '+(initial.reg_no||'Not read')+' | Chassis: '+(initial.chassis_no||'Not read')+' | Insured: '+(initial.insured_name||'Not read')):t==='puc'?('Registration: '+(initial.registration_no||'Not read')):('Registration: '+(initial.registration_no||'Not read'));
+       const gate=(message,next,buttons='redirect')=>{m.querySelector('.doc-upload-card').innerHTML='<div class="ex-review-card" style="max-width:620px"><div class="ex-review-head"><div><div class="ex-review-kicker">DOCUMENT TYPE CHECK</div><h2>'+esc(message)+'</h2><p>'+esc(details)+'</p></div><button class="ghost" id="gateClose" type="button">Cancel</button></div><div class="ex-review-footer"><span></span><div>'+(buttons==='choice'?'<button class="ghost" id="gateContinue" type="button">Continue as '+esc(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+'</button><button class="primary" id="gateNext" type="button">Open '+esc(next.toUpperCase())+' Section</button>':'<button class="primary" id="gateNext" type="button">'+esc(next?'Open '+next.toUpperCase()+' Section':'Close')+'</button>')+'</div></div></div>';wireDateInputs(m);document.getElementById('gateClose').onclick=()=>m.remove();document.getElementById('gateNext').onclick=()=>{m.remove();if(next)openDocUploader(next)};const cont=document.getElementById('gateContinue');if(cont)cont.onclick=()=>{m.remove();openDocUploader(t)}}; 
+       if(t==='insurance'&&detected==='insurance-two-wheeler')return gate((window.CARMY_MESSAGES?.documentDifferentVehicle||'This policy belongs to a different vehicle.'),'');
+       const classification=extracted.classification||CarmyExtraction.classifyDetailed(extracted.text,t);
+       const typeMap={'insurance-car':'insurance','insurance-two-wheeler':'insurance','rc':'rc','puc':'puc'};
+       const detectedSlot=typeMap[detected]||'';
+       const scoreRedirect=classification.redirect&&detectedSlot&&detectedSlot!==expected;
+       if(scoreRedirect)return gate(detected==='puc'?(window.CARMY_MESSAGES?.pucWrongSection||'This file looks like a PUC. Upload it in the PUC section.'):detected==='rc'?(window.CARMY_MESSAGES?.rcWrongSection||'This file looks like an RC. Upload it in the RC section.'):(window.CARMY_MESSAGES?.insuranceWrongSection||'This file looks like insurance. Upload it in the Insurance section.'),detectedSlot);
+       if(classification.ambiguous||detected==='other'||(detectedSlot&&detectedSlot!==expected))return gate('This file looks like '+(detectedSlot==='insurance'?'Insurance':detectedSlot==='rc'?'an RC':detectedSlot==='puc'?'a PUC':'an unclassified document')+' (confidence '+classification.confidence+'). Continue as '+(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+' or open in the detected section?',detectedSlot||expected,'choice');
        const preValidation=CarmyExtraction.validate(initial,car,t);
        const vehicleMismatch=preValidation.errors.some(x=>/does not match|different vehicle|selected RC/i.test(x));
-       if(vehicleMismatch)return gate(t==='puc'?'This PUC belongs to a different vehicle.':'Ye policy is gaadi ki nahi hai','');
+       if(vehicleMismatch)return gate(t==='puc'?'This PUC belongs to a different vehicle.':'This policy belongs to a different vehicle.','');
        const saved=t==='insurance'?insuranceHistory.find(x=>x.policy_number&&String(x.policy_number).replace(/\s+/g,'').toLowerCase()===String(initial.policy_number||'').replace(/\s+/g,'').toLowerCase()):t==='puc'?pucHistory.find(x=>x.certificate_number&&String(x.certificate_number).replace(/[^A-Z0-9]/gi,'').toUpperCase()===String(initial.certificate_number||'').replace(/[^A-Z0-9]/gi,'').toUpperCase()):null;
        reviewed=await openExtractionReview(t,initial,preValidation,{thumbnail:extracted.thumbnail,saved});
        if(!reviewed){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return;}
@@ -1491,6 +1493,11 @@ function report(){
  '<div class="report-section"><div class="report-section-title">INSURANCE HISTORY — ARCHIVE</div><table class="report-table"><thead><tr><th>Sr</th><th>Provider Name</th><th>Policy Number</th><th>Period</th><th>Claim</th><th>Claim Invoice No.</th></tr></thead><tbody>'+oldHtml+'</tbody></table></div>'+
  '<div class="report-section"><div class="report-section-title">CURRENT PUC</div>'+pucCurrentHtml+'</div><div class="report-section"><div class="report-section-title">PUC HISTORY — ARCHIVE</div><table class="report-table"><thead><tr><th>Sr</th><th>Test Date</th><th>Valid Until</th><th>Certificate No.</th><th>Cost</th></tr></thead><tbody>'+pucOldHtml+'</tbody></table></div>'+
  '<div class="report-section"><div class="report-section-title">SERVICE & REPAIR HISTORY</div><table class="report-table"><thead><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th></tr></thead><tbody>'+records.map(r=>'<tr><td>'+esc(formatDateNice(r.service_date))+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+(r.record_items?.length?'<small>'+esc(r.record_items.map(x=>x.item_name).join(', '))+'</small>':'')+'</td><td>'+money(r.total_cost)+'</td></tr>').join('')+'</tbody></table><div class="report-total"><span>Total Service Cost</span><b>'+money(total)+'</b></div></div>'+
+ '<div class="report-section"><div class="report-section-title">DOCUMENTS</div><div class="report-document-grid">'+[
+ {type:'rc',label:'Registration Certificate',number:car.registration_no,validity:car.rc_validity,doc:(docs||[]).find(d=>d.document_type==='rc'&&d.active&&!d.archived_at)},
+ {type:'insurance',label:'Current Insurance',number:current?.policy_number,validity:current?.expiry_date,doc:(docs||[]).find(d=>d.id===current?.source_document_id)||((docs||[]).find(d=>d.document_type==='insurance'&&d.active&&!d.archived_at))},
+ {type:'puc',label:'Current PUC',number:pucCurrent?.certificate_number,validity:pucCurrent?.expiry_date,doc:(docs||[]).find(d=>d.id===pucCurrent?.source_document_id)||((docs||[]).find(d=>d.document_type==='puc'&&d.active&&!d.archived_at))}
+].map(x=>'<article class="report-document-card"><b>'+esc(x.label)+'</b><span>Number: '+esc(x.number||'—')+'</span><span>Valid until: '+esc(x.validity?formatDateNice(x.validity):'—')+'</span>'+(x.doc?'<button type="button" class="report-doc-view" onclick="openDocumentPreview(\''+esc(x.doc.id)+'\',\''+esc(x.doc.storage_path||'')+'\',\''+esc(x.doc.file_name||x.label)+'\')">View</button>':'<span class="report-doc-missing">Not uploaded</span>')+'</article>').join('')+'</div></div>'+
  '<div class="report-footer"><span>Generated by CarCare Cloud</span><span>'+formatDateNice(new Date().toISOString().slice(0,10))+'</span></div></div>';
 }
 waitForSupabase();
@@ -1844,7 +1851,24 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
    rules during native window.print().
    ========================================================= */
 
-async function printVehicleReport(){
+function showReportPrintOptions(){
+ const key='carmy-report-doc-print-'+String(user?.id||'user');
+ let saved={};try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch(_){}
+ const types=[
+  {key:'rc',label:'Registration Certificate',doc:(docs||[]).find(d=>d.document_type==='rc'&&d.active&&!d.archived_at)},
+  {key:'insurance',label:'Current Insurance',doc:(docs||[]).find(d=>d.id===insuranceHistory.find(x=>x.car_id===car?.id&&x.policy_status==='current')?.source_document_id)||((docs||[]).find(d=>d.document_type==='insurance'&&d.active&&!d.archived_at))},
+  {key:'puc',label:'Current PUC',doc:(docs||[]).find(d=>d.id===pucHistory.find(x=>x.car_id===car?.id&&x.puc_status==='current')?.source_document_id)||((docs||[]).find(d=>d.document_type==='puc'&&d.active&&!d.archived_at))},
+  {key:'archiveInsurance',label:'Archive Insurance policies',doc:(docs||[]).find(d=>d.document_type==='insurance'&&d.archived_at)},
+  {key:'archivePuc',label:'Archive PUC certificates',doc:(docs||[]).find(d=>d.document_type==='puc'&&d.archived_at)}
+ ];
+ document.getElementById('reportPrintOptions')?.remove();
+ const m=document.createElement('div');m.id='reportPrintOptions';m.className='report-print-options';
+ m.innerHTML='<div class="report-print-options-card" role="dialog" aria-modal="true"><h2>Include documents with this report?</h2><p class="muted">Selected documents will be placed after the vehicle history.</p>'+types.map((x,i)=>'<label><input type="checkbox" data-print-doc="'+x.key+'" '+(x.doc?'':'disabled')+' '+(saved[x.key]===undefined?(i<3?'checked':''):saved[x.key]?'checked':'')+'><span>'+x.label+(x.doc?'':' <small>Not uploaded</small>')+'</span></label>').join('')+'<div class="actions"><button type="button" id="reportPrintCancel">Cancel</button><button type="button" class="primary" id="reportPrintGo">Print</button></div><p id="reportPrintStatus" role="status"></p></div>';
+ document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.remove()};m.querySelector('#reportPrintCancel').onclick=()=>m.remove();
+ m.querySelector('#reportPrintGo').onclick=()=>{const selection={};m.querySelectorAll('[data-print-doc]').forEach(x=>selection[x.dataset.printDoc]=x.checked);try{localStorage.setItem(key,JSON.stringify(selection))}catch(_){}m.remove();printVehicleReport(selection)};
+}
+async function printVehicleReport(selection=null){
+  if(!selection){showReportPrintOptions();return;}
   const source = document.getElementById('reportArea');
   const original = source?.querySelector('.report-sheet');
 
@@ -1924,6 +1948,33 @@ async function printVehicleReport(){
 
   stage.appendChild(css);
   stage.appendChild(clone);
+  const chosen=[];
+  const activeDocs=Array.isArray(docs)?docs:[];
+  const curIns=(insuranceHistory||[]).find(x=>x.car_id===car?.id&&x.policy_status==='current');
+  const curPuc=(pucHistory||[]).find(x=>x.car_id===car?.id&&x.puc_status==='current');
+  const pickDoc=(id,type)=>activeDocs.find(d=>id&&d.id===id)||activeDocs.find(d=>d.document_type===type&&d.active&&!d.archived_at);
+  if(selection.rc){const d=pickDoc(null,'rc');if(d)chosen.push({doc:d,label:'Registration Certificate',number:car?.registration_no,validity:car?.rc_validity})}
+  if(selection.insurance){const d=pickDoc(curIns?.source_document_id,'insurance');if(d)chosen.push({doc:d,label:'Current Insurance',number:curIns?.policy_number||car?.insurance_number,validity:curIns?.expiry_date||car?.insurance_expiry})}
+  if(selection.puc){const d=pickDoc(curPuc?.source_document_id,'puc');if(d)chosen.push({doc:d,label:'Current PUC',number:curPuc?.certificate_number||car?.puc_certificate_no,validity:curPuc?.expiry_date||car?.puc_expiry})}
+  const archives=[];
+  if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived Insurance',number:d.file_name,validity:d.document_expiry}));
+  if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived PUC',number:d.file_name,validity:d.document_expiry}));
+  chosen.push(...archives);
+  if(chosen.length){
+    const status=document.createElement('div');status.className='report-document-print-page';status.innerHTML='<h3>Preparing documents...</h3><p>Loading selected document files. Please wait.</p>';stage.appendChild(status);
+    const getUrl=async d=>{if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);if(r.error)throw r.error;return r.data.signedUrl};
+    const ensurePdfJs=async()=>{if(window.pdfjsLib)return window.pdfjsLib;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=resolve;s.onerror=()=>reject(new Error('PDF renderer failed to load'));document.head.appendChild(s)});window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';return window.pdfjsLib};
+    let failed=[];
+    for(const item of chosen){try{
+      const url=await getUrl(item.doc),ext=(item.doc.file_name||'').split('.').pop().toLowerCase(),header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
+      if(ext==='pdf'){
+        const pdfjs=await ensurePdfJs(),resp=await fetch(url);if(!resp.ok)throw new Error('Document download failed');const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
+        for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),vp=page.getViewport({scale:1.4}),canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap)}
+      }else{const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+'</h3>';const img=document.createElement('img');img.src=url;await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});wrap.appendChild(img);stage.appendChild(wrap)}
+    }catch(err){console.error('Document print load failed',item.doc?.id,err);failed.push(item.label)}}
+    status.remove();
+    if(failed.length&&!confirm('Could not load: '+failed.join(', ')+'. Print without these documents?')){stage.remove();return}
+  }
   document.body.appendChild(stage);
 
   const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
