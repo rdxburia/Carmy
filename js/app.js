@@ -1873,168 +1873,168 @@ function showReportPrintOptions(){
 }
 async function printVehicleReport(selection=null){
   if(!selection){showReportPrintOptions();return;}
-  const source = document.getElementById('reportArea');
-  const original = source?.querySelector('.report-sheet');
-
-  if(!original || !original.innerHTML.trim()){
-    toast('Vehicle Report is still loading. Please open the report once and try again.','error');
-    return;
+  const source=document.getElementById('reportArea');
+  const original=source?.querySelector('.report-sheet');
+  if(!original||!original.innerHTML.trim()){
+    toast('Vehicle Report is still loading. Please open the report once and try again.','error');return;
   }
-
-  try{
-    await loadPdfEngine();
-  }catch(err){
+  let html2pdf;
+  try{html2pdf=await loadPdfEngine()}catch(err){
     console.error('PDF engine load error:',err);
-    toast('PDF engine could not be loaded. Check your connection and try again.','error');
-    return;
+    toast('PDF engine could not be loaded. Check your connection and try again.','error');return;
   }
-
-  /*
-   * Stable PDF export:
-   * Put a REAL, VISIBLE copy in a full-screen print stage.
-   * html2canvas is unreliable with hidden/off-screen/fixed-only nodes.
-   * The clone therefore remains visible and centered while html2pdf
-   * measures and renders it.
-   */
   document.getElementById('vehicleReportPdfStage')?.remove();
-
   const stage=document.createElement('div');
   stage.id='vehicleReportPdfStage';
-  stage.style.cssText=[
-    'position:fixed',
-    'inset:0',
-    'width:100vw',
-    'height:100vh',
-    'overflow:auto',
-    'background:#fff',
-    'z-index:2147483647',
-    'display:flex',
-    'justify-content:center',
-    'align-items:flex-start',
-    'padding:20px',
-    'box-sizing:border-box'
-  ].join(';');
-
+  stage.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;overflow:auto;background:#fff;z-index:2147483647;display:flex;justify-content:center;align-items:flex-start;padding:12px;box-sizing:border-box';
   const clone=original.cloneNode(true);
   clone.removeAttribute('id');
-  clone.style.cssText=[
-    'display:block',
-    'flex:0 0 auto',
-    'width:190mm!important',
-    'min-width:190mm!important',
-    'max-width:190mm!important',
-    'min-height:277mm!important',
-    'height:auto!important',
-    'margin:0!important',
-    'padding:10mm!important',
-    'box-sizing:border-box!important',
-    'background:#fff!important',
-    'color:#172033!important',
-    'box-shadow:none!important',
-    'border-radius:0!important',
-    'overflow:visible!important',
-    'transform:none!important'
-  ].join(';');
-
+  clone.style.cssText='display:block;flex:0 0 auto;width:190mm!important;min-width:190mm!important;max-width:190mm!important;min-height:0!important;height:auto!important;margin:0!important;padding:8mm!important;box-sizing:border-box!important;background:#fff!important;color:#172033!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;transform:none!important';
   const css=document.createElement('style');
   css.textContent=[
     '#vehicleReportPdfStage *{box-sizing:border-box!important}',
-    '#vehicleReportPdfStage .report-grid{width:100%!important;max-width:100%!important}',
-    '#vehicleReportPdfStage .report-two{width:100%!important;max-width:100%!important}',
-    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important;break-inside:auto!important;page-break-inside:auto!important}',
+    '#vehicleReportPdfStage .report-sheet{width:190mm!important;min-height:0!important;height:auto!important;overflow:visible!important;font-size:9.5pt!important}',
+    '#vehicleReportPdfStage .report-brand{overflow:visible!important;display:flex!important;align-items:center!important;gap:5mm!important}',
+    '#vehicleReportPdfStage .report-brand-logo{display:block!important;width:auto!important;height:15mm!important;max-width:48mm!important;max-height:15mm!important;object-fit:contain!important;overflow:visible!important;flex:0 0 auto!important}',
+    '#vehicleReportPdfStage .report-head{break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-section{margin:3mm 0!important;padding:0!important}',
+    '#vehicleReportPdfStage .report-section-title{font-size:8pt!important;letter-spacing:.08em!important;margin:3mm 0 1.5mm!important;break-after:avoid!important;page-break-after:avoid!important}',
+    '#vehicleReportPdfStage .report-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:2mm!important;width:100%!important;max-width:100%!important}',
+    '#vehicleReportPdfStage .report-grid>div{padding:2mm!important;min-width:0!important;break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-grid span{font-size:6.5pt!important}',
+    '#vehicleReportPdfStage .report-grid b{font-size:8.5pt!important;overflow-wrap:anywhere!important}',
+    '#vehicleReportPdfStage .report-current-policy{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:2mm!important;padding:3mm!important}',
+    '#vehicleReportPdfStage .report-current-policy span{font-size:6.5pt!important}',
+    '#vehicleReportPdfStage .report-current-policy b{font-size:8.5pt!important;overflow-wrap:anywhere!important}',
+    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important;border-collapse:collapse!important;font-size:7.5pt!important;break-inside:auto!important;page-break-inside:auto!important}',
     '#vehicleReportPdfStage .report-table thead{display:table-header-group!important}',
     '#vehicleReportPdfStage .report-table tr{break-inside:avoid!important;page-break-inside:avoid!important}',
-    '#vehicleReportPdfStage .report-table th,#vehicleReportPdfStage .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
-    '#vehicleReportPdfStage .report-grid,#vehicleReportPdfStage .report-two,#vehicleReportPdfStage .report-panel,#vehicleReportPdfStage .report-total,#vehicleReportPdfStage .report-footer{break-inside:avoid!important;page-break-inside:avoid!important}',
-    '#vehicleReportPdfStage .report-head{break-inside:avoid!important;page-break-inside:avoid!important}',
-    '#vehicleReportPdfStage img{max-width:100%!important;height:auto!important}'
+    '#vehicleReportPdfStage .report-table th{height:auto!important;padding:2mm 1.2mm!important;font-size:7pt!important;vertical-align:middle!important}',
+    '#vehicleReportPdfStage .report-table td{padding:1.5mm 1.2mm!important;vertical-align:top!important;overflow-wrap:anywhere!important;word-break:normal!important}',
+    '#vehicleReportPdfStage .report-table td.date,#vehicleReportPdfStage .report-table td.cost{white-space:nowrap!important}',
+    '#vehicleReportPdfStage .report-table td.policy-no{font-size:7pt!important;overflow-wrap:anywhere!important;word-break:break-word!important}',
+    '#vehicleReportPdfStage .report-document-grid{display:block!important}',
+    '#vehicleReportPdfStage .report-document-card{display:grid!important;grid-template-columns:38mm 1fr 1fr!important;gap:2mm!important;padding:2mm 0!important;border:0!important;border-bottom:1px solid #e5e7eb!important;border-radius:0!important;break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-document-card>b{font-size:8pt!important}',
+    '#vehicleReportPdfStage .report-document-card>span{font-size:7.5pt!important}',
+    '#vehicleReportPdfStage .report-doc-view,#vehicleReportPdfStage button{display:none!important}',
+    '#vehicleReportPdfStage .report-incomplete-label{font-size:8pt!important;color:#98a2b3!important;font-style:italic!important}',
+    '#vehicleReportPdfStage .report-footer{margin-top:3mm!important;padding-top:2mm!important;font-size:7pt!important;break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-document-print-page{width:190mm!important;min-height:0!important;height:auto!important;padding:3mm!important;margin:0!important;background:#fff!important;break-before:page!important;page-break-before:always!important;break-after:auto!important;page-break-after:auto!important}',
+    '#vehicleReportPdfStage .report-document-print-page h3{font-size:8.5pt!important;margin:0 0 3mm!important;padding-bottom:2mm!important}',
+    '#vehicleReportPdfStage .report-document-print-page img,#vehicleReportPdfStage .report-document-print-page canvas{display:block!important;width:auto!important;height:auto!important;max-width:100%!important;max-height:245mm!important;object-fit:contain!important;margin:0 auto!important;break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-incomplete-row{color:#98a2b3!important}'
   ].join('');
-
   stage.appendChild(css);
   stage.appendChild(clone);
-  const chosen=[];
+  document.body.appendChild(stage);
+  if(selection.hideIncomplete)clone.querySelectorAll('[data-incomplete="1"]').forEach(row=>row.remove());
+
   const activeDocs=Array.isArray(docs)?docs:[];
   const curIns=(insuranceHistory||[]).find(x=>x.car_id===car?.id&&x.policy_status==='current');
   const curPuc=(pucHistory||[]).find(x=>x.car_id===car?.id&&x.puc_status==='current');
   const pickDoc=(id,type)=>activeDocs.find(d=>id&&d.id===id)||activeDocs.find(d=>d.document_type===type&&d.active&&!d.archived_at);
+  const chosen=[];
   if(selection.rc){const d=pickDoc(null,'rc');if(d)chosen.push({doc:d,label:'Registration Certificate',number:car?.registration_no,validity:car?.rc_validity})}
   if(selection.insurance){const d=pickDoc(curIns?.source_document_id,'insurance');if(d)chosen.push({doc:d,label:'Current Insurance',number:curIns?.policy_number||car?.insurance_number,validity:curIns?.expiry_date||car?.insurance_expiry})}
   if(selection.puc){const d=pickDoc(curPuc?.source_document_id,'puc');if(d)chosen.push({doc:d,label:'Current PUC',number:curPuc?.certificate_number||car?.puc_certificate_no,validity:curPuc?.expiry_date||car?.puc_expiry})}
-  const archives=[];
-  if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived Insurance',number:d.file_name,validity:d.document_expiry}));
-  if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived PUC',number:d.file_name,validity:d.document_expiry}));
-  chosen.push(...archives);
-  if(chosen.length){
-    const status=document.createElement('div');status.className='report-document-print-page';status.innerHTML='<h3>Preparing documents...</h3><p>Loading selected document files. Please wait.</p>';stage.appendChild(status);
-    const getUrl=async d=>{if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);if(r.error)throw r.error;return r.data.signedUrl};
-    const ensurePdfJs=async()=>{if(window.pdfjsLib)return window.pdfjsLib;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=resolve;s.onerror=()=>reject(new Error('PDF renderer failed to load'));document.head.appendChild(s)});window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';return window.pdfjsLib};
-    let failed=[];
-    for(const item of chosen){try{
-      const url=await getUrl(item.doc),ext=(item.doc.file_name||'').split('.').pop().toLowerCase(),header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
-      if(ext==='pdf'){
-        const pdfjs=await ensurePdfJs(),resp=await fetch(url);if(!resp.ok)throw new Error('Document download failed');const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
-        for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),vp=page.getViewport({scale:1.4}),canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap)}
-      }else{const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+'</h3>';const img=document.createElement('img');img.src=url;await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});wrap.appendChild(img);stage.appendChild(wrap)}
-    }catch(err){console.error('Document print load failed',item.doc?.id,err);failed.push(item.label)}}
-    status.remove();
-    if(failed.length&&!confirm('Could not load: '+failed.join(', ')+'. Print without these documents?')){stage.remove();return}
-  }
-  document.body.appendChild(stage);
+  if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>chosen.push({doc:d,label:'Archived Insurance',number:d.document_name||d.file_name,validity:d.document_expiry}));
+  if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>chosen.push({doc:d,label:'Archived PUC',number:d.document_name||d.file_name,validity:d.document_expiry}));
 
-  const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
-  if(button){button.disabled=true;button.textContent='GENERATING PDF…';}
-
-  const filename=`Carmy_Vehicle_Report_${(
-    typeof car!=='undefined' && car?.registration_no || 'Vehicle'
-  ).toString().replace(/[^a-z0-9_-]+/gi,'_')}.pdf`;
-
-  const options={
-    margin:[10,10,10,10],
-    filename,
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{
-      scale:2,
-      useCORS:true,
-      allowTaint:false,
-      backgroundColor:'#ffffff',
-      logging:false,
-      scrollX:0,
-      scrollY:0
-    },
-    jsPDF:{
-      unit:'mm',
-      format:'a4',
-      orientation:'portrait',
-      compress:true
-    },
-    pagebreak:{
-      mode:['css','legacy'],
-      avoid:['.report-head','.report-grid','.report-two','.report-panel','.report-total','.report-footer']
-    }
+  let status=null,failed=[];
+  const getUrl=async d=>{
+    if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}
+    const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);
+    if(r.error)throw r.error;return r.data.signedUrl;
   };
-
-  /*
-   * Wait for layout/fonts before measurement. The stage is visible,
-   * so html2canvas receives a normal, measurable DOM tree.
-   */
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(async()=>{
-      try{
-        if(document.fonts?.ready)await document.fonts.ready;
-        await html2pdf().set(options).from(clone).save();
-        toast('A4 Vehicle Report PDF generated successfully.','success');
-      }catch(err){
-        console.error('Vehicle report PDF error:',err);
-        toast('PDF generation failed. Please try again.','error');
-      }finally{
-        stage.remove();
-        if(button){
-          button.disabled=false;
-          button.textContent='PRINT / SAVE PDF';
-        }
-      }
+  const ensurePdfJs=async()=>{
+    if(window.pdfjsLib)return window.pdfjsLib;
+    await new Promise((resolve,reject)=>{
+      const existing=document.getElementById('carmy-print-pdfjs');
+      if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(new Error('PDF renderer failed to load')),{once:true});return}
+      const tag=document.createElement('script');tag.id='carmy-print-pdfjs';tag.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';tag.onload=resolve;tag.onerror=()=>reject(new Error('PDF renderer failed to load'));document.head.appendChild(tag);
     });
-  });
-}
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return window.pdfjsLib;
+  };
+  const addPlaceholder=(item)=>{
+    const page=document.createElement('section');page.className='report-document-print-page report-document-load-error';
+    page.innerHTML='<h3>'+esc(item.label)+'</h3><p>Document could not be loaded: '+esc(item.label)+'</p>';
+    clone.appendChild(page);
+  };
+  if(chosen.length){
+    status=document.createElement('div');status.className='report-print-loading';status.textContent='Preparing selected documents…';stage.appendChild(status);
+    for(const item of chosen){
+      try{
+        const url=await getUrl(item.doc);
+        const ext=String(item.doc.file_name||'').split('.').pop().toLowerCase();
+        const header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
+        if(ext==='pdf'){
+          const pdfjs=await ensurePdfJs(),resp=await fetch(url);
+          if(!resp.ok)throw new Error('Document download failed');
+          const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
+          for(let p=1;p<=pdf.numPages;p++){
+            const page=await pdf.getPage(p),vp=page.getViewport({scale:1.35}),canvas=document.createElement('canvas');
+            canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
+            const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
+            await page.render({canvasContext:ctx,viewport:vp}).promise;
+            const wrap=document.createElement('section');wrap.className='report-document-print-page';
+            wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap);
+          }
+        }else{
+          const img=new Image();img.loading='eager';img.decoding='async';img.src=url;
+          if(typeof img.decode==='function')await img.decode();else await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});
+          const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+          const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+          const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
+          ctx.drawImage(img,0,0,canvas.width,canvas.height);
+          const wrap=document.createElement('section');wrap.className='report-document-print-page';
+          wrap.innerHTML='<h3>'+esc(header)+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap);
+        }
+      }catch(err){
+        console.error('Document print load failed',item.label,err);failed.push(item.label);addPlaceholder(item);
+      }
+    }
+    status.remove();
+  }
 
+  const logo=clone.querySelector('.report-brand-logo');
+  if(logo){
+    logo.loading='eager';
+    try{if(typeof logo.decode==='function')await logo.decode();else if(!logo.complete)await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=reject})}
+    catch(err){console.error('Report logo failed to decode',err);const label=document.createElement('b');label.className='report-brand-fallback';label.textContent='CarCareCloud';logo.replaceWith(label)}
+  }
+  await Promise.all([...clone.querySelectorAll('img')].map(async img=>{
+    img.loading='eager';
+    if(typeof img.decode==='function'){try{await img.decode()}catch(e){if(!img.classList.contains('report-brand-logo'))throw e}}
+    else if(!img.complete)await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
+  })).catch(err=>console.error('A report image failed to decode',err));
+  if(failed.length){
+    const msg='Some documents could not be loaded: '+failed.join(', ')+'. A placeholder page will be included for each failed document. Continue printing?';
+    if(!confirm(msg)){stage.remove();return}
+  }
+  const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
+  if(button){button.disabled=true;button.textContent='GENERATING PDF…'}
+  const filename='Carmy_Vehicle_Report_'+String(car?.registration_no||'Vehicle').replace(/[^a-z0-9_-]+/gi,'_')+'.pdf';
+  const options={
+    margin:[10,10,12,10],
+    filename,
+    image:{type:'jpeg',quality:0.96},
+    html2canvas:{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
+    pagebreak:{mode:['css','legacy'],avoid:['.report-head','.report-grid','.report-current-policy','.report-document-print-page','.report-table tr']}
+  };
+  try{
+    if(document.fonts?.ready)await document.fonts.ready;
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await html2pdf().set(options).from(clone).save();
+    toast('A4 Vehicle Report PDF generated successfully.','success');
+  }catch(err){
+    console.error('Vehicle report PDF error:',err);
+    toast('PDF generation failed. Please try again.','error');
+  }finally{
+    stage.remove();
+    if(button){button.disabled=false;button.textContent='PRINT / SAVE PDF'}
+  }
+}
 window.printVehicleReport = printVehicleReport;
