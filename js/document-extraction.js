@@ -108,7 +108,7 @@ function parseInsurance(ps,text){
   m=raw.match(/(?:Gross\s+Premium(?:\s+Paid)?|Total\s+Premium(?:\s+Payable)?|Premium\s+Amount\s*\(Rs\.?\))\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
   if(!m){const v=near(rs,/Gross\s+Premium|Total\s+Premium|Premium\s+Amount/i,numeric);if(v)m=[v,v]}
   if(m)add('total_premium',money(m[1]),i+1,/GST\s+INVOICE/i.test(t)?'GST invoice gross premium':'premium schedule label',/Gross\s+Premium|Total\s+Premium\s+Payable/i.test(m[0])?5:3);
-  m=raw.match(/^\s*Previous\s+Policy\s+No\.?\s*:?\s*([A-Z0-9\/-]{8,30})/im);
+  m=raw.match(/\bPrevious\s+Policy\s+No\.?\s*:?\s*([A-Z0-9\/-]{8,30})/i);
   if(m)add('previous_policy_number',policyNo(m[1]),i+1,'previous policy number label',5);
   m=raw.match(/(?:Previous\s+Policy\s+Insurance\s+Co\.?|Previous\s+Insurer|Full\s+Name\s+of\s+previous\s+insurer)\s*:?\s*([A-Z][A-Z .'-]{3,80}?)(?=\s+(?:Total\s+Deductible|Period|Policy\s+No|Previous\s+Policy\s+Type|Date)|\n|$)/im);
   if(m){const found=known.find(([re])=>re.test(m[1]));add('previous_insurer',found?.[1]&&known.find(([re])=>re.test(m[1]))?.[1]?known.find(([re])=>re.test(m[1]))[1]:clean(m[1]).replace(/\.$/,''),i+1,'previous insurer block',5)}
