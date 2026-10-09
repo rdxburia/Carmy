@@ -26,47 +26,71 @@ function below(rs,label,pat,window=100){const words=(label.source.match(/[A-Za-z
 function parseInsurance(ps,text){const rs=ps.flat(),d={insurer_name:insurer(text),policy_number:null,insured_name:null,period_from:null,period_to:null,reg_no:null,chassis_no:null,engine_no:null,idv:null,total_premium:null,previous_policy_number:null,previous_insurer:null,policy_type:/PACKAGE\s+POLICY/i.test(text)?'Package':null,parser:'token-pdf',confidence:{}};const set=(k,v)=>{d[k]=v??null;d.confidence[k]=v?'high':'unverified'};
 if(/CHOLAMANDALAM/i.test(text)){set('policy_number',rowValue(rs,/^Policy\s+No/i,/\d{4}\/\d{8}\/\d{3}\/\d{2}/));set('insured_name',rowCapture(rs,/^Insured\s+Name\s*:\s*(.+?)(?=\s+Previous\s+Insurer|$)/i));const prow=rs.find(r=>/Period\s+of\s+Own\s+Damage/i.test(r.text));const pm=prow?.text.match(/Period\s+of\s+Own\s+Damage\s*:\s*(\d{1,2}-[A-Z]{3}-\d{4}).*?To\s+(\d{1,2}-[A-Z]{3}-\d{4})/i);set('period_from',date(pm?.[1]));set('period_to',date(pm?.[2]));set('reg_no',reg(below(rs,/Registration\s+No/i,/[A-Z]{2}\s*\d{2}\s*[A-Z]{2}\s*\d{4}/)));set('chassis_no',chassis(below(rs,/VIN\/Chassis/i,/[A-Z0-9]{17}/)));set('engine_no',engine(below(rs,/Engine\s+No/i,/[A-Z0-9]{10,24}/)));set('idv',money(below(rs,/Total\s+IDV/i,/[0-9,]+(?:\.[0-9]+)?/)));set('total_premium',money(rowValue(rs,/Gross\s+Premium\s+Paid/i,/[0-9,]+(?:\.[0-9]+)?/)));set('previous_policy_number',policyNo(rowValue(rs,/Previous\s+Policy\s+No/i,/\d{10,20}/)));set('previous_insurer',insurer(rowCapture(rs,/Previous\s+Insurer:?\s*(.+)$/i)||''))}
 else if(/RELIANCE/i.test(text)){set('policy_number',rowValue(rs,/Policy\s+Number/i,/\d{18}/));set('insured_name',rowCapture(rs,/^Insured.?s?\s+Name:\s*(.+?)(?=\s+Period\s+of\s+Insurance|$)/i));const periodText=text.slice(Math.max(0,text.search(/Period\s+of\s+Insurance/i)));const ds=[...periodText.matchAll(/\d{1,2}[‐\-]\d{1,2}[‐\-]\d{4}/g)].map(x=>date(x[0])).filter(Boolean);set('period_from',ds[0]);set('period_to',ds[1]);set('reg_no',reg(rowValue(rs,/Registration\s+No/i,/[A-Z]{2}\s*\d{2}\s*[A-Z]{2}\s*\d{4}/)));const r=rs.find(x=>/Engine\s+No\.?.*\/\s*Chassis\s+No/i.test(x.text)),v=r?.items.map(x=>x.t).filter(x=>/[A-Z0-9]{8,20}/.test(x))||[];set('engine_no',engine(v.find(x=>engine(x)&&!chassis(x))));set('chassis_no',chassis(v.find(x=>chassis(x))));set('idv',money(rowValue(rs,/Vehicle\s+IDV/i,/[0-9,]+(?:\.[0-9]+)?/)||below(rs,/Vehicle\s+IDV/i,/[0-9,]+(?:\.[0-9]+)?/,180)));set('total_premium',money(rowValue(rs,/Total\s+Premium/i,/[0-9,]+(?:\.[0-9]+)?/)));set('previous_policy_number',policyNo(rowValue(rs,/Previous\s+Year\s+Policy\s+No/i,/[A-Z0-9/\-]{7,30}/)));set('previous_insurer',insurer(rowCapture(rs,/Full\s+Name\s+of\s+previous\s+insurer:?\s*(.+)$/i)||''))}
-else if(/ROYAL\s+SUNDARAM/i.test(text)){set('policy_number',rowValue(rs,/^Policy\s+No/i,/VPC\d+/));set('insured_name',rowCapture(rs,/^Insured\s+Name\s*:\s*(.+?)(?=\s+Insured\s+Date|$)/i));set('period_from',date(rowValue(rs,/Valid\s+From/i,/\d{1,2}\/\d{1,2}\/\d{4}/)));set('period_to',date(rowValue(rs,/Valid\s+Till/i,/\d{1,2}\/\d{1,2}\/\d{4}/)));set('reg_no',reg(rowValue(rs,/Vehicle\s+Registration\s+No/i,/[A-Z]{2}\s*\d{2}\s*[A-Z]{2}\s*\d{4}/)));set('engine_no',engine(rowValue(rs,/Engine\s+No/i,/[A-Z0-9]{10,24}/)));set('chassis_no',chassis(rowValue(rs,/Chassis\s+No/i,/[A-Z0-9]{17}/)));set('idv',money(rowValue(rs,/Total\s+IDV\s*\(Rs\.\)/i,/[0-9,]+(?:\.[0-9]+)?/)));set('total_premium',money(rowValue(rs,/Premium\s+Amount\s*\(Rs\.\)/i,/[0-9,]+(?:\.[0-9]+)?/)));set('previous_policy_number',policyNo(rowValue(rs,/Previous\s+Policy\s+No/i,/\d{18}/)));set('previous_insurer',insurer(rowCapture(rs,/Previous\s+Policy\s+Insurance\s+Co\.?\s*:?\s*(.+)$/i)||''))}return d}
+else if(/ROYAL\s+SUNDARAM/i.test(text)){set('policy_number',rowValue(rs,/^Policy\s+No/i,/VPC\d+/));set('insured_name',rowCapture(rs,/^Insured\s+Name\s*:\s*(.+?)(?=\s+Insured\s+Date|$)/i));set('period_from',date(rowValue(rs,/Valid\s+From/i,/\d{1,2}\/\d{1,2}\/\d{4}/)));set('period_to',date(rowValue(rs,/Valid\s+Till/i,/\d{1,2}\/\d{1,2}\/\d{4}/)));set('reg_no',reg(rowValue(rs,/Vehicle\s+Registration\s+No/i,/[A-Z]{2}\s*\d{2}\s*[A-Z]{2}\s*\d{4}/)));set('engine_no',engine(rowValue(rs,/Engine\s+No/i,/[A-Z0-9]{10,24}/)));set('chassis_no',chassis(rowValue(rs,/Chassis\s+No/i,/[A-Z0-9]{17}/)));set('idv',money(rowValue(rs,/Total\s+IDV\s*\(Rs\.\)/i,/[0-9,]+(?:\.[0-9]+)?/)));set('total_premium',money(rowValue(rs,/Premium\s+Amount\s*\(Rs\.\)/i,/[0-9,]+(?:\.[0-9]+)?/)));set('previous_policy_number',policyNo(rowValue(rs,/Previous\s+Policy\s+No/i,/\d{18}/)));set('previous_insurer',insurer(rowCapture(rs,/Previous\s+Policy\s+Insurance\s+Co\.?\s*:?\s*(.+)$/i)||''))}
+// Raw-text fallback for PDF layouts where token X positions do not align with joined row offsets.
+if(/ROYAL\s+SUNDARAM/i.test(text)){
+ const raw=(re)=>{const m=text.match(re);return m?clean(m[1]):null};
+ if(!d.insured_name)set('insured_name',raw(/Insured\s+Name\s*:\s*(.+?)(?=\s+Insured\s+Date|\s+Policy\s+No|$)/i));
+ if(!d.chassis_no)set('chassis_no',chassis(raw(/Chassis\s+No\.?\s*[:\-]?\s*([A-Z0-9]{17})/i)));
+ if(!d.engine_no)set('engine_no',engine(raw(/Engine\s+No\.?\s*[:\-]?\s*([A-Z0-9]{6,24})/i)));
+ if(!d.policy_number)set('policy_number',policyNo(raw(/Policy\s+No\.?\s*[:\-]?\s*([A-Z0-9\/-]{7,30})/i)));
+ if(!d.period_from)set('period_from',date(raw(/Valid\s+From\s*[:\-]?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i)));
+ if(!d.period_to)set('period_to',date(raw(/Valid\s+Till(?:\s*\([^)]*\))?\s*[:\-]?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i)));
+}
+return d}
 function parsePuc(text){const t=norm(text),d={test_date:null,valid_until:null,certificate_number:null,cost:null,registration_no:null,suggested_valid_until:null,confidence:{}};const set=(k,v)=>{d[k]=v??null;d.confidence[k]=v?'high':'unverified'};set('registration_no',reg(t.match(/(?:REG(?:ISTRATION)?\s*(?:NO|NUMBER)|VEHICLE\s*(?:REGISTRATION|NO))[^A-Z0-9]{0,20}([A-Z]{2}[ -]?\d{2}[ -]?[A-Z]{1,3}[ -]?\d{4})/i)?.[1]));const c=t.match(/(?:CERTIFICATE\s*(?:SL\.?\s*NO\.?|NO\.?|NUMBER)|PUC\s*(?:NO|NUMBER))[^A-Z0-9]{0,20}([A-Z0-9 ]{8,32}?)(?=\s+(?:REGISTRATION|REGN|VEHICLE|DATE|TEST|VALIDITY|FEES|COST|FUEL|PUC\s+CODE)|$)/i);set('certificate_number',c?.[1]?.replace(/\s+/g,'').replace(/[^A-Z0-9]/g,'')||null);const ds=[...t.matchAll(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}\b/g)].map(x=>date(x[0])).filter(Boolean);set('test_date',ds[0]);set('valid_until',ds[1]);set('cost',money(t.match(/(?:FEES?|COST|AMOUNT)[^0-9]{0,20}(?:RS\.?|₹)?\s*([0-9]+(?:\.[0-9]{1,2})?)/i)?.[1]));if(d.test_date){const x=new Date(d.test_date+'T00:00:00Z');x.setUTCFullYear(x.getUTCFullYear()+1);x.setUTCDate(x.getUTCDate()-1);d.suggested_valid_until=x.toISOString().slice(0,10);if(d.valid_until!==d.suggested_valid_until)d.confidence.valid_until='review'}return d}
 function levenshtein(a,b){a=alnum(a)||'';b=alnum(b)||'';const q=[...Array(b.length+1)].map((_,i)=>i);for(let i=1;i<=a.length;i++){let p=q[0];q[0]=i;for(let j=1;j<=b.length;j++){const z=q[j];q[j]=Math.min(q[j]+1,q[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=z}}return q[b.length]}
 function validate(d,car,type){const o={ok:true,errors:[],warnings:[]},eq=(a,b)=>alnum(a)===alnum(b);if(type==='insurance'){if(!d.policy_number)o.errors.push('Policy number could not be extracted.');if(car?.registration_no&&!d.reg_no)o.errors.push('Policy registration number could not be verified.');if(car?.registration_no&&d.reg_no&&!eq(d.reg_no,car.registration_no))o.errors.push('Policy registration number does not match the selected RC.');if(car?.vin&&!d.chassis_no&&car?.engine_no&&!d.engine_no)o.errors.push('Vehicle identity could not be verified from the policy.');if(car?.vin&&d.chassis_no&&!eq(d.chassis_no,car.vin))o.errors.push('Policy chassis number does not match the selected RC.');if(car?.engine_no&&d.engine_no&&!eq(d.engine_no,car.engine_no))o.errors.push('Policy engine number does not match the selected RC.');if(!d.period_from||!d.period_to)o.errors.push('Policy period From/To is required.')}else if(type==='puc'){if(car?.registration_no&&!d.registration_no)o.errors.push('PUC registration number could not be verified.');if(car?.registration_no&&d.registration_no&&!eq(d.registration_no,car.registration_no))o.errors.push('This PUC belongs to a different vehicle.');if(!d.test_date)o.errors.push('PUC test date could not be verified.');if(!d.valid_until)o.errors.push('PUC validity could not be verified.');if(!d.certificate_number)o.errors.push('PUC certificate number could not be verified.');if(d.test_date&&d.valid_until){const x=new Date(d.test_date+'T00:00:00Z');x.setUTCFullYear(x.getUTCFullYear()+1);x.setUTCDate(x.getUTCDate()-1);if(x.toISOString().slice(0,10)!==d.valid_until)o.warnings.push('PUC validity differs from test date + 1 year - 1 day. Please verify.')}}else{if(car?.registration_no&&!d.registration_no)o.errors.push('RC registration number could not be verified.');if(car?.registration_no&&d.registration_candidates?.length&&!d.registration_candidates.some(x=>eq(x,car.registration_no)))o.errors.push('RC registration number does not match this vehicle.');if(car?.vin&&d.chassis_no&&!eq(d.chassis_no,car.vin)){if(levenshtein(d.chassis_no,car.vin)<=2)o.warnings.push('OCR may have misread the chassis number. Saved vehicle value can be used after confirmation.');else o.errors.push('RC chassis number does not match this vehicle.')}if(car?.engine_no&&d.engine_no&&!eq(d.engine_no,car.engine_no)){if(levenshtein(d.engine_no,car.engine_no)<=2)o.warnings.push('OCR may have misread the engine number. Saved vehicle value can be used after confirmation.');else o.errors.push('RC engine number does not match this vehicle.')}}o.ok=!o.errors.length;return o}
 function parseRC(text){const t=norm(text),lines=t.split(/\n+/).map(clean).filter(Boolean),pick=(r,p)=>{const i=lines.findIndex(x=>r.test(x));for(let j=Math.max(0,i);j<Math.min(i+3,lines.length);j++){const m=lines[j].match(p);if(m)return m[1]||m[0]}return null},cs=[...t.matchAll(/\b[A-Z0-9]{8,12}\b/g)].map(x=>reg(x[0])).filter(Boolean),r=pick(/REGN?\s*NO/i,/([A-Z]{2}[0-9]{2}[A-Z]{1,3}[0-9]{4})/i)||cs[0]||null;const d={registration_no:r,registration_candidates:[...new Set(cs)],date_of_regn:date(t.match(/DATE\s+OF\s+REGN\.?[^0-9]*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})/i)?.[1]),regn_validity:date(t.match(/REGN\.?\s+VALIDITY[^0-9]*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})/i)?.[1]),chassis_no:chassis(t.match(/CHASSIS\s*NO\.?\s*([A-Z0-9]{17})/i)?.[1]),engine_no:engine(t.match(/ENGINE(?:\/MOTOR)?\s*NO\.?\s*([A-Z0-9]{6,24})/i)?.[1]),owner_name:(t.match(/OWNER\s*NAME\s*[:\-]?\s*([A-Z][A-Z .'-]{1,50}?)(?=\s+(?:SON\/WIFE|S\/D\/W|OWNERSHIP|FUEL|EMISSION)|$)/i)||[])[1]||null,owner_relation:clean((t.match(/(?:D\/O|S\/O|W\/O)\s+[A-Z][A-Z .'-]{2,40}?\s*(?=OWNERSHIP|FUEL|EMISSION|$)/i)||[])[0]||null),ownership_type:/\bINDIVIDUAL\b/i.test(t)?'INDIVIDUAL':null,address:null,fuel:(t.match(/\b(PETROL|DIESEL|CNG|LPG|ELECTRIC|HYBRID)\b/i)||[])[1]||null,emission_norms:(t.match(/BHARAT\s+STAGE\s*[IVX0-9]+/i)||[])[0]||null,vehicle_class:null,maker:(t.match(/\b(HYUNDAI|MARUTI|SUZUKI|TATA|MAHINDRA|HONDA|TOYOTA|RENAULT|FORD|VOLKSWAGEN|SKODA|KIA)\b/i)||[])[1]||null,model:(t.match(/\b(GRAND\s+I10|I10|SWIFT|BALENO|CRETA|VENUE)\b/i)||[])[1]||null,colour:(t.match(/\b(STAR\s+DUST|WHITE|BLACK|RED|BLUE|GREY|SILVER)\b/i)||[])[1]||null,body_type:null,seating:null,unladen_weight:null,cubic_capacity:null,mfg_month_year:null,no_of_cylinders:null,registration_authority:null,card_issue_date:null,confidence:{}};for(const k of Object.keys(d))if(k!=='registration_candidates'&&k!=='confidence')d.confidence[k]=d[k]!=null?'high':'unverified';return d}
-async function extract(file,type,onProgress){let text='',ps=[],thumbnail=null;if(file.type==='application/pdf'){const x=await pdfData(file,onProgress);ps=x.ps;text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n');thumbnail=await thumb(x.d);if(text.replace(/\s/g,'').length<120){const o=await ocrPdfPage(x.d,onProgress,type==='rc');text=o.text;thumbnail=thumbnail||o.thumbnail}else if(type==='puc'){const p0=parsePuc(text);if(!p0.test_date||!p0.certificate_number||!p0.cost||!p0.registration_no){const o=await ocrPdfPage(x.d,onProgress,false);text=text+'\n'+o.text;thumbnail=thumbnail||o.thumbnail}}}else{const o=await ocr(file,onProgress,type==='rc');text=o.text;thumbnail=o.thumbnail}const classification=classifyDetailed(text,type),detected=classification.type;return{kind:type,detected_type:detected,classification,data:type==='insurance'?parseInsurance(ps,text):type==='puc'?parsePuc(text):parseRC(text),text,thumbnail}}
-function classifyDetailed(text,slot=''){
+async function extract(file,type,onProgress){let text='',ps=[],thumbnail=null;if(file.type==='application/pdf'){const x=await pdfData(file,onProgress);ps=x.ps;text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');thumbnail=await thumb(x.d);if(text.replace(/\s/g,'').length<120){const o=await ocrPdfPage(x.d,onProgress,type==='rc');text=o.text;thumbnail=thumbnail||o.thumbnail}else if(type==='puc'){const p0=parsePuc(text);if(!p0.test_date||!p0.certificate_number||!p0.cost||!p0.registration_no){const o=await ocrPdfPage(x.d,onProgress,false);text=text+'\n'+o.text;thumbnail=thumbnail||o.thumbnail}}}else{const o=await ocr(file,onProgress,type==='rc');text=o.text;thumbnail=o.thumbnail}const classification=classifyDetailed(text,type,{pageCount:ps.length||1}),detected=classification.type;return{kind:type,detected_type:detected,classification,data:type==='insurance'?parseInsurance(ps,text):type==='puc'?parsePuc(text):parseRC(text),text,thumbnail}}
+function classifyDetailed(text,slot='',meta={}){
  const t=norm(text),len=t.length;
- const scores={insurance:0,puc:0,rc:0};
- const add=(type,pattern,points)=>{const re=new RegExp(pattern,'i');if(re.test(t))scores[type]+=points};
- // Insurance scores document-wide; legal mentions of PUC are intentionally ignored.
- add('insurance','\\bPolicy\\s*(?:No\\.?|Number)\\b',4);
- add('insurance','Period\\s+of\\s+Insurance|Valid\\s+From[\\s\\S]{0,100}Valid\\s+Till',4);
- add('insurance','\\bIDV\\b',2);add('insurance','Total\\s+Premium|Gross\\s+Premium',3);
- add('insurance','Certificate\\s+of\\s+Insurance|Policy\\s+Schedule',4);
- add('insurance','\\bIRDAI\\b|\\bUIN\\b',2);
- add('insurance','Own\\s+Damage|Third\\s+Party\\s+Liability|\\bNCB\\b',2);
- if(insurer(t))scores.insurance+=5;
- // PUC requires certificate-specific fields, not a disclaimer mention.
- add('puc','Pollution\\s+Under\\s+Control\\s+Certificate',7);
- add('puc','Certificate\\s+SL\\.?\\s*No\\.?',4);add('puc','\\bForm\\s*59\\b',3);
- add('puc','\\bPUC\\s+Code\\b',3);add('puc','Validity\\s+upto',3);
- if(/\\b(?:CO|HC|RPM|LAMBDA)\\b/i.test(t)&&/EMISSION|TEST\\s+RESULT|POLLUTION/i.test(t))scores.puc+=4;
- if(len<7000&&scores.puc>=7)scores.puc+=1;
- // RC fields must co-occur as a registration document.
- add('rc','Registration\\s+Certificate|Certificate\\s+of\\s+Registration|Form\\s*23A',5);
- add('rc','Regn\\.?\\s+No\\.?|Registration\\s+No\\.?',2);
- add('rc','Chassis\\s+No\\.?',2);add('rc','Engine(?:/Motor)?\\s+No\\.?',2);
- add('rc','Owner\\s+Name',2);add('rc','Date\\s+of\\s+Regn',2);
- let twoWheeler=/TWO\\s+WHEELER|MOTORCYCLE|SCOOTER|TVS\\s+JUPITER|JUPITER\\b/i.test(t)&&/POLICY|INSURANCE/i.test(t);
- if(twoWheeler)scores.insurance+=3;
+ const pageCount=Math.max(1,Number(meta.pageCount)||((text.match(/\f/g)||[]).length+1));
+ const scores={insurance:0,puc:0,rc:0},matchedSignals=[];
+ const add=(type,label,pattern,points)=>{const re=new RegExp(pattern,'i'),m=t.match(re);if(m){scores[type]+=points;matchedSignals.push({type,label,weight:points,match:clean(m[0]).slice(0,120)});return true}return false};
+ const policyPattern=/\bPolicy\s*(?:No\.?|Number)\s*[:#.-]?\s*[A-Z0-9][A-Z0-9\/-]{6,30}\b/i.test(t);
+ const periodPattern=/Period\s+of\s+Insurance/i.test(t)||(/Valid\s+From/i.test(t)&&/Valid\s+Till/i.test(t));
+ const financialPattern=/\bIDV\b|\b(?:Total|Gross)\s+Premium\b|\bIRDAI\b/i.test(t);
+ const insuranceHardRule=policyPattern&&periodPattern&&financialPattern;
+ const pucTitle=/Pollution\s+Under\s+Control\s+Certificate/i.test(t);
+ const emissionTable=/(?:\bCO\b\s*(?:%|PPM)?\s*[:=]?\s*\d[\d.]*)[\s\S]{0,300}(?:\bHC\b\s*(?:PPM)?\s*[:=]?\s*\d[\d.]*)[\s\S]{0,300}(?:\bRPM\b\s*[:=]?\s*\d[\d.]*)/i.test(t)
+  ||/(?:\bHC\b\s*(?:PPM)?\s*[:=]?\s*\d[\d.]*)[\s\S]{0,300}(?:\bCO\b\s*(?:%|PPM)?\s*[:=]?\s*\d[\d.]*)[\s\S]{0,300}(?:\bRPM\b\s*[:=]?\s*\d[\d.]*)/i.test(t);
+ // Deterministic insurance rule takes priority over any legal PUC wording.
+ add('insurance','Policy number','\\bPolicy\\s*(?:No\\.?|Number)\\b',4);
+ add('insurance','Period / Valid From+Till','Period\\s+of\\s+Insurance|Valid\\s+From[\\s\\S]{0,100}Valid\\s+Till',4);
+ add('insurance','IDV','\\bIDV\\b',2);
+ add('insurance','Premium','Total\\s+Premium|Gross\\s+Premium',3);
+ add('insurance','Certificate of Insurance / Policy Schedule','Certificate\\s+of\\s+Insurance|Policy\\s+Schedule',4);
+ add('insurance','IRDAI / UIN','\\bIRDAI\\b|\\bUIN\\b',2);
+ add('insurance','Own Damage / Third Party Liability / NCB','Own\\s+Damage|Third\\s+Party\\s+Liability|\\bNCB\\b',2);
+ if(insurer(t)){scores.insurance+=5;matchedSignals.push({type:'insurance',label:'Recognized insurer',weight:5,match:insurer(t)})}
+ add('puc','PUC certificate title','Pollution\\s+Under\\s+Control\\s+Certificate',7);
+ add('puc','Certificate SL No','Certificate\\s+SL\\.?\\s*No\\.?',4);
+ add('puc','Form 59','\\bForm\\s*59\\b',3);
+ add('puc','PUC Code','\\bPUC\\s+Code\\b',3);
+ add('puc','Validity upto','Validity\\s+upto',3);
+ if(emissionTable){scores.puc+=4;matchedSignals.push({type:'puc',label:'Emission readings table',weight:4,match:'CO + HC + RPM readings with numeric values'})}
+ add('rc','Registration Certificate / Form 23A','Registration\\s+Certificate|Certificate\\s+of\\s+Registration|Form\\s*23A',5);
+ add('rc','Regn No / Registration No','Regn\\.?\\s+No\\.?|Registration\\s+No\\.?',2);
+ add('rc','Chassis No','Chassis\\s+No\\.?',2);
+ add('rc','Engine/Motor No','Engine(?:/Motor)?\\s+No\\.?',2);
+ add('rc','Owner Name','Owner\\s+Name',2);
+ add('rc','Date of Regn','Date\\s+of\\s+Regn',2);
+ const twoWheeler=/TWO\s+WHEELER|MOTORCYCLE|SCOOTER|TVS\s+JUPITER|JUPITER\b/i.test(t)&&/POLICY|INSURANCE/i.test(t);
+ if(twoWheeler){scores.insurance+=3;matchedSignals.push({type:'insurance',label:'Two-wheeler policy signal',weight:3,match:'Two-wheeler model/class with policy wording'})}
  const slotType=slot==='insurance'?'insurance':slot==='rc'?'rc':slot==='puc'?'puc':'';
- const ordered=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
- const top=ordered[0],second=ordered[1];
- let detected=top[1]>=5&&top[1]-second[1]>=2?top[0]:'other';
+ const ordered=Object.entries(scores).sort((a,b)=>b[1]-a[1]),top=ordered[0],second=ordered[1];
+ const pucSignals=matchedSignals.filter(x=>x.type==='puc'&&x.label!=='PUC certificate title').length;
+ let detected;
+ if(insuranceHardRule)detected='insurance';
+ else if(pucTitle&&pucSignals>=2&&(pageCount<=2||pucSignals>=3))detected='puc';
+ else detected=top[1]>=5&&top[1]-second[1]>=2?top[0]:'other';
  if(twoWheeler&&detected==='insurance')detected='insurance-two-wheeler';
- const confidence=top[1]>=12&&top[1]-second[1]>=5?'high':top[1]>=7?'medium':'low';
+ const confidence=insuranceHardRule?'high':(top[1]>=12&&top[1]-second[1]>=5?'high':top[1]>=7?'medium':'low');
  const slotScore=slotType?scores[slotType]:0;
- const redirect=!!slotType&&detected!=='other'&&detected!==slotType&&slotScore<4&&top[1]-slotScore>=5;
- return{type:detected,scores,confidence,slot_score:slotScore,redirect,ambiguous:detected==='other'||(top[1]-second[1]<3)};
+ const redirect=!!slotType&&detected!=='other'&&detected!=='insurance-two-wheeler'&&detected!==slotType&&slotScore<4&&top[1]-slotScore>=5;
+ return{type:detected,scores,matchedSignals,confidence,slot_score:slotScore,redirect,ambiguous:!insuranceHardRule&&(detected==='other'||(top[1]-second[1]<3)),page_count:pageCount,hard_rules:{insurance:insuranceHardRule,puc_title:pucTitle,puc_signals:pucSignals,multi_page:pageCount>2}};
 }
-function classify(text,slot=''){return classifyDetailed(text,slot).type}
+function classify(text,slot='',meta={}){return classifyDetailed(text,slot,meta).type}
 window.CarmyExtraction={extract,parseRC,parseInsurance:parseInsurance,parsePuc,validate,reg,date,canonicalInsurer:insurer,classifyDocument:classify,classifyDetailed};
 })();
