@@ -1897,7 +1897,7 @@ async function printVehicleReport(selection=null){
     '#vehicleReportPdfStage *{box-sizing:border-box!important}',
     '#vehicleReportPdfStage .report-sheet{width:190mm!important;min-height:0!important;height:auto!important;overflow:visible!important;font-size:9.5pt!important}',
     '#vehicleReportPdfStage .report-brand{overflow:visible!important;display:flex!important;align-items:center!important;gap:5mm!important}',
-    '#vehicleReportPdfStage .report-brand-logo{display:block!important;width:auto!important;height:15mm!important;max-width:48mm!important;max-height:15mm!important;object-fit:contain!important;overflow:visible!important;flex:0 0 auto!important}',
+    '#vehicleReportPdfStage .report-brand-logo{display:block!important;width:48mm!important;height:10.3mm!important;min-width:48mm!important;max-width:48mm!important;max-height:10.3mm!important;object-fit:fill!important;object-position:left center!important;overflow:visible!important;flex:0 0 48mm!important}',
     '#vehicleReportPdfStage .report-head{break-inside:avoid!important;page-break-inside:avoid!important}',
     '#vehicleReportPdfStage .report-section{margin:3mm 0!important;padding:0!important}',
     '#vehicleReportPdfStage .report-section-title{font-size:8pt!important;letter-spacing:.08em!important;margin:3mm 0 1.5mm!important;break-after:avoid!important;page-break-after:avoid!important}',
