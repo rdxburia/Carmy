@@ -98,7 +98,7 @@ function parseInsurance(ps,text){
   if(m)add('reg_no',reg(m[1]),i+1,'vehicle registration label',4);
   m=null;{const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-HJ-NPR-Z0-9]{17})/i);if(pair)m=[pair[0],pair[2]]}
   if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)\s*:?\s*([A-HJ-NPR-Z0-9]{17})/i);
-  if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?) [^\n]{0,300}\n[^\n]{0,420}?\b([A-HJ-NPR-Z0-9]{17})\b/i);
+  if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)\s*[^\n]{0,300}\n[^\n]{0,420}?\b([A-HJ-NPR-Z0-9]{17})\b/i);
   if(!m)m=raw.match(/Chassis\s+Number\s*:\s*([A-HJ-NPR-Z0-9]{17})/i);
   if(m)add('chassis_no',chassis(m[1]),i+1,'chassis label/column',4);
   m=raw.match(/Engine(?:\/Motor)?\s+No\.?\s*[:\-]\s*([A-Z0-9]{6,24})/i);
