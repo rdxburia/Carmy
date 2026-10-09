@@ -597,7 +597,7 @@
  html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
  .report-sheet{width:auto!important;min-height:0!important;height:auto!important;overflow:visible!important;box-shadow:none!important;border:0!important;border-radius:0!important;padding:0!important}
  .report-brand{overflow:visible!important}
- .report-brand-logo{display:block!important;height:15mm!important;width:auto!important;max-width:48mm!important;object-fit:contain!important}
+ .report-brand-logo{display:block!important;width:48mm!important;height:10.3mm!important;min-width:48mm!important;max-width:48mm!important;max-height:10.3mm!important;object-fit:fill!important;object-position:left center!important;overflow:visible!important;flex:0 0 48mm!important}
  .report-section-title{font-size:8pt!important;letter-spacing:.08em!important;margin:10pt 0 4pt!important;break-after:avoid;page-break-after:avoid}
  .report-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4pt!important}
  .report-grid>div,.report-current-policy{padding:4pt 6pt!important;break-inside:avoid;page-break-inside:avoid}
