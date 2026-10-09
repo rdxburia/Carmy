@@ -2003,8 +2003,16 @@ async function printVehicleReport(selection=null){
   const logo=clone.querySelector('.report-brand-logo');
   if(logo){
     logo.loading='eager';
-    try{if(typeof logo.decode==='function')await logo.decode();else if(!logo.complete)await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=reject})}
-    catch(err){console.error('Report logo failed to decode',err);const label=document.createElement('b');label.className='report-brand-fallback';label.textContent='CarCareCloud';logo.replaceWith(label)}
+    try{
+      const response=await fetch(new URL(logo.getAttribute('src'),document.baseURI).href,{cache:'force-cache'});
+      if(!response.ok)throw new Error('Logo request failed: '+response.status);
+      const svg=await response.text();
+      const embedded='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+      logo.src=embedded;
+      logo.removeAttribute('srcset');
+      logo.style.cssText='display:block!important;width:48mm!important;height:10.3mm!important;min-width:48mm!important;max-width:48mm!important;max-height:10.3mm!important;object-fit:fill!important;object-position:left center!important;overflow:visible!important;flex:0 0 48mm!important';
+      if(typeof logo.decode==='function')await logo.decode();else if(!logo.complete)await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=reject});
+    }catch(err){console.error('Report logo failed to decode',err);const label=document.createElement('b');label.className='report-brand-fallback';label.textContent='CarCareCloud';logo.replaceWith(label)}
   }
   await Promise.all([...clone.querySelectorAll('img')].map(async img=>{
     img.loading='eager';
