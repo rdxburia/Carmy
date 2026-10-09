@@ -1972,7 +1972,7 @@ async function printVehicleReport(selection=null){
           if(!resp.ok)throw new Error('Document download failed');
           const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
           for(let p=1;p<=pdf.numPages;p++){
-            const page=await pdf.getPage(p),vp=page.getViewport({scale:1.35}),canvas=document.createElement('canvas');
+            const page=await pdf.getPage(p),baseViewport=page.getViewport({scale:1}),renderScale=Math.min(1.35,1600/Math.max(baseViewport.width,baseViewport.height)),vp=page.getViewport({scale:renderScale}),canvas=document.createElement('canvas');
             canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
             const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
             await page.render({canvasContext:ctx,viewport:vp}).promise;
