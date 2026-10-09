@@ -577,3 +577,39 @@
 
 /* Vehicle report document cards and print selection */
 .report-document-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.report-document-card{display:flex;flex-direction:column;gap:7px;padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;min-width:0}.report-document-card>b{font-size:13px;color:#111827}.report-document-card>span{font-size:11px;color:#667085;overflow-wrap:anywhere}.report-doc-view{align-self:flex-start;border:1px solid #d0d5dd;background:#fff;color:#111827;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700}.report-doc-missing{font-weight:700!important;color:#98a2b3!important}.report-document-print-page{width:190mm;min-height:277mm;page-break-before:always;break-before:page;padding:5mm;background:#fff;color:#111827}.report-document-print-page h3{font-size:10pt;border-bottom:1px solid #d0d5dd;padding-bottom:3mm;margin:0 0 4mm}.report-document-print-page img,.report-document-print-page canvas{display:block;max-width:100%;max-height:245mm;object-fit:contain;margin:auto}.report-print-options{position:fixed;inset:0;z-index:2147483640;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px}.report-print-options-card{background:#fff;color:#111827;border:1px solid #e5e7eb;border-radius:16px;padding:22px;width:min(520px,100%);max-height:90vh;overflow:auto;box-shadow:0 20px 60px #0002}.report-print-options-card h2{font-size:18px;margin:0 0 8px}.report-print-options-card label{display:flex;gap:10px;align-items:center;padding:10px 0;font-size:14px}.report-print-options-card label small{color:#667085}.report-print-options-card .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}.report-print-options-card button{border-radius:9px;padding:9px 14px;border:1px solid #d0d5dd;background:#fff}.report-print-options-card button.primary{background:#111827;color:#fff}@media(max-width:700px){.report-document-grid{grid-template-columns:1fr}.report-print-options-card{padding:18px}}
+
+
+
+/* Task 3: compact, predictable A4 report output */
+.ex-field-evidence{display:block;margin-top:2px;font-size:10px;font-weight:500;color:#667085;line-height:1.35}
+.ex-field-evidence.is-verified{color:#067647}
+.ex-field-evidence.is-single{color:#475467}
+.ex-field-evidence.is-unverified{color:#b54708}
+.extraction-diagnostics{margin:12px 0;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;background:#fafafa;color:#344054;font-size:12px}
+.extraction-diagnostics summary{cursor:pointer;font-weight:700}
+.extraction-diagnostics pre{max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}
+.report-print-incomplete{display:flex;gap:8px;align-items:center;padding:10px 0;border-top:1px solid #eaecf0;margin-top:10px;font-size:12px;color:#475467}
+.report-incomplete-label{font-size:11px;color:#98a2b3;font-style:italic}
+.report-incomplete-row td{background:#fafafa;color:#98a2b3}
+@page{size:A4;margin:12mm 12mm 14mm}
+@media print{
+ html{font-size:9.5pt}
+ html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ .report-sheet{width:auto!important;min-height:0!important;height:auto!important;overflow:visible!important;box-shadow:none!important;border:0!important;border-radius:0!important;padding:0!important}
+ .report-brand{overflow:visible!important}
+ .report-brand-logo{display:block!important;height:15mm!important;width:auto!important;max-width:48mm!important;object-fit:contain!important}
+ .report-section-title{font-size:8pt!important;letter-spacing:.08em!important;margin:10pt 0 4pt!important;break-after:avoid;page-break-after:avoid}
+ .report-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4pt!important}
+ .report-grid>div,.report-current-policy{padding:4pt 6pt!important;break-inside:avoid;page-break-inside:avoid}
+ .report-table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;font-size:7.5pt!important}
+ .report-table thead{display:table-header-group!important}
+ .report-table tr{break-inside:avoid;page-break-inside:avoid}
+ .report-table th{height:auto!important;padding:3pt 2pt!important}
+ .report-table td,.report-table th{overflow-wrap:anywhere}
+ .report-table td.date,.report-table td.cost{white-space:nowrap}
+ .report-doc-view,.report-document-card button,.no-print,button{display:none!important}
+ .report-document-grid{display:block!important}
+ .report-document-card{display:grid!important;grid-template-columns:38mm 1fr 1fr!important;padding:4pt 0!important;border:0!important;border-bottom:1px solid #e5e7eb!important;break-inside:avoid}
+ .report-document-print-page{width:auto!important;min-height:0!important;height:auto!important;padding:3mm!important;break-before:page!important;page-break-before:always!important;break-after:auto!important;page-break-after:auto!important}
+ .report-document-print-page img,.report-document-print-page canvas{max-width:100%!important;max-height:250mm!important;object-fit:contain!important;display:block!important;margin:0 auto!important}
+}
