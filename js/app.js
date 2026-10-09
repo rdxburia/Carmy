@@ -1364,69 +1364,79 @@ function openExtractionReview(kind,initial,validation){
 function openDocUploader(preselectedType=''){
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
- m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. New documents use private Cloudflare R2; existing documents remain on legacy Supabase Storage.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
+ m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. RC and Insurance are reviewed before extracted data is saved.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label><input id="docIssue" type="date"></div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label><input id="docExpiry" type="date"></div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
  document.body.appendChild(m);
  if(['rc','puc','insurance','other'].includes(preselectedType))$('docType').value=preselectedType;
- const updateFields=()=>{
-   let t=$('docType').value,rc=t==='rc',expiry=t==='insurance'||t==='puc';
-   $('docNameWrap').style.display=t==='other'?'block':'none';$('docExpiryWrap').style.display=expiry?'block':'none';$('docIssueReq').textContent=(rc||t==='insurance'||t==='puc')?'*':'';
-   $('rcValidityInfo').style.display=rc?'block':'none';
-   if(rc){$('rcValidityYears').textContent=rcValidityYears(car?.fuel);let x=calculateRcExpiry($('docIssue').value,car?.fuel);$('rcCalculatedExpiry').textContent=x?formatDateNice(x):'—'}
- };
+ const updateFields=()=>{let t=$('docType').value,rc=t==='rc',expiry=t==='insurance'||t==='puc';$('docNameWrap').style.display=t==='other'?'block':'none';$('docExpiryWrap').style.display=expiry?'block':'none';$('docIssueReq').textContent=(rc||t==='insurance'||t==='puc')?'*':'';$('rcValidityInfo').style.display=rc?'block':'none';if(rc){$('rcValidityYears').textContent=rcValidityYears(car?.fuel);let x=calculateRcExpiry($('docIssue').value,car?.fuel);$('rcCalculatedExpiry').textContent=x?formatDateNice(x):'—'}};
  $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();
  if(preselectedType)$('docUploadTitle').textContent=preselectedType==='insurance'?'Renew Insurance':preselectedType==='puc'?'Renew PUC':preselectedType==='rc'?'Replace Registration Certificate':'Upload Vehicle Document';
  $('docUploadClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m&&$('docUploadBtn')&&!$('docUploadBtn').disabled)m.remove()};
  $('docUploadBtn').onclick=async()=>{
-   let btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
-   btn.disabled=true;btn.classList.add('is-uploading');label.innerHTML='<span class="inline-spinner"></span> UPLOADING...';
+   const btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
+   btn.disabled=true;btn.classList.add('is-uploading');label.innerHTML='<span class="inline-spinner"></span> CHECKING...';
    let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null,e=t==='rc'?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?$('docExpiry').value:'');
-   let f=$('docFile').files[0],MAX_FILE_SIZE=10*1024*1024,ALLOWED_MIME=new Set(['application/pdf','image/jpeg','image/png']),ALLOWED_EXT=new Set(['pdf','jpg','jpeg','png']);
+   const f=$('docFile').files[0],MAX_FILE_SIZE=10*1024*1024,ALLOWED_MIME=new Set(['application/pdf','image/jpeg','image/png']),ALLOWED_EXT=new Set(['pdf','jpg','jpeg','png']);
+   let reviewed=null,extracted=null;
    const fail=msg=>{btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';toast(msg,'error')};
    if(!f||!car)return fail('Failed to upload document. Select a file.');
    if(f.size<=0)return fail('Failed to upload document. The selected file is empty.');
    if(f.size>MAX_FILE_SIZE)return fail('File is too large. Maximum allowed size is 10 MB.');
    let ext=(f.name.split('.').pop()||'').toLowerCase();if(!ALLOWED_MIME.has(f.type)||!ALLOWED_EXT.has(ext))return fail('Unsupported file. Only PDF, JPG, JPEG and PNG files are allowed.');
    if(t==='other'&&!n)return fail('Failed to upload Other Document. Enter document name.');
-   if((t==='rc'||t==='insurance'||t==='puc')&&!issue)return fail('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':'PUC Certificate')+'. Issue Date is required.');
-   if((t==='insurance'||t==='puc')&&!e)return fail('Failed to upload '+(t==='insurance'?'Insurance Document':'PUC Certificate')+'. Expiry date is required.');
-   let oldDoc=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
-   let oldPatch=t==='insurance'?{insurance_expiry:car.insurance_expiry}:t==='puc'?{puc_expiry:car.puc_expiry}:null;
-   let newDocId=null,archived=false,complianceUpdated=false,pendingKey=null,finalKey=null;
    try{
+     if(t==='rc'||t==='insurance'){
+       label.innerHTML='<span class="inline-spinner"></span> EXTRACTING...';
+       extracted=await CarmyExtraction.extract(f,t,(p,s)=>{label.textContent=(s||'EXTRACTING')+' '+Math.round((p||0)*100)+'%';});
+       const initial=t==='rc'?{...extracted.data,registration_no:extracted.data.registration_no||car.registration_no,chassis_no:extracted.data.chassis_no||car.vin,engine_no:extracted.data.engine_no||car.engine_no,owner_name:extracted.data.owner_name||car.owner_name,fuel:extracted.data.fuel||car.fuel}:extracted.data;
+       reviewed=await openExtractionReview(t,initial,CarmyExtraction.validate(initial,car,t));
+       if(!reviewed){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return;}
+       if(t==='rc'){issue=reviewed.date_of_regn||issue;e=reviewed.regn_validity||e}
+       if(t==='insurance'){issue=reviewed.period_from;e=reviewed.period_to}
+     }else{
+       if((t==='rc'||t==='insurance'||t==='puc')&&!issue)return fail('Issue Date is required.');
+       if((t==='insurance'||t==='puc')&&!e)return fail('Expiry date is required.');
+     }
+     let oldDoc=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
+     let oldPatch=t==='puc'?{puc_expiry:car.puc_expiry}:null,newDocId=null,archived=false,complianceUpdated=false,pendingKey=null,finalKey=null;
+     label.innerHTML='<span class="inline-spinner"></span> UPLOADING...';
      const signed=await workerPost('/api/files/presign-upload',{car_id:car.id,file_name:f.name,mime_type:f.type,file_size:f.size,document_type:t});
      pendingKey=signed.data.pending_key;
-     const put=await fetch(signed.data.upload_url,{method:'PUT',headers:{'Content-Type':f.type},body:f});
-     if(!put.ok)throw new Error('R2 upload failed ('+put.status+').');
+     const put=await fetch(signed.data.upload_url,{method:'PUT',headers:{'Content-Type':f.type},body:f});if(!put.ok)throw new Error('R2 upload failed ('+put.status+').');
      finalKey=pendingKey.replace(/^pending\//,'documents/');
-     let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:finalKey,storage_backend:'r2',mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:false}).select('id').single();
+     let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:finalKey,storage_backend:'r2',mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:false,extraction_status:(t==='rc'||t==='insurance')?'processing':'not_started'}).select('id').single();
      if(ins.error)throw new Error('Document record save failed: '+ins.error.message);newDocId=ins.data.id;
      if(oldDoc){
        let folder=docTypeLabel(oldDoc)+'-'+fyLabel(oldDoc.document_expiry||oldDoc.created_at);
        let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id).is('archived_at',null);
        if(au.error)throw new Error('Old document could not be archived: '+au.error.message);archived=true;
      }
-     const finalized=await workerPost('/api/files/finalize',{car_id:car.id,pending_key:pendingKey});
-     if(finalized?.data?.storage_path!==finalKey)throw new Error('R2 final storage path verification failed.');
-     let activate=await db.from('documents').update({active:true,archived_at:null}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
-     if(activate.error)throw new Error('New document could not be activated: '+activate.error.message);
-     if(t==='insurance'||t==='puc'){
-       let patch=t==='insurance'?{insurance_expiry:e}:{puc_expiry:e};let cr=await db.from('cars').update(patch).eq('id',car.id).eq('user_id',user.id);
-       if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);
-       Object.assign(car,patch);complianceUpdated=true;
+     const finalized=await workerPost('/api/files/finalize',{car_id:car.id,pending_key:pendingKey});if(finalized?.data?.storage_path!==finalKey)throw new Error('R2 final storage path verification failed.');
+     let activate=await db.from('documents').update({active:true,archived_at:null}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);if(activate.error)throw new Error('New document could not be activated: '+activate.error.message);
+     if(t==='rc'){
+       const maker=reviewed.maker||'',model=reviewed.model||'',payload={registration_no:reviewed.registration_no||car.registration_no,owner_name:reviewed.owner_name||car.owner_name,vin:reviewed.chassis_no||car.vin,engine_no:reviewed.engine_no||car.engine_no,fuel:reviewed.fuel||car.fuel,make_model:(maker&&model)?maker+' / '+model:(car.make_model||model||maker),rc_regn_date:reviewed.date_of_regn||null,rc_validity:reviewed.regn_validity||null,rc_owner_relation:reviewed.owner_relation||null,rc_ownership_type:reviewed.ownership_type||null,rc_address:reviewed.address||null,rc_emission_norms:reviewed.emission_norms||null,rc_vehicle_class:reviewed.vehicle_class||null,rc_maker:maker||null,rc_model:model||null,rc_colour:reviewed.colour||null,rc_body_type:reviewed.body_type||null,rc_seating:reviewed.seating??null,rc_unladen_weight:reviewed.unladen_weight??null,rc_cubic_capacity:reviewed.cubic_capacity??null,rc_mfg_month_year:reviewed.mfg_month_year||null,rc_cylinders:reviewed.no_of_cylinders??null,rc_registration_authority:reviewed.registration_authority||null,rc_card_issue_date:reviewed.card_issue_date||null,rc_extraction_meta:{source:'browser-ocr',reviewed:true,confidence:reviewed.confidence||{}}};
+       const saved=await workerPatch('/api/vehicles/'+encodeURIComponent(car.id)+'/rc',payload);Object.assign(car,saved.data||payload);
+     }else if(t==='insurance'){
+       label.innerHTML='<span class="inline-spinner"></span> SAVING POLICY...';
+       const saved=await workerPost('/api/insurance',{car_id:car.id,source_document_id:newDocId,insurer_name:reviewed.insurer_name,policy_number:reviewed.policy_number,insured_name:reviewed.insured_name,period_from:reviewed.period_from,period_to:reviewed.period_to,policy_reg_no:reviewed.reg_no,policy_chassis_no:reviewed.chassis_no,policy_engine_no:reviewed.engine_no,idv_amount:reviewed.idv,total_premium:reviewed.total_premium,gross_premium_amount:reviewed.total_premium,previous_policy_number:reviewed.previous_policy_number,previous_insurer:reviewed.previous_insurer,policy_type:reviewed.policy_type,claim_taken:reviewed.claim_taken,claim_invoice_no:reviewed.claim_invoice_no,extraction_meta:{source:'browser-pdf-text',parser:extracted.data.parser,reviewed:true,confidence:reviewed.confidence||{}}});
+       await db.from('documents').update({extraction_status:'completed'}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
+     }else if(t==='puc'){
+       let cr=await db.from('cars').update({puc_expiry:e}).eq('id',car.id).eq('user_id',user.id);if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);Object.assign(car,{puc_expiry:e});complianceUpdated=true;
      }
+     if(t==='rc'||t==='insurance')await db.from('documents').update({extraction_status:'completed'}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
      let refreshError=null;try{await loadData()}catch(refreshErrCaught){refreshError=refreshErrCaught}
      m.remove();let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
-     toast(t==='rc'?('Registration Certificate uploaded successfully! Valid until '+formatDateNice(e)+'.'):name+' uploaded successfully!');
+     toast(name+' saved successfully.');
      if(refreshError)toast('Document saved, but the document list could not refresh. Please refresh the page.','error');
    }catch(err){
      if(newDocId){try{await workerDelete('/api/files/object?document_id='+encodeURIComponent(newDocId)+'&car_id='+encodeURIComponent(car.id))}catch(cleanErr){console.error('R2 cleanup failed:',cleanErr)}}
      if(complianceUpdated&&oldPatch)await db.from('cars').update(oldPatch).eq('id',car.id).eq('user_id',user.id);
      if(newDocId)await db.from('documents').delete().eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
      if(archived&&oldDoc)await db.from('documents').update({archive_name:null,archived_at:null,active:true}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id);
-     toast('Failed to upload '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
+     toast('Failed to save '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
    }finally{if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}}
  };
 }
+
 window.openDocUploader=openDocUploader;
 async function openDocumentPreview(id,path,fileName='Document'){
  let existing=document.getElementById('documentPreviewModal');if(existing)existing.remove();
