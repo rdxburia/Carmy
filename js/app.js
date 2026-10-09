@@ -1299,6 +1299,68 @@ function formatDateNice(x){
  const d=new Date(x+'T00:00:00');
  return Number.isNaN(d.getTime())?x:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
 }
+
+async function workerPatch(path,payload){
+  return workerRequest(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+}
+function istTodayClient(){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+}
+function policyStatusPreview(from,to){
+  const today=istTodayClient();
+  if(from&&from>today)return 'Upcoming';
+  if(from&&to&&from<=today&&today<=to)return 'Current';
+  return 'Archive';
+}
+function extractionReviewField(id,label,value,type='text',unverified=false){
+  const inputType=type==='date'?'date':type==='number'?'number':'text';
+  return '<label class="ex-review-field"><span>'+esc(label)+(unverified?' <em>UNVERIFIED</em>':'')+'</span><input id="'+esc(id)+'" type="'+inputType+'" value="'+esc(value??'')+'"></label>';
+}
+function openExtractionReview(kind,initial,validation){
+  return new Promise(resolve=>{
+    const data=JSON.parse(JSON.stringify(initial||{}));
+    let modal=document.getElementById('extractionReviewModal');if(modal)modal.remove();
+    modal=document.createElement('div');modal.id='extractionReviewModal';
+    modal.style='position:fixed;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(8px);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';
+    const isRc=kind==='rc';
+    const fields=isRc?[
+      ['registration_no','Regn No','text'],['date_of_regn','Date of Regn','date'],['regn_validity','Regn Validity','date'],['chassis_no','Chassis No','text'],['engine_no','Engine No','text'],['owner_name','Owner Name','text'],['owner_relation','S/D/W of','text'],['ownership_type','Ownership Type','text'],['address','Address','text'],['fuel','Fuel','text'],['emission_norms','Emission Norms (BS)','text'],['vehicle_class','Vehicle Class','text'],['maker','Maker','text'],['model','Model','text'],['colour','Colour','text'],['body_type','Body Type','text'],['seating','Seating','number'],['unladen_weight','Unladen Weight (Kg)','number'],['cubic_capacity','Cubic Capacity','number'],['mfg_month_year','Month-Year of Mfg','text'],['no_of_cylinders','No. of Cylinders','number'],['registration_authority','Registration Authority','text'],['card_issue_date','Card Issue Date','date']
+    ]:[
+      ['insurer_name','Insurer Name','text'],['policy_number','Policy No','text'],['insured_name','Insured Name','text'],['period_from','Period From (Own Damage)','date'],['period_to','Period To (Own Damage)','date'],['reg_no','Reg No','text'],['chassis_no','Chassis','text'],['engine_no','Engine','text'],['idv','IDV','number'],['total_premium','Total / Gross Premium','number'],['previous_policy_number','Previous Policy No','text'],['previous_insurer','Previous Insurer','text'],['policy_type','Policy Type','text']
+    ];
+    const unverified=id=>initial?.confidence?.[id]==='unverified'||initial?.confidence?.[id]==='review';
+    const rows=fields.map(f=>extractionReviewField(f[0],f[1],data[f[0]],f[2],unverified(f[0]))).join('');
+    const claim=kind==='insurance'?'<div class="ex-review-claim"><div><b>Claim taken</b><small>Never extracted from the policy PDF. Confirm manually.</small></div><div class="ex-review-claim-actions"><label><input type="radio" name="exClaim" value="no" checked> No</label><label><input type="radio" name="exClaim" value="yes"> Yes</label></div><label class="ex-review-field ex-claim-invoice"><span>Claim Invoice No. <em>REQUIRED FOR YES</em></span><input id="claim_invoice_no" type="text" value=""></label></div>':'';
+    modal.innerHTML='<div class="ex-review-card"><div class="ex-review-head"><div><div class="ex-review-kicker">REVIEW BEFORE SAVE</div><h2>'+(isRc?'RC details review':'Insurance policy review')+'</h2><p>Auto-filled values are editable. Nothing extracted here is saved until you confirm.</p></div><button class="ghost" id="exReviewCancel" type="button">Cancel</button></div><div id="exReviewValidation" class="ex-review-validation"></div><div class="ex-review-grid">'+rows+'</div>'+claim+'<div class="ex-review-footer"><span id="exReviewStatus"></span><div><button class="ghost" id="exReviewBack" type="button">Cancel</button><button class="primary" id="exReviewConfirm" type="button">CONFIRM &amp; SAVE</button></div></div></div>';
+    document.body.appendChild(modal);
+    const read=()=>{
+      for(const f of fields){const el=document.getElementById(f[0]);if(el)data[f[0]]=el.value===''?null:(f[2]==='number'?Number(el.value):el.value)}
+      if(kind==='insurance'){data.claim_taken=document.querySelector('input[name="exClaim"]:checked')?.value==='yes'?true:false;data.claim_invoice_no=document.getElementById('claim_invoice_no')?.value.trim()||null}
+      return data;
+    };
+    const render=()=>{
+      const d=read();let v=CarmyExtraction.validate(d,car,kind);
+      if(kind==='insurance'){
+        if(insuranceHistory.some(x=>x.policy_number&&String(x.policy_number).trim().toLowerCase()===String(d.policy_number||'').trim().toLowerCase()))v.errors.push('This policy number already exists for this vehicle.');
+        if(!d.period_from||!d.period_to)v.errors.push('Policy period From/To is required.');
+        if(d.period_from&&d.period_to&&d.period_from>d.period_to)v.errors.push('Policy period is invalid: From cannot be after To.');
+        if(d.claim_taken===true&&!d.claim_invoice_no)v.errors.push('Claim Invoice No. is required when Claim = Yes.');
+      }
+      const box=document.getElementById('exReviewValidation'),btn=document.getElementById('exReviewConfirm');
+      box.innerHTML=v.errors.length?'<b>Cannot save yet</b><ul>'+v.errors.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<b class="ok">Vehicle match verified.</b>';
+      if(document.getElementById('exReviewStatus'))document.getElementById('exReviewStatus').textContent=kind==='insurance'?'Status preview: '+policyStatusPreview(d.period_from,d.period_to):'RC values will update only after confirmation.';
+      btn.disabled=v.errors.length>0;
+      return {data:d,validation:v};
+    };
+    modal.querySelectorAll('input').forEach(x=>x.addEventListener('input',render));
+    document.querySelectorAll('input[name="exClaim"]').forEach(x=>x.addEventListener('change',render));
+    const close=()=>{modal.remove();resolve(null)};
+    document.getElementById('exReviewCancel').onclick=close;document.getElementById('exReviewBack').onclick=close;
+    document.getElementById('exReviewConfirm').onclick=()=>{const r=render();if(r.validation.errors.length)return;modal.remove();resolve(r.data)};
+    render();
+  });
+}
+
 function openDocUploader(preselectedType=''){
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
