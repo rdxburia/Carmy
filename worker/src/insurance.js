@@ -68,7 +68,7 @@ export async function createInsurancePolicy(env,user,userToken,input){
   const owned=await ownedCar(env,user,userToken,carId);
   if(!owned)throw err("Vehicle ownership verification failed.",403,"FORBIDDEN");
   const policyReg=clean(input?.policy_reg_no),policyChassis=clean(input?.policy_chassis_no);
-  const rcReg=clean(owned.registration_no),rcChassis=clean(owned.chassis_no||owned.rc_chassis_no);
+  const rcReg=clean(owned.registration_no),rcChassis=clean(owned.vin);
   if(policyReg&&rcReg&&key(policyReg)!==key(rcReg))throw err("This insurance policy registration number does not match the vehicle RC.");
   if(policyChassis&&rcChassis&&key(policyChassis)!==key(rcChassis))throw err("This insurance policy chassis number does not match the vehicle RC.");
   const documentId=clean(input?.source_document_id);if(!(await validDocument(env,user,userToken,documentId,carId)))throw err("Source document ownership verification failed.",403,"FORBIDDEN");
