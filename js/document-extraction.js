@@ -106,9 +106,10 @@ function parseInsurance(ps,text){
   m=raw.match(/(?:Total\s+IDV(?:\s*\(Rs\.?\))?|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value(?:\s*\(IDV\))?)\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
   if(!m){const v=near(rs,/Total\s+IDV|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value/i,numeric);if(v)m=[v,v]}
   if(m)add('idv',money(m[1]),i+1,'IDV label/table',4);
-  m=raw.match(/(?:Gross\s+Premium(?:\s+Paid)?|Total\s+Premium(?:\s+Payable)?|Premium\s+Amount\s*\(Rs\.?\))\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
-  if(!m){const v=near(rs,/Gross\s+Premium|Total\s+Premium|Premium\s+Amount/i,numeric);if(v)m=[v,v]}
-  if(m)add('total_premium',money(m[1]),i+1,/GST\s+INVOICE/i.test(t)?'GST invoice gross premium':'premium schedule label',/Gross\s+Premium|Total\s+Premium\s+Payable/i.test(m[0])?5:3);
+  m=raw.match(/Gross\s+Premium(?:\s+Paid)?\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
+  if(!m)m=raw.match(/(?:Total\s+Premium\s+Payable|Premium\s+Amount\s*\(Rs\.?\)|Total\s+Premium)\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
+  if(!m){const v=near(rs,/Gross\s+Premium|Total\s+Premium\s+Payable|Premium\s+Amount/i,numeric);if(v)m=[v,v]}
+  if(m)add('total_premium',money(m[1]),i+1,/GST\s+INVOICE/i.test(t)?'GST invoice gross premium':/Gross\s+Premium/i.test(m[0])?'schedule gross premium':'premium schedule label',/Gross\s+Premium|Total\s+Premium\s+Payable/i.test(m[0])?5:3);
   m=raw.match(/\bPrevious\s+Policy\s+No\.?\s*:?\s*([A-Z0-9\/-]{8,30})/i);
   if(!m&&/FULL\s+NAME\s+OF\s+PREVIOUS\s+INSURER/i.test(raw)){
    const pm=raw.match(/FULL\s+NAME\s+OF\s+PREVIOUS\s+INSURER[\s\S]{0,500}?\bPolicy\s+Number\s+([A-Z0-9\/-]{8,30})/i);if(pm)m=pm;
