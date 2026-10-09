@@ -1,0 +1,2 @@
+# Private customer document fixtures must never be committed
+tests/fixtures/local/
