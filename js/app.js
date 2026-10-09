@@ -1074,7 +1074,8 @@ function ownerProfileView(){
    (hasProfile?'':'<div class="minimal-empty dangerbox"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>')+
    '<div class="owner-profile-note" style="margin-bottom:18px;padding:12px 14px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-soft);color:var(--c-mute);font-size:12px">Form 29 &amp; 30 use the saved owner profile as the transferor name and address.</div>'+
    ownerProfileFields(p,meta)+
-   '</div></div>';
+   '</div></div>'+
+   '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>';
  const btn=$('opSave');
  btn.onclick=async()=>{
    if(btn.disabled)return;
