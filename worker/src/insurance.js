@@ -6,7 +6,7 @@ function addDays(iso,days){const d=new Date(String(iso)+"T00:00:00Z");d.setUTCDa
 function clean(v){const s=String(v??"").trim();return s||null}
 function eqKey(v){return clean(v)?.toLowerCase().replace(/\s+/g,"")||null}
 function err(message,status=400,code="BAD_REQUEST"){const e=new Error(message);e.status=status;e.code=code;return e}
-function validIsoDate(v){if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(v||'')))return false;const d=new Date(v+'T00:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v}
+function validIsoDate(v){if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(v||'')))return false;const d=new Date(v+'T00:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v}
 function key(v){return clean(v)?.toUpperCase().replace(/[^A-Z0-9]/g,'')||null}
 
 async function ownedCar(env,user,token,carId){
@@ -68,7 +68,7 @@ export async function createInsurancePolicy(env,user,userToken,input){
   const owned=await ownedCar(env,user,userToken,carId);
   if(!owned)throw err("Vehicle ownership verification failed.",403,"FORBIDDEN");
   const policyReg=clean(input?.policy_reg_no),policyChassis=clean(input?.policy_chassis_no);
-  const rcReg=clean(owned.registration_no),rcChassis=clean(owned.chassis_no||owned.rc_chassis_no);
+  const rcReg=clean(owned.registration_no),rcChassis=clean(owned.vin);
   if(policyReg&&rcReg&&key(policyReg)!==key(rcReg))throw err("This insurance policy registration number does not match the vehicle RC.");
   if(policyChassis&&rcChassis&&key(policyChassis)!==key(rcChassis))throw err("This insurance policy chassis number does not match the vehicle RC.");
   const documentId=clean(input?.source_document_id);if(!(await validDocument(env,user,userToken,documentId,carId)))throw err("Source document ownership verification failed.",403,"FORBIDDEN");

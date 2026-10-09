@@ -1874,6 +1874,7 @@ function showReportPrintOptions(){
  m.querySelector('#reportPrintGo').onclick=()=>{const selection={};m.querySelectorAll('[data-print-doc]').forEach(x=>selection[x.dataset.printDoc]=x.checked);selection.hideIncomplete=!!m.querySelector('#reportHideIncomplete')?.checked;try{localStorage.setItem(key,JSON.stringify(selection))}catch(_){}m.remove();printVehicleReport(selection)};
 }
 async function printVehicleReport(selection=null){
+  document.getElementById('vehicleReportPdfStage')?.remove();
   if(!selection){showReportPrintOptions();return;}
   const source=document.getElementById('reportArea');
   const original=source?.querySelector('.report-sheet');
@@ -1939,7 +1940,7 @@ async function printVehicleReport(selection=null){
   if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>chosen.push({doc:d,label:'Archived Insurance',number:d.document_name||d.file_name,validity:d.document_expiry}));
   if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>chosen.push({doc:d,label:'Archived PUC',number:d.document_name||d.file_name,validity:d.document_expiry}));
 
-  let status=null,failed=[];
+  let status=null,failed=[],printObjectUrls=[];
   const getUrl=async d=>{
     if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}
     const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);
@@ -1980,7 +1981,11 @@ async function printVehicleReport(selection=null){
             wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label+' page '+p;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
           }
         }else{
-          const img=new Image();img.loading='eager';img.decoding='async';img.src=url;
+          const imageResponse=await fetch(url,{mode:'cors',credentials:'omit'});
+          if(!imageResponse.ok)throw new Error('Image fetch failed with HTTP '+imageResponse.status);
+          const imageBlob=await imageResponse.blob();
+          const imageObjectUrl=URL.createObjectURL(imageBlob);printObjectUrls.push(imageObjectUrl);
+          const img=new Image();img.crossOrigin='anonymous';img.loading='eager';img.decoding='async';img.src=imageObjectUrl;
           if(typeof img.decode==='function')await img.decode();else await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});
           const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
           const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
@@ -1990,7 +1995,7 @@ async function printVehicleReport(selection=null){
           wrap.innerHTML='<h3>'+esc(header)+'</h3>';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
         }
       }catch(err){
-        console.error('Document print load failed',item.label,err);failed.push(item.label);addPlaceholder(item);
+        console.error('Document print load failed: '+item.label,err);failed.push(item.label+': '+String(err?.message||err));addPlaceholder(item);
       }
     }
     status.remove();
@@ -2016,13 +2021,13 @@ async function printVehicleReport(selection=null){
     else if(!img.complete)await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
   })).catch(err=>console.error('A report image failed to decode',err));
   if(failed.length){
-    const msg='Some documents could not be loaded: '+failed.join(', ')+'. A placeholder page will be included for each failed document. Continue printing?';
+    const msg='Some documents could not be loaded:\n'+failed.join('\n')+'\nA placeholder page will be included for each failed document. Continue printing?';
     if(!confirm(msg)){stage.remove();return}
   }
   const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
-  const hint=document.createElement('p');hint.className='report-print-hint no-print';hint.textContent='Choose Save as PDF in the print dialog.';stage.insertBefore(hint,clone);
+  const hint=document.createElement('p');hint.className='report-print-hint no-print';hint.textContent='In the print dialog choose Save as PDF, enable Background graphics (Print backgrounds in Firefox) and disable Headers and footers.';stage.insertBefore(hint,clone);
   let cleaned=false;
-  const cleanup=()=>{if(cleaned)return;cleaned=true;window.removeEventListener('afterprint',cleanup);stage.remove();if(button){button.disabled=false;button.textContent='PRINT / SAVE PDF'}};
+  const cleanup=()=>{if(cleaned)return;cleaned=true;window.removeEventListener('afterprint',cleanup);stage.remove();printObjectUrls.forEach(url=>URL.revokeObjectURL(url));printObjectUrls=[];if(button){button.disabled=false;button.textContent='PRINT / SAVE PDF'}};
   window.addEventListener('afterprint',cleanup,{once:true});
   try{
     if(document.fonts?.ready)await document.fonts.ready;
@@ -2031,6 +2036,6 @@ async function printVehicleReport(selection=null){
     if(button){button.disabled=true;button.textContent='PRINTING…'}
     window.print();
   }catch(err){console.error('Vehicle report print preparation failed:',err);toast('Report preparation failed. Check the console for the document error.','error');cleanup()}
-  setTimeout(()=>{if(!window.matchMedia('print').matches)cleanup()},1500);
+  // Firefox can return from window.print() before the preview is closed. Keep the print stage until afterprint; a subsequent report-print attempt also removes a stale stage.
 }
 window.printVehicleReport = printVehicleReport;
