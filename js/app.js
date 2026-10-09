@@ -2024,7 +2024,7 @@ async function printVehicleReport(selection=null){
     image:{type:'jpeg',quality:0.96},
     html2canvas:{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
-    pagebreak:{mode:['css','legacy'],avoid:['.report-head','.report-grid','.report-current-policy','.report-document-print-page','.report-table tr']}
+    pagebreak:{mode:['css'],avoid:['.report-head','.report-grid','.report-current-policy','.report-table tr']}
   };
   try{
     if(document.fonts?.ready)await document.fonts.ready;
