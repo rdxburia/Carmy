@@ -1851,7 +1851,24 @@ function dbSetupHint(err,file='step5_profile_history_sale.sql'){const m=String(e
    rules during native window.print().
    ========================================================= */
 
-async function printVehicleReport(){
+function showReportPrintOptions(){
+ const key='carmy-report-doc-print-'+String(user?.id||'user');
+ let saved={};try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch(_){}
+ const types=[
+  {key:'rc',label:'Registration Certificate',doc:(docs||[]).find(d=>d.document_type==='rc'&&d.active&&!d.archived_at)},
+  {key:'insurance',label:'Current Insurance',doc:(docs||[]).find(d=>d.id===insuranceHistory.find(x=>x.car_id===car?.id&&x.policy_status==='current')?.source_document_id)||((docs||[]).find(d=>d.document_type==='insurance'&&d.active&&!d.archived_at))},
+  {key:'puc',label:'Current PUC',doc:(docs||[]).find(d=>d.id===pucHistory.find(x=>x.car_id===car?.id&&x.puc_status==='current')?.source_document_id)||((docs||[]).find(d=>d.document_type==='puc'&&d.active&&!d.archived_at))},
+  {key:'archiveInsurance',label:'Archive Insurance policies',doc:(docs||[]).find(d=>d.document_type==='insurance'&&d.archived_at)},
+  {key:'archivePuc',label:'Archive PUC certificates',doc:(docs||[]).find(d=>d.document_type==='puc'&&d.archived_at)}
+ ];
+ document.getElementById('reportPrintOptions')?.remove();
+ const m=document.createElement('div');m.id='reportPrintOptions';m.className='report-print-options';
+ m.innerHTML='<div class="report-print-options-card" role="dialog" aria-modal="true"><h2>Include documents with this report?</h2><p class="muted">Selected documents will be placed after the vehicle history.</p>'+types.map((x,i)=>'<label><input type="checkbox" data-print-doc="'+x.key+'" '+(x.doc?'':'disabled')+' '+(saved[x.key]===undefined?(i<3?'checked':''):saved[x.key]?'checked':'')+'><span>'+x.label+(x.doc?'':' <small>Not uploaded</small>')+'</span></label>').join('')+'<div class="actions"><button type="button" id="reportPrintCancel">Cancel</button><button type="button" class="primary" id="reportPrintGo">Print</button></div><p id="reportPrintStatus" role="status"></p></div>';
+ document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.remove()};m.querySelector('#reportPrintCancel').onclick=()=>m.remove();
+ m.querySelector('#reportPrintGo').onclick=()=>{const selection={};m.querySelectorAll('[data-print-doc]').forEach(x=>selection[x.dataset.printDoc]=x.checked);try{localStorage.setItem(key,JSON.stringify(selection))}catch(_){}m.remove();printVehicleReport(selection)};
+}
+async function printVehicleReport(selection=null){
+  if(!selection){showReportPrintOptions();return;}
   const source = document.getElementById('reportArea');
   const original = source?.querySelector('.report-sheet');
 
