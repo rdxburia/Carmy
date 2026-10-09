@@ -1074,7 +1074,8 @@ function ownerProfileView(){
    (hasProfile?'':'<div class="minimal-empty dangerbox"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>')+
    '<div class="owner-profile-note" style="margin-bottom:18px;padding:12px 14px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-soft);color:var(--c-mute);font-size:12px">Form 29 &amp; 30 use the saved owner profile as the transferor name and address.</div>'+
    ownerProfileFields(p,meta)+
-   '</div></div>';
+   '</div></div>'+
+   '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>';
  const btn=$('opSave');
  btn.onclick=async()=>{
    if(btn.disabled)return;
@@ -1310,16 +1311,17 @@ function istTodayClient(){
   return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 }
 function policyStatusPreview(from,to){
+  if(!from||!to)return 'Needs verification';
   const today=istTodayClient();
-  if(from&&from>today)return 'Upcoming';
-  if(from&&to&&from<=today&&today<=to)return 'Current';
+  if(from>today)return 'Upcoming';
+  if(from<=today&&today<=to)return 'Current';
   return 'Archive';
 }
 function extractionReviewField(id,label,value,type='text',unverified=false){
   const inputType=type==='date'?'date':type==='number'?'number':'text';
   return '<label class="ex-review-field"><span>'+esc(label)+(unverified?' <em>UNVERIFIED</em>':'')+'</span><input id="'+esc(id)+'" type="'+inputType+'" value="'+esc(value??'')+'"></label>';
 }
-function openExtractionReview(kind,initial,validation,meta={}){return new Promise(resolve=>{const data=JSON.parse(JSON.stringify(initial||{}));let modal=document.getElementById('extractionReviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='extractionReviewModal';modal.style='position:fixed;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(8px);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';const isRc=kind==='rc',isPuc=kind==='puc',fields=isRc?[['registration_no','Regn No','text'],['date_of_regn','Date of Regn','date'],['regn_validity','Regn Validity','date'],['chassis_no','Chassis No','text'],['engine_no','Engine No','text'],['owner_name','Owner Name','text'],['owner_relation','S/D/W of','text'],['ownership_type','Ownership Type','text'],['address','Address','text'],['fuel','Fuel','text'],['emission_norms','Emission Norms (BS)','text'],['vehicle_class','Vehicle Class','text'],['maker','Maker','text'],['model','Model','text'],['colour','Colour','text'],['body_type','Body Type','text'],['seating','Seating','number'],['unladen_weight','Unladen Weight (Kg)','number'],['cubic_capacity','Cubic Capacity','number'],['mfg_month_year','Month-Year of Mfg','text'],['no_of_cylinders','No. of Cylinders','number'],['registration_authority','Registration Authority','text'],['card_issue_date','Card Issue Date','date']]:isPuc?[['test_date','Test Date','date'],['valid_until','Validity Upto','date'],['certificate_number','Certificate SL. No.','text'],['cost','Fees','number']]:[['insurer_name','Insurer Name','text'],['policy_number','Policy No','text'],['insured_name','Insured Name','text'],['period_from','Period From','date'],['period_to','Period To','date'],['reg_no','Reg No','text'],['chassis_no','Chassis','text'],['engine_no','Engine','text'],['idv','IDV','number'],['total_premium','Total / Gross Premium','number'],['previous_policy_number','Previous Policy No','text'],['previous_insurer','Previous Insurer','text'],['policy_type','Policy Type','text']];const inputField=(f)=>{const val=f[2]==='date'?formatDateNice(data[f[0]]):data[f[0]]??'';return '<label class="ex-review-field"><span>'+esc(f[1])+(data.confidence?.[f[0]]==='unverified'||data.confidence?.[f[0]]==='review'?' <em>UNVERIFIED</em>':'')+'</span>'+dateInputHtml(f[0],data[f[0]])+'</label>'.replace('>'+dateInputHtml(f[0],data[f[0]])+'</label>','>'+dateInputHtml(f[0],data[f[0]])+'</label>').replace('type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"','type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"')||''};const fieldHtml=fields.map(f=>f[2]==='date'?'<label class="ex-review-field"><span>'+esc(f[1])+(data.confidence?.[f[0]]==='unverified'||data.confidence?.[f[0]]==='review'?' <em>UNVERIFIED</em>':'')+'</span>'+dateInputHtml(f[0],data[f[0]])+'</label>':'<label class="ex-review-field"><span>'+esc(f[1])+(data.confidence?.[f[0]]==='unverified'||data.confidence?.[f[0]]==='review'?' <em>UNVERIFIED</em>':'')+'</span><input id="'+esc(f[0])+'" type="'+(f[2]==='number'?'number':'text')+'" value="'+esc(data[f[0]]??'')+'"></label>').join('');let duplicate='';if(meta.saved){const diff=fields.map(f=>{const old=meta.saved[f[0]],neu=data[f[0]];return old!=null&&String(old)!==String(neu??'')?'<div><b>'+esc(f[1])+'</b>: saved <span>'+esc(old)+'</span> → extracted <span>'+esc(neu??'')+'</span></div>':''}).join('');duplicate='<div class="ex-review-duplicate"><b>Already saved</b><p>Existing non-empty values will not be overwritten. Only empty saved fields can be filled.</p>'+(diff||'<span>No field differences.</span>')+'</div>'}const claim=isRc||isPuc?'':'<div class="ex-review-claim"><div><b>Claim taken</b><small>Choose Yes or No before saving.</small></div><div class="ex-review-claim-actions"><label><input type="radio" name="exClaim" value="yes"> Yes</label><label><input type="radio" name="exClaim" value="no"> No</label></div><label class="ex-review-field ex-claim-invoice" id="exClaimInvoiceWrap" style="display:none"><span>Claim Invoice No. *</span><input id="claim_invoice_no" type="text" value=""></label></div>';const thumb=meta.thumbnail?'<div class="ex-review-preview"><img src="'+meta.thumbnail+'" alt="Document preview"></div>':'';modal.innerHTML='<div class="ex-review-card"><div class="ex-review-head"><div><div class="ex-review-kicker">REVIEW BEFORE SAVE</div><h2>'+esc(isRc?'RC details review':isPuc?'PUC certificate review':'Insurance policy review')+'</h2><p>Nothing is saved until you confirm.</p></div><button class="ghost" id="exReviewCancel" type="button">Cancel</button></div><div class="ex-review-layout">'+thumb+'<div><div id="exReviewValidation" class="ex-review-validation"></div>'+duplicate+'<div class="ex-review-grid">'+fieldHtml+'</div>'+(!isPuc?'':(data.suggested_valid_until&&!data.valid_until?'<div class="ex-review-validation">Suggested validity: <b>'+esc(formatDateNice(data.suggested_valid_until))+'</b> — please verify and enter it.</div>':''))+claim+'</div></div><div class="ex-review-footer"><span id="exReviewStatus"></span><div><button class="ghost" id="exReviewBack" type="button">Cancel</button><button class="primary" id="exReviewConfirm" type="button">CONFIRM &amp; SAVE</button></div></div></div>';document.body.appendChild(modal);wireDateInputs(modal);const read=()=>{for(const f of fields){const el=document.getElementById(f[0]);if(el)data[f[0]]=f[2]==='date'?dateInputValue(f[0]):el.value===''?null:(f[2]==='number'?Number(el.value):el.value)}if(kind==='insurance'){const q=document.querySelector('input[name="exClaim"]:checked');data.claim_taken=q?String(q.value)==='yes':null;data.claim_invoice_no=document.getElementById('claim_invoice_no')?.value.trim()||null}return data};const render=()=>{const d=read(),v=CarmyExtraction.validate(d,car,kind);if(kind==='insurance'){if(!d.period_from||!d.period_to)v.errors.push('Policy period From/To is required.');if(d.period_from&&d.period_to&&d.period_from>d.period_to)v.errors.push('Policy period is invalid.');if(d.claim_taken===null)v.errors.push('Choose Claim Yes or No.');if(d.claim_taken===true&&!d.claim_invoice_no)v.errors.push('Claim Invoice No. is required when Claim = Yes.')}if(isPuc&&d.valid_until&&data.suggested_valid_until&&d.valid_until!==data.suggested_valid_until)v.warnings.push('Validity differs from test date + 1 year - 1 day. Please verify.');const box=document.getElementById('exReviewValidation'),btn=document.getElementById('exReviewConfirm');box.innerHTML=(v.errors.length?'<b>Cannot save yet</b><ul>'+v.errors.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<b class="ok">Vehicle/type checks passed.</b>')+(v.warnings.length?'<div class="ex-review-warning">'+v.warnings.map(x=>esc(x)).join('<br>')+'</div>':'');if(isPuc)document.getElementById('exReviewStatus').textContent='Status preview: '+(d.valid_until>=istTodayClient()?'Current':'Archive');else if(kind==='insurance')document.getElementById('exReviewStatus').textContent='Status preview: '+policyStatusPreview(d.period_from,d.period_to);btn.disabled=v.errors.length>0;return{data:d,validation:v}};modal.querySelectorAll('input').forEach(x=>x.addEventListener('input',render));modal.querySelectorAll('input[name="exClaim"]').forEach(x=>x.addEventListener('change',()=>{document.getElementById('exClaimInvoiceWrap').style.display=document.querySelector('input[name="exClaim"]:checked')?.value==='yes'?'block':'none';render()}));const close=()=>{modal.remove();resolve(null)};document.getElementById('exReviewCancel').onclick=close;document.getElementById('exReviewBack').onclick=close;document.getElementById('exReviewConfirm').onclick=()=>{const r=render();if(r.validation.errors.length)return;modal.remove();resolve(r.data)};render()})}
+function openExtractionReview(kind,initial,validation,meta={}){return new Promise(resolve=>{const data=JSON.parse(JSON.stringify(initial||{}));let modal=document.getElementById('extractionReviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='extractionReviewModal';modal.style='position:fixed;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(8px);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';const isRc=kind==='rc',isPuc=kind==='puc',fields=isRc?[['registration_no','Regn No','text'],['date_of_regn','Date of Regn','date'],['regn_validity','Regn Validity','date'],['chassis_no','Chassis No','text'],['engine_no','Engine No','text'],['owner_name','Owner Name','text'],['owner_relation','S/D/W of','text'],['ownership_type','Ownership Type','text'],['address','Address','text'],['fuel','Fuel','text'],['emission_norms','Emission Norms (BS)','text'],['vehicle_class','Vehicle Class','text'],['maker','Maker','text'],['model','Model','text'],['colour','Colour','text'],['body_type','Body Type','text'],['seating','Seating','number'],['unladen_weight','Unladen Weight (Kg)','number'],['cubic_capacity','Cubic Capacity','number'],['mfg_month_year','Month-Year of Mfg','text'],['no_of_cylinders','No. of Cylinders','number'],['registration_authority','Registration Authority','text'],['card_issue_date','Card Issue Date','date']]:isPuc?[['test_date','Test Date','date'],['valid_until','Validity Upto','date'],['certificate_number','Certificate SL. No.','text'],['cost','Fees','number']]:[['insurer_name','Insurer Name','text'],['policy_number','Policy No','text'],['insured_name','Insured Name','text'],['period_from','Period From','date'],['period_to','Period To','date'],['reg_no','Reg No','text'],['chassis_no','Chassis','text'],['engine_no','Engine','text'],['idv','IDV','number'],['total_premium','Total / Gross Premium','number'],['previous_policy_number','Previous Policy No','text'],['previous_insurer','Previous Insurer','text'],['policy_type','Policy Type','text']];const inputField=(f)=>{const val=f[2]==='date'?formatDateNice(data[f[0]]):data[f[0]]??'';return '<label class="ex-review-field"><span>'+esc(f[1])+(data.confidence?.[f[0]]==='unverified'||data.confidence?.[f[0]]==='review'?' <em>UNVERIFIED</em>':'')+'</span>'+dateInputHtml(f[0],data[f[0]])+'</label>'.replace('>'+dateInputHtml(f[0],data[f[0]])+'</label>','>'+dateInputHtml(f[0],data[f[0]])+'</label>').replace('type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"','type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"')||''};const evidenceText=key=>{const c=String(data.confidence?.[key]||'unverified'),v=c.match(/^verified:(\d+)/),one=c.match(/^single:(\d+)/);if(v)return 'Verified (found on '+v[1]+' pages)';if(one)return 'Single source · page '+one[1];if(c==='high')return 'Single source';if(c==='medium')return 'Single source · review recommended';if(c==='review')return 'Needs review';return 'Unverified'};const evidenceHtml=key=>'<small class="ex-field-evidence '+(String(data.confidence?.[key]||'unverified').startsWith('verified:')?'is-verified':String(data.confidence?.[key]||'').startsWith('single:')?'is-single':'is-unverified')+'">'+esc(evidenceText(key))+(data.field_sources?.[key]?.length?' · Source page(s): '+esc(data.field_sources[key].join(', ')):'')+'</small>';const fieldHtml=fields.map(f=>'<label class="ex-review-field"><span>'+esc(f[1])+'</span>'+(f[2]==='date'?dateInputHtml(f[0],data[f[0]]):'<input id="'+esc(f[0])+'" type="'+(f[2]==='number'?'number':'text')+'" value="'+esc(data[f[0]]??'')+'">')+evidenceHtml(f[0])+'</label>').join('');const devDiagnostics=(window.CARMY_DEV_DIAGNOSTICS===true||new URLSearchParams(window.location.search).get('debugExtraction')==='1')&&kind==='insurance'&&data.diagnostics;const diagnosticsHtml=devDiagnostics?'<details class="extraction-diagnostics"><summary>Developer extraction diagnostics</summary><p>Pages: '+esc(data.diagnostics.page_count)+'</p><pre>'+esc(JSON.stringify(data.diagnostics,null,2))+'</pre></details>':'';let duplicate='';if(meta.saved){const diff=fields.map(f=>{const old=meta.saved[f[0]],neu=data[f[0]];return old!=null&&String(old)!==String(neu??'')?'<div><b>'+esc(f[1])+'</b>: saved <span>'+esc(old)+'</span> → extracted <span>'+esc(neu??'')+'</span></div>':''}).join('');duplicate='<div class="ex-review-duplicate"><b>Already saved</b><p>Existing non-empty values will not be overwritten. Only empty saved fields can be filled.</p>'+(diff||'<span>No field differences.</span>')+'</div>'}const claim=isRc||isPuc?'':'<div class="ex-review-claim"><div><b>Claim taken</b><small>Choose Yes or No before saving.</small></div><div class="ex-review-claim-actions"><label><input type="radio" name="exClaim" value="yes"> Yes</label><label><input type="radio" name="exClaim" value="no"> No</label></div><label class="ex-review-field ex-claim-invoice" id="exClaimInvoiceWrap" style="display:none"><span>Claim Invoice No. *</span><input id="claim_invoice_no" type="text" value=""></label></div>';const thumb=meta.thumbnail?'<div class="ex-review-preview"><img src="'+meta.thumbnail+'" alt="Document preview"></div>':'';modal.innerHTML='<div class="ex-review-card"><div class="ex-review-head"><div><div class="ex-review-kicker">REVIEW BEFORE SAVE</div><h2>'+esc(isRc?'RC details review':isPuc?'PUC certificate review':'Insurance policy review')+'</h2><p>Nothing is saved until you confirm.</p></div><button class="ghost" id="exReviewCancel" type="button">Cancel</button></div><div class="ex-review-layout">'+thumb+'<div><div id="exReviewValidation" class="ex-review-validation"></div>'+duplicate+'<div class="ex-review-grid">'+fieldHtml+'</div>'+diagnosticsHtml+(!isPuc?'':(data.suggested_valid_until&&!data.valid_until?'<div class="ex-review-validation">Suggested validity: <b>'+esc(formatDateNice(data.suggested_valid_until))+'</b> — please verify and enter it.</div>':''))+claim+'</div></div><div class="ex-review-footer"><span id="exReviewStatus"></span><div><button class="ghost" id="exReviewBack" type="button">Cancel</button><button class="primary" id="exReviewConfirm" type="button">CONFIRM &amp; SAVE</button></div></div></div>';document.body.appendChild(modal);wireDateInputs(modal);const read=()=>{for(const f of fields){const el=document.getElementById(f[0]);if(el)data[f[0]]=f[2]==='date'?dateInputValue(f[0]):el.value===''?null:(f[2]==='number'?Number(el.value):el.value)}if(kind==='insurance'){const q=document.querySelector('input[name="exClaim"]:checked');data.claim_taken=q?String(q.value)==='yes':null;data.claim_invoice_no=document.getElementById('claim_invoice_no')?.value.trim()||null}return data};const render=()=>{const d=read(),v=CarmyExtraction.validate(d,car,kind);if(kind==='insurance'){if(!d.period_from||!d.period_to)v.errors.push('Policy period From/To is required.');if(d.period_from&&d.period_to&&d.period_from>d.period_to)v.errors.push('Policy period is invalid.');if(d.claim_taken===null)v.errors.push('Choose Claim Yes or No.');if(d.claim_taken===true&&!d.claim_invoice_no)v.errors.push('Claim Invoice No. is required when Claim = Yes.')}if(isPuc&&d.valid_until&&data.suggested_valid_until&&d.valid_until!==data.suggested_valid_until)v.warnings.push('Validity differs from test date + 1 year - 1 day. Please verify.');const box=document.getElementById('exReviewValidation'),btn=document.getElementById('exReviewConfirm');box.innerHTML=(v.errors.length?'<b>Cannot save yet</b><ul>'+v.errors.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<b class="ok">Vehicle/type checks passed.</b>')+(v.warnings.length?'<div class="ex-review-warning">'+v.warnings.map(x=>esc(x)).join('<br>')+'</div>':'');if(isPuc)document.getElementById('exReviewStatus').textContent='Status preview: '+(!d.valid_until?'Needs verification':d.valid_until>=istTodayClient()?'Current':'Archive');else if(kind==='insurance')document.getElementById('exReviewStatus').textContent='Status preview: '+policyStatusPreview(d.period_from,d.period_to);btn.disabled=v.errors.length>0;return{data:d,validation:v}};modal.querySelectorAll('input').forEach(x=>x.addEventListener('input',render));modal.querySelectorAll('input[name="exClaim"]').forEach(x=>x.addEventListener('change',()=>{document.getElementById('exClaimInvoiceWrap').style.display=document.querySelector('input[name="exClaim"]:checked')?.value==='yes'?'block':'none';render()}));const close=()=>{modal.remove();resolve(null)};document.getElementById('exReviewCancel').onclick=close;document.getElementById('exReviewBack').onclick=close;document.getElementById('exReviewConfirm').onclick=()=>{const r=render();if(r.validation.errors.length)return;modal.remove();resolve(r.data)};render()})}
 function openDocUploader(preselectedType=''){
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
@@ -1330,8 +1332,8 @@ function openDocUploader(preselectedType=''){
  $('docType').onchange=updateFields;$('docIssue').oninput=updateFields;updateFields();
  if(preselectedType)$('docUploadTitle').textContent=preselectedType==='insurance'?'Renew Insurance':preselectedType==='puc'?'Renew PUC':preselectedType==='rc'?'Replace Registration Certificate':'Upload Vehicle Document';
  $('docUploadClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m&&$('docUploadBtn')&&!$('docUploadBtn').disabled)m.remove()};
- $('docUploadBtn').onclick=async()=>{
-   const btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
+ const handleDocumentUpload=async()=>{
+   let btn=$('docUploadBtn'),label=btn.querySelector('.upload-btn-label');if(btn.disabled)return;
    btn.disabled=true;btn.classList.add('is-uploading');label.innerHTML='<span class="inline-spinner"></span> CHECKING...';
    let t=$('docType').value,n=t==='other'?$('docName').value.trim():'',issue=$('docIssue').value||null,e=t==='rc'?calculateRcExpiry(issue,car?.fuel):((t==='insurance'||t==='puc')?dateInputValue('docExpiry'):'');
    const f=$('docFile').files[0],MAX_FILE_SIZE=10*1024*1024,ALLOWED_MIME=new Set(['application/pdf','image/jpeg','image/png']),ALLOWED_EXT=new Set(['pdf','jpg','jpeg','png']);
@@ -1350,17 +1352,19 @@ function openDocUploader(preselectedType=''){
        const expected=t==='rc'?'rc':t==='puc'?'puc':'insurance';
        const initial=extracted.data;
        const details=t==='insurance'?('Registration: '+(initial.reg_no||'Not read')+' | Chassis: '+(initial.chassis_no||'Not read')+' | Insured: '+(initial.insured_name||'Not read')):t==='puc'?('Registration: '+(initial.registration_no||'Not read')):('Registration: '+(initial.registration_no||'Not read'));
-       const gate=(message,next,buttons='redirect')=>{m.querySelector('.doc-upload-card').innerHTML='<div class="ex-review-card" style="max-width:620px"><div class="ex-review-head"><div><div class="ex-review-kicker">DOCUMENT TYPE CHECK</div><h2>'+esc(message)+'</h2><p>'+esc(details)+'</p></div><button class="ghost" id="gateClose" type="button">Cancel</button></div><div class="ex-review-footer"><span></span><div>'+(buttons==='choice'?'<button class="ghost" id="gateContinue" type="button">Continue as '+esc(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+'</button><button class="primary" id="gateNext" type="button">Open '+esc(next.toUpperCase())+' Section</button>':'<button class="primary" id="gateNext" type="button">'+esc(next?'Open '+next.toUpperCase()+' Section':'Close')+'</button>')+'</div></div></div>';wireDateInputs(m);document.getElementById('gateClose').onclick=()=>m.remove();document.getElementById('gateNext').onclick=()=>{m.remove();if(next)openDocUploader(next)};const cont=document.getElementById('gateContinue');if(cont)cont.onclick=()=>{m.remove();openDocUploader(t)}}; 
-       if(t==='insurance'&&detected==='insurance-two-wheeler')return gate((window.CARMY_MESSAGES?.documentDifferentVehicle||'This policy belongs to a different vehicle.'),'');
+       const uploadCard=m.querySelector('.doc-upload-card'),uploadCardMarkup=uploadCard.innerHTML;
+       const gate=(message,next,buttons='redirect')=>new Promise(resolve=>{uploadCard.innerHTML='<div class="ex-review-card" style="max-width:620px"><div class="ex-review-head"><div><div class="ex-review-kicker">DOCUMENT TYPE CHECK</div><h2>'+esc(message)+'</h2><p>'+esc(details)+'</p></div><button class="ghost" id="gateClose" type="button">Cancel</button></div><div class="ex-review-footer"><span></span><div>'+(buttons==='choice'?'<button class="ghost" id="gateContinue" type="button">Continue as '+esc(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+'</button><button class="primary" id="gateNext" type="button">Open '+esc(next.toUpperCase())+' Section</button>':'<button class="primary" id="gateNext" type="button">'+esc(next?'Open '+next.toUpperCase()+' Section':'Close')+'</button>')+'</div></div></div>';wireDateInputs(m);document.getElementById('gateClose').onclick=()=>{m.remove();resolve(false)};document.getElementById('gateNext').onclick=()=>{m.remove();if(next)openDocUploader(next);resolve(false)};const cont=document.getElementById('gateContinue');if(cont)cont.onclick=()=>{uploadCard.innerHTML=uploadCardMarkup;btn=$('docUploadBtn');label=btn.querySelector('.upload-btn-label');btn.disabled=true;btn.classList.add('is-uploading');label.textContent='REVIEWING EXTRACTED DOCUMENT...';$('docUploadClose').onclick=()=>m.remove();$('docUploadBtn').onclick=handleDocumentUpload;$('docType').onchange=updateFields;$('docIssue').oninput=updateFields;wireDateInputs(m);resolve(true)}});
+       if(t==='insurance'&&detected==='insurance-two-wheeler'){await gate((window.CARMY_MESSAGES?.documentDifferentVehicle||'This policy belongs to a different vehicle.'),'');return;}
        const classification=extracted.classification||CarmyExtraction.classifyDetailed(extracted.text,t);
+       console.info('[CarCareCloud] Document classification',{type:detected,pageCount:classification.page_count,confidence:classification.confidence,scores:classification.scores,hardRules:classification.hard_rules});
        const typeMap={'insurance-car':'insurance','insurance-two-wheeler':'insurance','rc':'rc','puc':'puc'};
        const detectedSlot=typeMap[detected]||'';
        const scoreRedirect=classification.redirect&&detectedSlot&&detectedSlot!==expected;
-       if(scoreRedirect)return gate(detected==='puc'?(window.CARMY_MESSAGES?.pucWrongSection||'This file looks like a PUC. Upload it in the PUC section.'):detected==='rc'?(window.CARMY_MESSAGES?.rcWrongSection||'This file looks like an RC. Upload it in the RC section.'):(window.CARMY_MESSAGES?.insuranceWrongSection||'This file looks like insurance. Upload it in the Insurance section.'),detectedSlot);
-       if(classification.ambiguous||detected==='other'||(detectedSlot&&detectedSlot!==expected))return gate('This file looks like '+(detectedSlot==='insurance'?'Insurance':detectedSlot==='rc'?'an RC':detectedSlot==='puc'?'a PUC':'an unclassified document')+' (confidence '+classification.confidence+'). Continue as '+(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+' or open in the detected section?',detectedSlot||expected,'choice');
+       if(scoreRedirect){await gate(detected==='puc'?(window.CARMY_MESSAGES?.pucWrongSection||'This file looks like a PUC. Upload it in the PUC section.'):detected==='rc'?(window.CARMY_MESSAGES?.rcWrongSection||'This file looks like an RC. Upload it in the RC section.'):(window.CARMY_MESSAGES?.insuranceWrongSection||'This file looks like insurance. Upload it in the Insurance section.'),detectedSlot);return;}
+       if(classification.ambiguous||detected==='other'||(detectedSlot&&detectedSlot!==expected)){const continueWithSameExtraction=await gate('This file looks like '+(detectedSlot==='insurance'?'Insurance':detectedSlot==='rc'?'an RC':detectedSlot==='puc'?'a PUC':'an unclassified document')+' (confidence '+classification.confidence+'). Continue as '+(t==='insurance'?'Insurance':t==='rc'?'RC':'PUC')+' or open in the detected section?',detectedSlot||expected,'choice');if(!continueWithSameExtraction)return;}
        const preValidation=CarmyExtraction.validate(initial,car,t);
        const vehicleMismatch=preValidation.errors.some(x=>/does not match|different vehicle|selected RC/i.test(x));
-       if(vehicleMismatch)return gate(t==='puc'?'This PUC belongs to a different vehicle.':'This policy belongs to a different vehicle.','');
+       if(vehicleMismatch){await gate(t==='puc'?'This PUC belongs to a different vehicle.':'This policy belongs to a different vehicle.','');return;}
        const saved=t==='insurance'?insuranceHistory.find(x=>x.policy_number&&String(x.policy_number).replace(/\s+/g,'').toLowerCase()===String(initial.policy_number||'').replace(/\s+/g,'').toLowerCase()):t==='puc'?pucHistory.find(x=>x.certificate_number&&String(x.certificate_number).replace(/[^A-Z0-9]/gi,'').toUpperCase()===String(initial.certificate_number||'').replace(/[^A-Z0-9]/gi,'').toUpperCase()):null;
        reviewed=await openExtractionReview(t,initial,preValidation,{thumbnail:extracted.thumbnail,saved});
        if(!reviewed){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return;}
@@ -1407,6 +1411,7 @@ function openDocUploader(preselectedType=''){
      toast('Failed to save '+(t==='rc'?'Registration Certificate':t==='insurance'?'Insurance Document':t==='puc'?'PUC Certificate':'Document')+'. '+(err?.message||'Please try again.'),'error');
    }finally{if(document.body.contains(btn)){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT'}}
  };
+ $('docUploadBtn').onclick=handleDocumentUpload;
 }
 
 window.openDocUploader=openDocUploader;
@@ -1481,17 +1486,18 @@ function report(){
  const total=records.reduce((sum,r)=>sum+Number(r.total_cost||0),0),rows=Array.isArray(insuranceHistory)?insuranceHistory.filter(x=>x.car_id===car.id):[],current=rows.find(x=>x.policy_status==='current')||null,old=rows.filter(x=>x.policy_status==='archive'&&x.policy_number).sort((a,b)=>String(a.issue_date||'').localeCompare(String(b.issue_date||''))),pucs=Array.isArray(pucHistory)?pucHistory.filter(x=>x.car_id===car.id):[],pucCurrent=pucs.find(x=>x.puc_status==='current')||null,pucOld=pucs.filter(x=>x.puc_status==='archive').sort((a,b)=>String(a.expiry_date||'').localeCompare(String(b.expiry_date||'')));
  const claimLabel=x=>x?.claim_taken===true?'Yes':x?.claim_taken===false?'No':'Not confirmed';
  const period=x=>(x?.issue_date?formatDateNice(x.issue_date):'—')+' to '+(x?.expiry_date?formatDateNice(x.expiry_date):'—');
+ const provenanceNote=x=>{const meta=x?.extraction_meta||{},estimated=Array.isArray(meta.estimated_fields)&&meta.estimated_fields.some(k=>['issue_date','expiry_date','period_from','period_to'].includes(k))||meta.estimated_dates===true;if(estimated)return '<small class="report-date-provenance report-estimated">Estimated</small>';if(x?.source==='historical_import'&&!x?.source_document_id)return '<small class="report-date-provenance">Imported · source document not linked</small>';return ''};
  const rc=[['Registration Date',car.rc_regn_date],['Registration Validity',car.rc_validity],['Owner',car.owner_name],['S/D/W of',car.rc_owner_relation],['Ownership Type',car.rc_ownership_type],['Address',car.rc_address],['Fuel',car.fuel],['Emission Norms',car.rc_emission_norms],['Vehicle Class',car.rc_vehicle_class],['Maker',car.rc_maker],['Model',car.rc_model],['Colour',car.rc_colour],['Body Type',car.rc_body_type],['Seating',car.rc_seating],['Unladen Weight',car.rc_unladen_weight],['Cubic Capacity',car.rc_cubic_capacity],['Month-Year of Mfg',car.rc_mfg_month_year],['No. of Cylinders',car.rc_cylinders],['Registration Authority',car.rc_registration_authority],['Card Issue Date',car.rc_card_issue_date]];
  const rcHtml=rc.map(x=>'<div><span>'+esc(x[0])+'</span><b>'+esc(/Date|Validity/i.test(x[0])?formatDateNice(x[1]):(x[1]??'—'))+'</b></div>').join('');
- const oldHtml=old.length?old.map((x,i)=>'<tr><td>'+String(i+1)+'</td><td>'+esc(x.insurance_company||'—')+'</td><td>'+esc(x.policy_number)+'</td><td>'+esc(period(x))+'</td><td>'+claimLabel(x)+'</td><td>'+esc(x.claim_taken===true?(x.claim_invoice_no||'—'):'—')+'</td></tr>').join(''):'<tr><td colspan="6">No archived policy records.</td></tr>';
- const pucCurrentHtml=pucCurrent?'<div class="report-current-policy"><div><span>CURRENT PUC</span><b>'+esc(formatDateNice(pucCurrent.issue_date))+'</b></div><div><span>Valid Until</span><b>'+esc(formatDateNice(pucCurrent.expiry_date))+'</b></div><div><span>Certificate No.</span><b>'+esc(pucCurrent.certificate_number||'—')+'</b></div><div><span>Cost</span><b>'+money(pucCurrent.cost)+'</b></div></div>':'<div class="report-current-policy"><b>No current PUC is recorded.</b></div>';const pucOldHtml=pucOld.length?pucOld.map((x,i)=>'<tr><td>'+String(i+1)+'</td><td>'+esc(formatDateNice(x.issue_date))+'</td><td>'+esc(formatDateNice(x.expiry_date))+'</td><td>'+esc(x.certificate_number||'—')+'</td><td>'+money(x.cost)+'</td></tr>').join(''):'<tr><td colspan="5">No archived PUC records.</td></tr>';
- const currentHtml=current?'<div class="report-current-policy"><div><span>CURRENT POLICY</span><b>'+esc(current.insurance_company||'—')+'</b></div><div><span>Policy Number</span><b>'+esc(current.policy_number||'—')+'</b></div><div><span>Period</span><b>'+esc(period(current))+'</b></div><div><span>Type</span><b>'+esc(current.policy_type||'—')+'</b></div><div><span>IDV</span><b>'+money(current.idv_amount)+'</b></div><div><span>Gross Premium</span><b>'+money(current.gross_premium_amount||current.premium_amount)+'</b></div><div><span>Claim</span><b>'+claimLabel(current)+(current.claim_taken===true?' • '+esc(current.claim_invoice_no||''):'')+'</b></div></div>':'<div class="report-current-policy"><b>No current policy is recorded.</b><span>Expired policies remain in the archive; future policies are marked Upcoming.</span></div>';
+ const oldHtml=old.length?old.map((x,i)=>'<tr><td>'+String(i+1)+'</td><td>'+esc(x.insurance_company||'—')+'</td><td class="policy-no">'+esc(x.policy_number)+'</td><td class="date">'+esc(period(x))+provenanceNote(x)+'</td><td>'+claimLabel(x)+'</td><td class="policy-no">'+esc(x.claim_taken===true?(x.claim_invoice_no||'—'):'—')+'</td></tr>').join(''):'<tr><td colspan="6">No archived policy records.</td></tr>';
+ const pucCurrentHtml=pucCurrent?'<div class="report-current-policy"><div><span>CURRENT PUC</span><b>'+esc(formatDateNice(pucCurrent.issue_date))+'</b></div><div><span>Valid Until</span><b>'+esc(formatDateNice(pucCurrent.expiry_date))+'</b></div><div><span>Certificate No.</span><b>'+esc(pucCurrent.certificate_number||'—')+'</b></div><div><span>Cost</span><b>'+money(pucCurrent.cost)+'</b></div></div>':'<div class="report-current-policy"><b>No current PUC is recorded.</b></div>';const pucOldHtml=pucOld.length?pucOld.map((x,i)=>{const incomplete=!x.issue_date&&!x.expiry_date&&!x.certificate_number&&(x.cost==null||Number(x.cost)===0);return incomplete?'<tr class="report-incomplete-row" data-incomplete="1"><td>'+String(i+1)+'</td><td colspan="4"><span class="report-incomplete-label">Incomplete record</span></td></tr>':'<tr><td>'+String(i+1)+'</td><td class="date">'+esc(formatDateNice(x.issue_date))+provenanceNote(x)+'</td><td class="date">'+esc(formatDateNice(x.expiry_date))+'</td><td class="policy-no">'+esc(x.certificate_number||'—')+'</td><td class="cost">'+money(x.cost)+'</td></tr>'}).join(''):'<tr><td colspan="5">No archived PUC records.</td></tr>';
+ const currentHtml=current?'<div class="report-current-policy"><div><span>CURRENT POLICY</span><b>'+esc(current.insurance_company||'—')+'</b></div><div><span>Policy Number</span><b>'+esc(current.policy_number||'—')+'</b></div><div><span>Period</span><b>'+esc(period(current))+'</b></div><div><span>Type</span><b>'+esc(current.policy_type||'—')+'</b></div><div><span>IDV</span><b>'+money(current.idv_amount)+'</b></div><div><span>Gross Premium</span><b>'+money(current.gross_premium_amount||current.premium_amount)+'</b></div><div><span>Claim</span><b>'+claimLabel(current)+(current.claim_taken===true?' • '+esc(current.claim_invoice_no||''):'')+'</b></div></div>':'<div class="report-current-policy"><b>No current policy is recorded.</b></div>';
  $('reportArea').innerHTML='<div class="report-sheet"><div class="report-head"><div><div class="report-brand"><img class="report-brand-logo" src="assets/carcarecloud-logo.svg" alt="CarCareCloud"><div><h1>Vehicle Service Report</h1><p>Complete vehicle, RC, insurance, PUC and service history</p></div></div><div class="report-reg">'+esc(car.registration_no)+'</div></div></div>'+
  '<div class="report-section"><div class="report-section-title">VEHICLE DETAILS</div><div class="report-grid"><div><span>Make / Model</span><b>'+esc(car.make_model||'—')+'</b></div><div><span>Model Year</span><b>'+esc(car.model_year||'—')+'</b></div><div><span>Fuel Type</span><b>'+esc(car.fuel||'—')+'</b></div><div><span>Current KM</span><b>'+esc(car.current_km||'0')+'</b></div><div><span>VIN / Chassis</span><b>'+esc(car.vin||'—')+'</b></div><div><span>Engine No.</span><b>'+esc(car.engine_no||'—')+'</b></div></div></div>'+
  '<div class="report-section"><div class="report-section-title">RC DETAILS</div><div class="report-grid">'+rcHtml+'</div></div>'+
  '<div class="report-section"><div class="report-section-title">CURRENT INSURANCE</div>'+currentHtml+'</div>'+
- '<div class="report-section"><div class="report-section-title">INSURANCE HISTORY — ARCHIVE</div><table class="report-table"><thead><tr><th>Sr</th><th>Provider Name</th><th>Policy Number</th><th>Period</th><th>Claim</th><th>Claim Invoice No.</th></tr></thead><tbody>'+oldHtml+'</tbody></table></div>'+
- '<div class="report-section"><div class="report-section-title">CURRENT PUC</div>'+pucCurrentHtml+'</div><div class="report-section"><div class="report-section-title">PUC HISTORY — ARCHIVE</div><table class="report-table"><thead><tr><th>Sr</th><th>Test Date</th><th>Valid Until</th><th>Certificate No.</th><th>Cost</th></tr></thead><tbody>'+pucOldHtml+'</tbody></table></div>'+
+ '<div class="report-section"><div class="report-section-title">INSURANCE HISTORY — ARCHIVE</div><table class="report-table insurance-archive-table"><colgroup><col style="width:6%"><col style="width:22%"><col style="width:24%"><col style="width:20%"><col style="width:9%"><col style="width:19%"></colgroup><thead><tr><th>Sr</th><th>Provider</th><th>Policy No.</th><th>Period</th><th>Claim</th><th>Claim Invoice No.</th></tr></thead><tbody>'+oldHtml+'</tbody></table></div>'+
+ '<div class="report-section"><div class="report-section-title">CURRENT PUC</div>'+pucCurrentHtml+'</div><div class="report-section"><div class="report-section-title">PUC HISTORY — ARCHIVE</div><table class="report-table puc-archive-table"><colgroup><col style="width:6%"><col style="width:18%"><col style="width:18%"><col style="width:38%"><col style="width:20%"></colgroup><thead><tr><th>Sr</th><th>Test Date</th><th>Valid Until</th><th>Certificate No.</th><th>Cost</th></tr></thead><tbody>'+pucOldHtml+'</tbody></table></div>'+
  '<div class="report-section"><div class="report-section-title">SERVICE & REPAIR HISTORY</div><table class="report-table"><thead><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th></tr></thead><tbody>'+records.map(r=>'<tr><td>'+esc(formatDateNice(r.service_date))+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+(r.record_items?.length?'<small>'+esc(r.record_items.map(x=>x.item_name).join(', '))+'</small>':'')+'</td><td>'+money(r.total_cost)+'</td></tr>').join('')+'</tbody></table><div class="report-total"><span>Total Service Cost</span><b>'+money(total)+'</b></div></div>'+
  '<div class="report-section"><div class="report-section-title">DOCUMENTS</div><div class="report-document-grid">'+[
  {type:'rc',label:'Registration Certificate',number:car.registration_no,validity:car.rc_validity,doc:(docs||[]).find(d=>d.document_type==='rc'&&d.active&&!d.archived_at)},
@@ -1863,174 +1869,174 @@ function showReportPrintOptions(){
  ];
  document.getElementById('reportPrintOptions')?.remove();
  const m=document.createElement('div');m.id='reportPrintOptions';m.className='report-print-options';
- m.innerHTML='<div class="report-print-options-card" role="dialog" aria-modal="true"><h2>Include documents with this report?</h2><p class="muted">Selected documents will be placed after the vehicle history.</p>'+types.map((x,i)=>'<label><input type="checkbox" data-print-doc="'+x.key+'" '+(x.doc?'':'disabled')+' '+(saved[x.key]===undefined?(i<3?'checked':''):saved[x.key]?'checked':'')+'><span>'+x.label+(x.doc?'':' <small>Not uploaded</small>')+'</span></label>').join('')+'<div class="actions"><button type="button" id="reportPrintCancel">Cancel</button><button type="button" class="primary" id="reportPrintGo">Print</button></div><p id="reportPrintStatus" role="status"></p></div>';
+ m.innerHTML='<div class="report-print-options-card" role="dialog" aria-modal="true"><h2>Include documents with this report?</h2><p class="muted">Selected documents will be placed after the vehicle history.</p>'+types.map((x,i)=>'<label><input type="checkbox" data-print-doc="'+x.key+'" '+(x.doc?'':'disabled')+' '+(saved[x.key]===undefined?(i<3?'checked':''):saved[x.key]?'checked':'')+'><span>'+x.label+(x.doc?'':' <small>Not uploaded</small>')+'</span></label>').join('')+'<label class="report-print-incomplete"><input id="reportHideIncomplete" type="checkbox" '+(saved.hideIncomplete?'checked':'')+'><span>Hide incomplete records in the printed report</span></label><div class="actions"><button type="button" id="reportPrintCancel">Cancel</button><button type="button" class="primary" id="reportPrintGo">Print</button></div><p id="reportPrintStatus" role="status"></p></div>';
  document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.remove()};m.querySelector('#reportPrintCancel').onclick=()=>m.remove();
- m.querySelector('#reportPrintGo').onclick=()=>{const selection={};m.querySelectorAll('[data-print-doc]').forEach(x=>selection[x.dataset.printDoc]=x.checked);try{localStorage.setItem(key,JSON.stringify(selection))}catch(_){}m.remove();printVehicleReport(selection)};
+ m.querySelector('#reportPrintGo').onclick=()=>{const selection={};m.querySelectorAll('[data-print-doc]').forEach(x=>selection[x.dataset.printDoc]=x.checked);selection.hideIncomplete=!!m.querySelector('#reportHideIncomplete')?.checked;try{localStorage.setItem(key,JSON.stringify(selection))}catch(_){}m.remove();printVehicleReport(selection)};
 }
 async function printVehicleReport(selection=null){
   if(!selection){showReportPrintOptions();return;}
-  const source = document.getElementById('reportArea');
-  const original = source?.querySelector('.report-sheet');
-
-  if(!original || !original.innerHTML.trim()){
-    toast('Vehicle Report is still loading. Please open the report once and try again.','error');
-    return;
+  const source=document.getElementById('reportArea');
+  const original=source?.querySelector('.report-sheet');
+  if(!original||!original.innerHTML.trim()){
+    toast('Vehicle Report is still loading. Please open the report once and try again.','error');return;
   }
-
-  try{
-    await loadPdfEngine();
-  }catch(err){
+  let html2pdf;
+  try{html2pdf=await loadPdfEngine()}catch(err){
     console.error('PDF engine load error:',err);
-    toast('PDF engine could not be loaded. Check your connection and try again.','error');
-    return;
+    toast('PDF engine could not be loaded. Check your connection and try again.','error');return;
   }
-
-  /*
-   * Stable PDF export:
-   * Put a REAL, VISIBLE copy in a full-screen print stage.
-   * html2canvas is unreliable with hidden/off-screen/fixed-only nodes.
-   * The clone therefore remains visible and centered while html2pdf
-   * measures and renders it.
-   */
   document.getElementById('vehicleReportPdfStage')?.remove();
-
   const stage=document.createElement('div');
   stage.id='vehicleReportPdfStage';
-  stage.style.cssText=[
-    'position:fixed',
-    'inset:0',
-    'width:100vw',
-    'height:100vh',
-    'overflow:auto',
-    'background:#fff',
-    'z-index:2147483647',
-    'display:flex',
-    'justify-content:center',
-    'align-items:flex-start',
-    'padding:20px',
-    'box-sizing:border-box'
-  ].join(';');
-
+  stage.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;overflow:auto;background:#fff;z-index:2147483647;display:flex;justify-content:center;align-items:flex-start;padding:12px;box-sizing:border-box';
   const clone=original.cloneNode(true);
   clone.removeAttribute('id');
-  clone.style.cssText=[
-    'display:block',
-    'flex:0 0 auto',
-    'width:190mm!important',
-    'min-width:190mm!important',
-    'max-width:190mm!important',
-    'min-height:277mm!important',
-    'height:auto!important',
-    'margin:0!important',
-    'padding:10mm!important',
-    'box-sizing:border-box!important',
-    'background:#fff!important',
-    'color:#172033!important',
-    'box-shadow:none!important',
-    'border-radius:0!important',
-    'overflow:visible!important',
-    'transform:none!important'
-  ].join(';');
-
+  clone.style.cssText='display:block;flex:0 0 auto;width:190mm!important;min-width:190mm!important;max-width:190mm!important;min-height:0!important;height:auto!important;margin:0!important;padding:8mm!important;box-sizing:border-box!important;background:#fff!important;color:#172033!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;transform:none!important';
   const css=document.createElement('style');
   css.textContent=[
     '#vehicleReportPdfStage *{box-sizing:border-box!important}',
-    '#vehicleReportPdfStage .report-grid{width:100%!important;max-width:100%!important}',
-    '#vehicleReportPdfStage .report-two{width:100%!important;max-width:100%!important}',
-    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important;break-inside:auto!important;page-break-inside:auto!important}',
+    '#vehicleReportPdfStage .report-sheet{width:190mm!important;min-height:0!important;height:auto!important;overflow:visible!important;font-size:9.5pt!important}',
+    '#vehicleReportPdfStage .report-brand{overflow:visible!important;display:flex!important;align-items:center!important;gap:5mm!important}',
+    '#vehicleReportPdfStage .report-brand-logo{display:block!important;width:auto!important;height:15mm!important;max-width:48mm!important;max-height:15mm!important;object-fit:contain!important;overflow:visible!important;flex:0 0 auto!important}',
+    '#vehicleReportPdfStage .report-head{break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-section{margin:3mm 0!important;padding:0!important}',
+    '#vehicleReportPdfStage .report-section-title{font-size:8pt!important;letter-spacing:.08em!important;margin:3mm 0 1.5mm!important;break-after:avoid!important;page-break-after:avoid!important}',
+    '#vehicleReportPdfStage .report-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:2mm!important;width:100%!important;max-width:100%!important}',
+    '#vehicleReportPdfStage .report-grid>div{padding:2mm!important;min-width:0!important;break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-grid span{font-size:6.5pt!important}',
+    '#vehicleReportPdfStage .report-grid b{font-size:8.5pt!important;overflow-wrap:anywhere!important}',
+    '#vehicleReportPdfStage .report-current-policy{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:2mm!important;padding:3mm!important}',
+    '#vehicleReportPdfStage .report-current-policy span{font-size:6.5pt!important}',
+    '#vehicleReportPdfStage .report-current-policy b{font-size:8.5pt!important;overflow-wrap:anywhere!important}',
+    '#vehicleReportPdfStage .report-table{width:100%!important;max-width:100%!important;table-layout:fixed!important;border-collapse:collapse!important;font-size:7.5pt!important;break-inside:auto!important;page-break-inside:auto!important}',
     '#vehicleReportPdfStage .report-table thead{display:table-header-group!important}',
     '#vehicleReportPdfStage .report-table tr{break-inside:avoid!important;page-break-inside:avoid!important}',
-    '#vehicleReportPdfStage .report-table th,#vehicleReportPdfStage .report-table td{overflow-wrap:anywhere!important;word-break:break-word!important}',
-    '#vehicleReportPdfStage .report-grid,#vehicleReportPdfStage .report-two,#vehicleReportPdfStage .report-panel,#vehicleReportPdfStage .report-total,#vehicleReportPdfStage .report-footer{break-inside:avoid!important;page-break-inside:avoid!important}',
-    '#vehicleReportPdfStage .report-head{break-inside:avoid!important;page-break-inside:avoid!important}',
-    '#vehicleReportPdfStage img{max-width:100%!important;height:auto!important}'
+    '#vehicleReportPdfStage .report-table th{height:auto!important;padding:2mm 1.2mm!important;font-size:7pt!important;vertical-align:middle!important}',
+    '#vehicleReportPdfStage .report-table td{padding:1.5mm 1.2mm!important;vertical-align:top!important;overflow-wrap:anywhere!important;word-break:normal!important}',
+    '#vehicleReportPdfStage .report-table td.date,#vehicleReportPdfStage .report-table td.cost{white-space:nowrap!important}',
+    '#vehicleReportPdfStage .report-table td.policy-no{font-size:7pt!important;overflow-wrap:anywhere!important;word-break:break-word!important}',
+    '#vehicleReportPdfStage .report-document-grid{display:block!important}',
+    '#vehicleReportPdfStage .report-document-card{display:grid!important;grid-template-columns:38mm 1fr 1fr!important;gap:2mm!important;padding:2mm 0!important;border:0!important;border-bottom:1px solid #e5e7eb!important;border-radius:0!important;break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-document-card>b{font-size:8pt!important}',
+    '#vehicleReportPdfStage .report-document-card>span{font-size:7.5pt!important}',
+    '#vehicleReportPdfStage .report-doc-view,#vehicleReportPdfStage button{display:none!important}',
+    '#vehicleReportPdfStage .report-incomplete-label{font-size:8pt!important;color:#98a2b3!important;font-style:italic!important}',
+    '#vehicleReportPdfStage .report-footer{margin-top:3mm!important;padding-top:2mm!important;font-size:7pt!important;break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-document-print-page{width:190mm!important;min-height:0!important;height:auto!important;padding:3mm!important;margin:0!important;background:#fff!important;break-before:page!important;page-break-before:always!important;break-after:auto!important;page-break-after:auto!important}',
+    '#vehicleReportPdfStage .report-document-print-page h3{font-size:8.5pt!important;margin:0 0 3mm!important;padding-bottom:2mm!important}',
+    '#vehicleReportPdfStage .report-document-print-page img,#vehicleReportPdfStage .report-document-print-page canvas{display:block!important;width:auto!important;height:auto!important;max-width:100%!important;max-height:245mm!important;object-fit:contain!important;margin:0 auto!important;break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-incomplete-row{color:#98a2b3!important}'
   ].join('');
-
   stage.appendChild(css);
   stage.appendChild(clone);
-  const chosen=[];
+  document.body.appendChild(stage);
+  if(selection.hideIncomplete)clone.querySelectorAll('[data-incomplete="1"]').forEach(row=>row.remove());
+
   const activeDocs=Array.isArray(docs)?docs:[];
   const curIns=(insuranceHistory||[]).find(x=>x.car_id===car?.id&&x.policy_status==='current');
   const curPuc=(pucHistory||[]).find(x=>x.car_id===car?.id&&x.puc_status==='current');
   const pickDoc=(id,type)=>activeDocs.find(d=>id&&d.id===id)||activeDocs.find(d=>d.document_type===type&&d.active&&!d.archived_at);
+  const chosen=[];
   if(selection.rc){const d=pickDoc(null,'rc');if(d)chosen.push({doc:d,label:'Registration Certificate',number:car?.registration_no,validity:car?.rc_validity})}
   if(selection.insurance){const d=pickDoc(curIns?.source_document_id,'insurance');if(d)chosen.push({doc:d,label:'Current Insurance',number:curIns?.policy_number||car?.insurance_number,validity:curIns?.expiry_date||car?.insurance_expiry})}
   if(selection.puc){const d=pickDoc(curPuc?.source_document_id,'puc');if(d)chosen.push({doc:d,label:'Current PUC',number:curPuc?.certificate_number||car?.puc_certificate_no,validity:curPuc?.expiry_date||car?.puc_expiry})}
-  const archives=[];
-  if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived Insurance',number:d.file_name,validity:d.document_expiry}));
-  if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>archives.push({doc:d,label:'Archived PUC',number:d.file_name,validity:d.document_expiry}));
-  chosen.push(...archives);
-  if(chosen.length){
-    const status=document.createElement('div');status.className='report-document-print-page';status.innerHTML='<h3>Preparing documents...</h3><p>Loading selected document files. Please wait.</p>';stage.appendChild(status);
-    const getUrl=async d=>{if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);if(r.error)throw r.error;return r.data.signedUrl};
-    const ensurePdfJs=async()=>{if(window.pdfjsLib)return window.pdfjsLib;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=resolve;s.onerror=()=>reject(new Error('PDF renderer failed to load'));document.head.appendChild(s)});window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';return window.pdfjsLib};
-    let failed=[];
-    for(const item of chosen){try{
-      const url=await getUrl(item.doc),ext=(item.doc.file_name||'').split('.').pop().toLowerCase(),header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
-      if(ext==='pdf'){
-        const pdfjs=await ensurePdfJs(),resp=await fetch(url);if(!resp.ok)throw new Error('Document download failed');const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
-        for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),vp=page.getViewport({scale:1.4}),canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap)}
-      }else{const wrap=document.createElement('section');wrap.className='report-document-print-page';wrap.innerHTML='<h3>'+esc(header)+'</h3>';const img=document.createElement('img');img.src=url;await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});wrap.appendChild(img);stage.appendChild(wrap)}
-    }catch(err){console.error('Document print load failed',item.doc?.id,err);failed.push(item.label)}}
-    status.remove();
-    if(failed.length&&!confirm('Could not load: '+failed.join(', ')+'. Print without these documents?')){stage.remove();return}
-  }
-  document.body.appendChild(stage);
+  if(selection.archiveInsurance)activeDocs.filter(d=>d.document_type==='insurance'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>chosen.push({doc:d,label:'Archived Insurance',number:d.document_name||d.file_name,validity:d.document_expiry}));
+  if(selection.archivePuc)activeDocs.filter(d=>d.document_type==='puc'&&d.archived_at).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).forEach(d=>chosen.push({doc:d,label:'Archived PUC',number:d.document_name||d.file_name,validity:d.document_expiry}));
 
-  const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
-  if(button){button.disabled=true;button.textContent='GENERATING PDF…';}
-
-  const filename=`Carmy_Vehicle_Report_${(
-    typeof car!=='undefined' && car?.registration_no || 'Vehicle'
-  ).toString().replace(/[^a-z0-9_-]+/gi,'_')}.pdf`;
-
-  const options={
-    margin:[10,10,10,10],
-    filename,
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{
-      scale:2,
-      useCORS:true,
-      allowTaint:false,
-      backgroundColor:'#ffffff',
-      logging:false,
-      scrollX:0,
-      scrollY:0
-    },
-    jsPDF:{
-      unit:'mm',
-      format:'a4',
-      orientation:'portrait',
-      compress:true
-    },
-    pagebreak:{
-      mode:['css','legacy'],
-      avoid:['.report-head','.report-grid','.report-two','.report-panel','.report-total','.report-footer']
-    }
+  let status=null,failed=[];
+  const getUrl=async d=>{
+    if((d.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(d.id)+'&car_id='+encodeURIComponent(car.id));return r.data.url}
+    const r=await db.storage.from('car-documents').createSignedUrl(d.storage_path,300);
+    if(r.error)throw r.error;return r.data.signedUrl;
   };
-
-  /*
-   * Wait for layout/fonts before measurement. The stage is visible,
-   * so html2canvas receives a normal, measurable DOM tree.
-   */
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(async()=>{
-      try{
-        if(document.fonts?.ready)await document.fonts.ready;
-        await html2pdf().set(options).from(clone).save();
-        toast('A4 Vehicle Report PDF generated successfully.','success');
-      }catch(err){
-        console.error('Vehicle report PDF error:',err);
-        toast('PDF generation failed. Please try again.','error');
-      }finally{
-        stage.remove();
-        if(button){
-          button.disabled=false;
-          button.textContent='PRINT / SAVE PDF';
-        }
-      }
+  const ensurePdfJs=async()=>{
+    if(window.pdfjsLib)return window.pdfjsLib;
+    await new Promise((resolve,reject)=>{
+      const existing=document.getElementById('carmy-print-pdfjs');
+      if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(new Error('PDF renderer failed to load')),{once:true});return}
+      const tag=document.createElement('script');tag.id='carmy-print-pdfjs';tag.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';tag.onload=resolve;tag.onerror=()=>reject(new Error('PDF renderer failed to load'));document.head.appendChild(tag);
     });
-  });
-}
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return window.pdfjsLib;
+  };
+  const addPlaceholder=(item)=>{
+    const page=document.createElement('section');page.className='report-document-print-page report-document-load-error';
+    page.innerHTML='<h3>'+esc(item.label)+'</h3><p>Document could not be loaded: '+esc(item.label)+'</p>';
+    clone.appendChild(page);
+  };
+  if(chosen.length){
+    status=document.createElement('div');status.className='report-print-loading';status.textContent='Preparing selected documents…';stage.appendChild(status);
+    for(const item of chosen){
+      try{
+        const url=await getUrl(item.doc);
+        const ext=String(item.doc.file_name||'').split('.').pop().toLowerCase();
+        const header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
+        if(ext==='pdf'){
+          const pdfjs=await ensurePdfJs(),resp=await fetch(url);
+          if(!resp.ok)throw new Error('Document download failed');
+          const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
+          for(let p=1;p<=pdf.numPages;p++){
+            const page=await pdf.getPage(p),vp=page.getViewport({scale:1.35}),canvas=document.createElement('canvas');
+            canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
+            const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
+            await page.render({canvasContext:ctx,viewport:vp}).promise;
+            const wrap=document.createElement('section');wrap.className='report-document-print-page';
+            wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap);
+          }
+        }else{
+          const img=new Image();img.loading='eager';img.decoding='async';img.src=url;
+          if(typeof img.decode==='function')await img.decode();else await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Image failed to load'))});
+          const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+          const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+          const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
+          ctx.drawImage(img,0,0,canvas.width,canvas.height);
+          const wrap=document.createElement('section');wrap.className='report-document-print-page';
+          wrap.innerHTML='<h3>'+esc(header)+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap);
+        }
+      }catch(err){
+        console.error('Document print load failed',item.label,err);failed.push(item.label);addPlaceholder(item);
+      }
+    }
+    status.remove();
+  }
 
+  const logo=clone.querySelector('.report-brand-logo');
+  if(logo){
+    logo.loading='eager';
+    try{if(typeof logo.decode==='function')await logo.decode();else if(!logo.complete)await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=reject})}
+    catch(err){console.error('Report logo failed to decode',err);const label=document.createElement('b');label.className='report-brand-fallback';label.textContent='CarCareCloud';logo.replaceWith(label)}
+  }
+  await Promise.all([...clone.querySelectorAll('img')].map(async img=>{
+    img.loading='eager';
+    if(typeof img.decode==='function'){try{await img.decode()}catch(e){if(!img.classList.contains('report-brand-logo'))throw e}}
+    else if(!img.complete)await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
+  })).catch(err=>console.error('A report image failed to decode',err));
+  if(failed.length){
+    const msg='Some documents could not be loaded: '+failed.join(', ')+'. A placeholder page will be included for each failed document. Continue printing?';
+    if(!confirm(msg)){stage.remove();return}
+  }
+  const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
+  if(button){button.disabled=true;button.textContent='GENERATING PDF…'}
+  const filename='Carmy_Vehicle_Report_'+String(car?.registration_no||'Vehicle').replace(/[^a-z0-9_-]+/gi,'_')+'.pdf';
+  const options={
+    margin:[10,10,12,10],
+    filename,
+    image:{type:'jpeg',quality:0.96},
+    html2canvas:{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
+    pagebreak:{mode:['css','legacy'],avoid:['.report-head','.report-grid','.report-current-policy','.report-document-print-page','.report-table tr']}
+  };
+  try{
+    if(document.fonts?.ready)await document.fonts.ready;
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await html2pdf().set(options).from(clone).save();
+    toast('A4 Vehicle Report PDF generated successfully.','success');
+  }catch(err){
+    console.error('Vehicle report PDF error:',err);
+    toast('PDF generation failed. Please try again.','error');
+  }finally{
+    stage.remove();
+    if(button){button.disabled=false;button.textContent='PRINT / SAVE PDF'}
+  }
+}
 window.printVehicleReport = printVehicleReport;
