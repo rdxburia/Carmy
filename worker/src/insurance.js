@@ -17,13 +17,29 @@ async function validDocument(env,user,token,documentId,carId){
   return !!rows?.[0];
 }
 
+function decorateLifecycle(rows){
+  const today=istToday();
+  const dated=rows.filter(x=>x.issue_date&&x.expiry_date);
+  const current=dated.filter(x=>x.issue_date<=today&&today<=x.expiry_date).sort((a,b)=>String(b.issue_date).localeCompare(String(a.issue_date)))[0]||null;
+  const ordered=[...dated].sort((a,b)=>String(a.issue_date).localeCompare(String(b.issue_date)));
+  const gaps=new Map();
+  for(let i=1;i<ordered.length;i++){
+    const prev=ordered[i-1],cur=ordered[i],gap=cur.issue_date>addDays(prev.expiry_date,1);
+    gaps.set(cur.id,gap?Math.max(0,Math.round((new Date(cur.issue_date)-new Date(addDays(prev.expiry_date,1)))/86400000)+1):0);
+  }
+  return rows.map(row=>{
+    let status="archive";if(row.issue_date&&row.issue_date>today)status="upcoming";if(current?.id===row.id)status="current";
+    const gd=gaps.get(row.id)||0;
+    return {...row,policy_status:status,coverage_gap:gd>0,coverage_gap_days:gd};
+  });
+}
 export async function listInsuranceHistory(env,user,userToken,carId=null){
   const key=carId?"insurance:"+user.id+":"+carId:"insurance:"+user.id;
-  const cached=await getCache(env,key);if(cached)return cached;
+  const cached=await getCache(env,key);if(cached)return decorateLifecycle(cached);
   const filters=["user_id=eq."+encodeURIComponent(user.id),"order=issue_date.desc,created_at.desc"];
   if(carId)filters.push("car_id=eq."+encodeURIComponent(carId));
   const data=await supabaseRest(env,"insurance_history?select=*&"+filters.join("&"),{method:"GET"},userToken);
-  await putCache(env,key,user.id,"insurance",data);return data;
+  await putCache(env,key,user.id,"insurance",data);return decorateLifecycle(data);
 }
 
 async function recompute(env,user,token,carId){
