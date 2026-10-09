@@ -1880,15 +1880,11 @@ async function printVehicleReport(selection=null){
   if(!original||!original.innerHTML.trim()){
     toast('Vehicle Report is still loading. Please open the report once and try again.','error');return;
   }
-  let html2pdf;
-  try{html2pdf=await loadPdfEngine()}catch(err){
-    console.error('PDF engine load error:',err);
-    toast('PDF engine could not be loaded. Check your connection and try again.','error');return;
-  }
+  // Native browser print avoids the single long html2canvas image.
   document.getElementById('vehicleReportPdfStage')?.remove();
   const stage=document.createElement('div');
   stage.id='vehicleReportPdfStage';
-  stage.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;overflow:auto;background:#fff;z-index:2147483647;display:flex;justify-content:center;align-items:flex-start;padding:12px;box-sizing:border-box';
+  stage.style.cssText='position:static;width:100%;height:auto;overflow:visible;background:#fff;z-index:auto;display:block;padding:0;box-sizing:border-box';
   const clone=original.cloneNode(true);
   clone.removeAttribute('id');
   clone.style.cssText='display:block;flex:0 0 auto;width:190mm!important;min-width:190mm!important;max-width:190mm!important;min-height:0!important;height:auto!important;margin:0!important;padding:8mm!important;box-sizing:border-box!important;background:#fff!important;color:#172033!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;transform:none!important';
@@ -1981,7 +1977,7 @@ async function printVehicleReport(selection=null){
             const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
             await page.render({canvasContext:ctx,viewport:vp}).promise;
             const wrap=document.createElement('section');wrap.className='report-document-print-page';
-            wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap);
+            wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label+' page '+p;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
           }
         }else{
           const img=new Image();img.loading='eager';img.decoding='async';img.src=url;
@@ -1991,7 +1987,7 @@ async function printVehicleReport(selection=null){
           const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
           ctx.drawImage(img,0,0,canvas.width,canvas.height);
           const wrap=document.createElement('section');wrap.className='report-document-print-page';
-          wrap.innerHTML='<h3>'+esc(header)+'</h3>';wrap.appendChild(canvas);clone.appendChild(wrap);
+          wrap.innerHTML='<h3>'+esc(header)+'</h3>';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
         }
       }catch(err){
         console.error('Document print load failed',item.label,err);failed.push(item.label);addPlaceholder(item);
@@ -2006,7 +2002,8 @@ async function printVehicleReport(selection=null){
     try{
       const logoResponse=await fetch(new URL(logo.getAttribute('src'),document.baseURI).href,{cache:'force-cache'});
       if(!logoResponse.ok)throw new Error('Logo request failed: '+logoResponse.status);
-      const logoSvg=await logoResponse.text();
+      let logoSvg=await logoResponse.text();
+      if(!/\bwidth=/.test(logoSvg.slice(0,200)))logoSvg=logoSvg.replace('<svg ','<svg width="980" height="210" ');
       logo.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(logoSvg);
       logo.removeAttribute('srcset');
       logo.style.cssText='display:block!important;width:48mm!important;height:10.3mm!important;min-width:48mm!important;max-width:48mm!important;max-height:10.3mm!important;object-fit:fill!important;object-position:left center!important;overflow:visible!important;flex:0 0 48mm!important';
@@ -2023,27 +2020,17 @@ async function printVehicleReport(selection=null){
     if(!confirm(msg)){stage.remove();return}
   }
   const button=document.querySelector('#report .toolbar button[onclick*="printVehicleReport"]');
-  if(button){button.disabled=true;button.textContent='GENERATING PDF…'}
-  const filename='Carmy_Vehicle_Report_'+String(car?.registration_no||'Vehicle').replace(/[^a-z0-9_-]+/gi,'_')+'.pdf';
-  const options={
-    margin:[10,10,12,10],
-    filename,
-    image:{type:'jpeg',quality:0.96},
-    html2canvas:{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
-    pagebreak:{mode:[],avoid:['.report-head','.report-grid','.report-current-policy','.report-table tr']}
-  };
+  const hint=document.createElement('p');hint.className='report-print-hint no-print';hint.textContent='Choose Save as PDF in the print dialog.';stage.insertBefore(hint,clone);
+  let cleaned=false;
+  const cleanup=()=>{if(cleaned)return;cleaned=true;window.removeEventListener('afterprint',cleanup);stage.remove();if(button){button.disabled=false;button.textContent='PRINT / SAVE PDF'}};
+  window.addEventListener('afterprint',cleanup,{once:true});
   try{
     if(document.fonts?.ready)await document.fonts.ready;
+    await Promise.all([...clone.querySelectorAll('img')].map(async img=>{img.loading='eager';if(img.decode)await img.decode();else if(!img.complete)await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject})}));
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    await html2pdf().set(options).from(clone).save();
-    toast('A4 Vehicle Report PDF generated successfully.','success');
-  }catch(err){
-    console.error('Vehicle report PDF error:',err);
-    toast('PDF generation failed. Please try again.','error');
-  }finally{
-    stage.remove();
-    if(button){button.disabled=false;button.textContent='PRINT / SAVE PDF'}
-  }
+    if(button){button.disabled=true;button.textContent='PRINTING…'}
+    window.print();
+  }catch(err){console.error('Vehicle report print preparation failed:',err);toast('Report preparation failed. Check the console for the document error.','error');cleanup()}
+  setTimeout(()=>{if(!window.matchMedia('print').matches)cleanup()},1500);
 }
 window.printVehicleReport = printVehicleReport;
