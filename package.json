@@ -7,7 +7,9 @@
     "deploy": "wrangler deploy",
     "preview": "wrangler preview",
     "test:document-classifier": "node --test tests/document-classifier-real-files.test.cjs",
-    "debug:document-classifier": "node scripts/debug-document-classifier.cjs"
+    "debug:document-classifier": "node scripts/debug-document-classifier.cjs",
+    "test:insurance-real-files": "node --test tests/insurance-real-files.test.cjs",
+    "debug:insurance-real-files": "node scripts/debug-insurance-extraction.cjs"
   },
   "devDependencies": {
     "wrangler": "4.135.0",
