@@ -50,7 +50,7 @@ async function analyzeFile(file,slot){
  }else if(['.jpg','.jpeg','.png'].includes(ext)){text=ocrImage(file);pageTexts=[text];ocrUsed=true}
  else throw new Error('Unsupported fixture type: '+ext);
  const result=loadClassifier().classifyDetailed(text,slot,{pageCount});
- return {file:path.basename(file),slot,pageCount,pageLengths:pageTexts.map(x=>x.length),ocrUsed,result};
+ return {file:path.basename(file),slot,pageCount,pageLengths:pageTexts.map(x=>x.length),ocrUsed,result,text,classifier:loadClassifier()};
 }
 function printResult(r){
  console.log('\n=== FILE: '+r.file+' ===');console.log('Page count: '+r.pageCount);
@@ -73,4 +73,4 @@ async function main(){
  if(failed)process.exitCode=1;
 }
 if(require.main===module)main();
-module.exports={FILES,FIXTURE_DIR,analyzeFile};
+module.exports={FILES,FIXTURE_DIR,analyzeFile,loadClassifier};
