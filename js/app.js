@@ -1341,19 +1341,29 @@ function openDocUploader(preselectedType=''){
    let ext=(f.name.split('.').pop()||'').toLowerCase();if(!ALLOWED_MIME.has(f.type)||!ALLOWED_EXT.has(ext))return fail('Unsupported file. Only PDF, JPG, JPEG and PNG files are allowed.');
    if(t==='other'&&!n)return fail('Failed to upload Other Document. Enter document name.');
    try{
-     if(t==='rc'||t==='insurance'){
+     if(t==='rc'||t==='insurance'||t==='puc'){
        label.innerHTML='<span class="inline-spinner"></span> EXTRACTING...';
        extracted=await CarmyExtraction.extract(f,t,(p,s)=>{label.textContent=(s||'EXTRACTING')+' '+Math.round((p||0)*100)+'%';});
-       const initial=t==='rc'?{...extracted.data,registration_no:extracted.data.registration_no||car.registration_no,chassis_no:extracted.data.chassis_no||car.vin,engine_no:extracted.data.engine_no||car.engine_no,owner_name:extracted.data.owner_name||car.owner_name,fuel:extracted.data.fuel||car.fuel}:extracted.data;
-       reviewed=await openExtractionReview(t,initial,CarmyExtraction.validate(initial,car,t));
+       const detected=extracted.detected_type;
+       const expected=t==='rc'?'rc':t==='puc'?'puc':'insurance-car';
+       const details=t==='insurance'?('Detected Reg: '+(extracted.data.reg_no||'Not read')+' • Chassis: '+(extracted.data.chassis_no||'Not read')+' • Insured: '+(extracted.data.insured_name||'Not read')):t==='puc'?('Detected Reg: '+(extracted.data.registration_no||'Not read')):'Detected Reg: '+(extracted.data.registration_no||'Not read');
+       const gate=(message,next)=>{m.querySelector('.doc-upload-card').innerHTML='<div class="ex-review-card" style="max-width:620px"><div class="ex-review-head"><div><div class="ex-review-kicker">DOCUMENT TYPE CHECK</div><h2>'+esc(message)+'</h2><p>'+esc(details)+'</p></div><button class="ghost" id="gateClose" type="button">Cancel</button></div><div class="ex-review-footer"><span></span><div><button class="primary" id="gateNext" type="button">'+esc(next?'OPEN '+next.toUpperCase()+' SECTION':'CLOSE')+'</button></div></div></div>';wireDateInputs(m);document.getElementById('gateClose').onclick=()=>m.remove();document.getElementById('gateNext').onclick=()=>{m.remove();if(next)openDocUploader(next)}}};
+       if(t==='insurance'&&detected==='insurance-two-wheeler')return gate('Ye policy is gaadi ki nahi hai','');
+       if(t!=='puc'&&detected==='puc')return gate('Ye PUC lag raha hai, PUC section me upload karo','puc');
+       if(t==='puc'&&detected!=='puc')return gate(detected==='insurance-two-wheeler'||detected==='insurance-car'?'Ye Insurance lag raha hai, Insurance section me upload karo':'Ye document PUC nahi lag raha hai','insurance');
+       if(t==='rc'&&detected!=='rc')return gate(detected==='insurance-car'?'Ye Insurance lag raha hai, Insurance section me upload karo':detected==='puc'?'Ye PUC lag raha hai, PUC section me upload karo':'Ye RC nahi lag raha hai',detected==='insurance-car'?'insurance':detected==='puc'?'puc':'');
+       if(t==='insurance'&&detected!=='insurance-car')return gate(detected==='rc'?'Ye RC lag raha hai, RC section me upload karo':'Ye document car insurance nahi lag raha hai',detected==='rc'?'rc':'');
+       const initial=extracted.data;
+       const preValidation=CarmyExtraction.validate(initial,car,t);
+       const vehicleMismatch=preValidation.errors.some(x=>/does not match|different vehicle|selected RC/i.test(x));
+       if(vehicleMismatch)return gate(t==='puc'?'This PUC belongs to a different vehicle.':'Ye policy is gaadi ki nahi hai','');
+       const saved=t==='insurance'?insuranceHistory.find(x=>x.policy_number&&String(x.policy_number).replace(/\s+/g,'').toLowerCase()===String(initial.policy_number||'').replace(/\s+/g,'').toLowerCase()):t==='puc'?pucHistory.find(x=>x.certificate_number&&String(x.certificate_number).replace(/[^A-Z0-9]/gi,'').toUpperCase()===String(initial.certificate_number||'').replace(/[^A-Z0-9]/gi,'').toUpperCase()):null;
+       reviewed=await openExtractionReview(t,initial,preValidation,{thumbnail:extracted.thumbnail,saved});
        if(!reviewed){btn.disabled=false;btn.classList.remove('is-uploading');label.textContent='UPLOAD DOCUMENT';return;}
        if(t==='rc'){issue=reviewed.date_of_regn||issue;e=reviewed.regn_validity||e}
        if(t==='insurance'){issue=reviewed.period_from;e=reviewed.period_to}
-     }else{
-       if((t==='rc'||t==='insurance'||t==='puc')&&!issue)return fail('Issue Date is required.');
-       if((t==='insurance'||t==='puc')&&!e)return fail('Expiry date is required.');
-     }
-     let oldDoc=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
+       if(t==='puc'){issue=reviewed.test_date;e=reviewed.valid_until}
+     }     let oldDoc=(t==='rc'||t==='insurance'||t==='puc')?docs.find(d=>d.document_type===t&&!d.archived_at):null;
      let oldPatch=t==='puc'?{puc_expiry:car.puc_expiry}:null,newDocId=null,archived=false,complianceUpdated=false,pendingKey=null,finalKey=null;
      label.innerHTML='<span class="inline-spinner"></span> UPLOADING...';
      const signed=await workerPost('/api/files/presign-upload',{car_id:car.id,file_name:f.name,mime_type:f.type,file_size:f.size,document_type:t});
@@ -1362,11 +1372,6 @@ function openDocUploader(preselectedType=''){
      finalKey=pendingKey.replace(/^pending\//,'documents/');
      let ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:f.name,storage_path:finalKey,storage_backend:'r2',mime_type:f.type,file_size:f.size,document_type:t,document_name:n||null,document_expiry:e||null,active:false,extraction_status:(t==='rc'||t==='insurance')?'processing':'not_started'}).select('id').single();
      if(ins.error)throw new Error('Document record save failed: '+ins.error.message);newDocId=ins.data.id;
-     if(oldDoc){
-       let folder=docTypeLabel(oldDoc)+'-'+fyLabel(oldDoc.document_expiry||oldDoc.created_at);
-       let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id).is('archived_at',null);
-       if(au.error)throw new Error('Old document could not be archived: '+au.error.message);archived=true;
-     }
      const finalized=await workerPost('/api/files/finalize',{car_id:car.id,pending_key:pendingKey});if(finalized?.data?.storage_path!==finalKey)throw new Error('R2 final storage path verification failed.');
      let activate=await db.from('documents').update({active:true,archived_at:null}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);if(activate.error)throw new Error('New document could not be activated: '+activate.error.message);
      if(t==='rc'){
@@ -1374,11 +1379,16 @@ function openDocUploader(preselectedType=''){
        const saved=await workerPatch('/api/vehicles/'+encodeURIComponent(car.id)+'/rc',payload);Object.assign(car,saved.data||payload);
      }else if(t==='insurance'){
        label.innerHTML='<span class="inline-spinner"></span> SAVING POLICY...';
-       const saved=await workerPost('/api/insurance',{car_id:car.id,source_document_id:newDocId,insurer_name:reviewed.insurer_name,policy_number:reviewed.policy_number,insured_name:reviewed.insured_name,period_from:reviewed.period_from,period_to:reviewed.period_to,policy_reg_no:reviewed.reg_no,policy_chassis_no:reviewed.chassis_no,policy_engine_no:reviewed.engine_no,idv_amount:reviewed.idv,total_premium:reviewed.total_premium,gross_premium_amount:reviewed.total_premium,previous_policy_number:reviewed.previous_policy_number,previous_insurer:reviewed.previous_insurer,policy_type:reviewed.policy_type,claim_taken:reviewed.claim_taken,claim_invoice_no:reviewed.claim_invoice_no,extraction_meta:{source:'browser-pdf-text',parser:extracted.data.parser,reviewed:true,confidence:reviewed.confidence||{}}});
+       const saved=await workerPost('/api/insurance',{car_id:car.id,source_document_id:newDocId,insurer_name:reviewed.insurer_name,policy_number:reviewed.policy_number,insured_name:reviewed.insured_name,period_from:reviewed.period_from,period_to:reviewed.period_to,policy_reg_no:reviewed.reg_no,policy_chassis_no:reviewed.chassis_no,policy_engine_no:reviewed.engine_no,idv_amount:reviewed.idv,total_premium:reviewed.total_premium,gross_premium_amount:reviewed.total_premium,previous_policy_number:reviewed.previous_policy_number,previous_insurer:reviewed.previous_insurer,policy_type:reviewed.policy_type,claim_taken:reviewed.claim_taken,claim_invoice_no:reviewed.claim_invoice_no,extraction_meta:{source:'browser-pdf-text-token-rows',parser:extracted.data.parser,reviewed:true,confidence:reviewed.confidence||{}}});
        await db.from('documents').update({extraction_status:'completed'}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
+       if(saved?.data?.already_saved){/* duplicate policy: keep prior document/history untouched */} 
      }else if(t==='puc'){
-       let cr=await db.from('cars').update({puc_expiry:e}).eq('id',car.id).eq('user_id',user.id);if(cr.error)throw new Error('Document saved, but vehicle compliance date could not be synced: '+cr.error.message);Object.assign(car,{puc_expiry:e});complianceUpdated=true;
+       const saved=await workerPost('/api/puc',{car_id:car.id,source_document_id:newDocId,certificate_number:reviewed.certificate_number,test_date:reviewed.test_date,valid_until:reviewed.valid_until,cost:reviewed.cost});
+       await db.from('documents').update({extraction_status:'completed'}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
+       if(saved?.data?.puc_status==='archive'){const au=await db.from('documents').update({archive_name:'PUC-'+fyLabel(e),archived_at:new Date().toISOString(),active:false}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);if(au.error)throw new Error('Archived PUC document could not be finalized: '+au.error.message)}
      }
+     if((t==='rc'||t==='insurance')&&!((t==='insurance')&&saved?.data?.already_saved)){if(oldDoc){let folder=docTypeLabel(oldDoc)+'-'+fyLabel(oldDoc.document_expiry||oldDoc.created_at);let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id).is('archived_at',null);if(au.error)throw new Error('Old document could not be archived: '+au.error.message);archived=true}}
+     if(t==='puc'&&saved?.data?.puc_status==='current'&&oldDoc){let folder=docTypeLabel(oldDoc)+'-'+fyLabel(oldDoc.document_expiry||oldDoc.created_at);let au=await db.from('documents').update({archive_name:folder,archived_at:new Date().toISOString(),active:false}).eq('id',oldDoc.id).eq('car_id',car.id).eq('user_id',user.id).is('archived_at',null);if(au.error)throw new Error('Old PUC document could not be archived: '+au.error.message);archived=true}
      if(t==='rc'||t==='insurance')await db.from('documents').update({extraction_status:'completed'}).eq('id',newDocId).eq('car_id',car.id).eq('user_id',user.id);
      let refreshError=null;try{await loadData()}catch(refreshErrCaught){refreshError=refreshErrCaught}
      m.remove();let name=t==='rc'?'Registration Certificate':t==='puc'?'PUC Certificate':t==='insurance'?'Insurance Document':'Document';
