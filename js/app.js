@@ -1297,7 +1297,7 @@ function calculateRcExpiry(issueDate,fuel){
  const years=rcValidityYears(fuel);d.setFullYear(d.getFullYear()+years);d.setDate(d.getDate()-1);
  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
-function parseUserDate(v){const s=String(v||'').trim();if(!s)return null;let m=s.match(/^(\\d{2})-(\\d{2})-(\\d{4})$/);if(m){const d=new Date(Date.UTC(+m[3],+m[2]-1,+m[1]));return d.getUTCFullYear()===+m[3]&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[1]?m[3]+'-'+m[2]+'-'+m[1]:null}m=s.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);return m?m[1]+'-'+m[2]+'-'+m[3]:null}
+function parseUserDate(v){const s=String(v||'').trim();if(!s)return null;let m=s.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(m){const d=new Date(Date.UTC(+m[3],+m[2]-1,+m[1]));return d.getUTCFullYear()===+m[3]&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[1]?m[3]+'-'+m[2]+'-'+m[1]:null}m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?m[1]+'-'+m[2]+'-'+m[3]:null}
 function formatDateNice(x){if(!x)return '';const iso=parseUserDate(x);if(!iso)return String(x);const [y,m,d]=iso.split('-');return d+'-'+m+'-'+y}
 function formatTimestamp(x){if(!x)return '';const d=new Date(x);if(Number.isNaN(d.getTime()))return String(x);return formatDateNice(d.toISOString().slice(0,10))+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false})}
 function dateInputHtml(id,iso,required=false){return '<input id="'+esc(id)+'" type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1" value="'+esc(formatDateNice(iso||''))+'"'+(required?' required':'')+'>'}
