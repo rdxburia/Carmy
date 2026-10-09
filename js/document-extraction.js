@@ -100,7 +100,7 @@ function classifyDetailed(text,slot='',meta={}){
  add('rc','Engine/Motor No','Engine(?:/Motor)?\\s+No\\.?',2);
  add('rc','Owner Name','Owner\\s+Name',2);
  add('rc','Date of Regn','Date\\s+of\\s+Regn',2);
- const twoWheeler=/TWO\s+WHEELER|MOTORCYCLE|SCOOTER|TVS\s+JUPITER|JUPITER\b/i.test(t)&&/POLICY|INSURANCE/i.test(t);
+ const twoWheeler=/\bTVS\s+JUPITER\b|\bRELIANCE\s+TWO\s+WHEELER\s+POLICY\b|\bMAKE\s*\/\s*MODEL\s*&?\s*VARIANT\b[\s\S]{0,120}\b(?:MOTORCYCLE|SCOOTER|MOPED)\b/i.test(t)&&/POLICY|INSURANCE/i.test(t);
  if(twoWheeler){scores.insurance+=3;matchedSignals.push({type:'insurance',label:'Two-wheeler policy signal',weight:3,match:'Two-wheeler model/class with policy wording'})}
  const slotType=slot==='insurance'?'insurance':slot==='rc'?'rc':slot==='puc'?'puc':'';
  const ordered=Object.entries(scores).sort((a,b)=>b[1]-a[1]),top=ordered[0],second=ordered[1];
