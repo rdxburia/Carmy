@@ -4,7 +4,7 @@ import { listVehicles, getVehicle, patchVehicleRc } from "./vehicles.js";
 import { listServiceHistory } from "./records.js";
 import { listDocuments } from "./documents.js";
 import { listInsuranceHistory, createInsurancePolicy } from "./insurance.js";
-import { listPucHistory } from "./puc.js";
+import { listPucHistory, createPuc } from "./puc.js";
 import { getProfile } from "./profile.js";
 import { listRenewals } from "./renewals.js";
 import { listSaleHistory } from "./sales.js";
@@ -180,7 +180,7 @@ export default {
         return json({ ok: true, data: await listInsuranceHistory(env, user, userToken, carId) }, 200, origin);
       }
 
-      if (request.method === "GET" && parts[0] === "puc") {
+      if (request.method === "POST" && parts[0] === "puc" && parts.length === 1) {\n        const input = await request.json();\n        return json({ ok: true, data: await createPuc(env, user, userToken, input) }, 201, origin);\n      }\n\n      if (request.method === "GET" && parts[0] === "puc") {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listPucHistory(env, user, userToken, carId) }, 200, origin);
       }
