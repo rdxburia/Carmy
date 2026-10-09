@@ -2003,8 +2003,15 @@ async function printVehicleReport(selection=null){
   const logo=clone.querySelector('.report-brand-logo');
   if(logo){
     logo.loading='eager';
-    try{if(typeof logo.decode==='function')await logo.decode();else if(!logo.complete)await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=reject})}
-    catch(err){console.error('Report logo failed to decode',err);const label=document.createElement('b');label.className='report-brand-fallback';label.textContent='CarCareCloud';logo.replaceWith(label)}
+    try{
+      const logoResponse=await fetch(new URL(logo.getAttribute('src'),document.baseURI).href,{cache:'force-cache'});
+      if(!logoResponse.ok)throw new Error('Logo request failed: '+logoResponse.status);
+      const logoSvg=await logoResponse.text();
+      logo.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(logoSvg);
+      logo.removeAttribute('srcset');
+      logo.style.cssText='display:block!important;width:48mm!important;height:10.3mm!important;min-width:48mm!important;max-width:48mm!important;max-height:10.3mm!important;object-fit:fill!important;object-position:left center!important;overflow:visible!important;flex:0 0 48mm!important';
+      if(typeof logo.decode==='function')await logo.decode();else if(!logo.complete)await new Promise((resolve,reject)=>{logo.onload=resolve;logo.onerror=reject});
+    }catch(err){console.error('Report logo failed to decode',err);const label=document.createElement('b');label.className='report-brand-fallback';label.textContent='CarCareCloud';logo.replaceWith(label)}
   }
   await Promise.all([...clone.querySelectorAll('img')].map(async img=>{
     img.loading='eager';
@@ -2024,7 +2031,7 @@ async function printVehicleReport(selection=null){
     image:{type:'jpeg',quality:0.96},
     html2canvas:{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
-    pagebreak:{mode:['css','legacy'],avoid:['.report-head','.report-grid','.report-current-policy','.report-document-print-page','.report-table tr']}
+    pagebreak:{mode:[],avoid:['.report-head','.report-grid','.report-current-policy','.report-table tr']}
   };
   try{
     if(document.fonts?.ready)await document.fonts.ready;
