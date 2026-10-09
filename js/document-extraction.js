@@ -98,8 +98,9 @@ function parseInsurance(ps,text){
   m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)\s*:?\s*([A-Z0-9]{17})/i);
   if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)[^\n]{0,120}\n[^\n]{0,160}?([A-Z0-9]{17})/i);
   if(m)add('chassis_no',chassis(m[1]),i+1,'chassis label/column',4);
-  m=raw.match(/Engine(?:\/Motor)?\s+No\.?\s*:?\s*([A-Z0-9]{6,24})/i);
-  if(!m)m=raw.match(/Engine(?:\/Motor)?\s+No\.?[^\n]{0,120}\n[^\n]{0,160}?([A-Z0-9]{6,24})/i);
+  m=raw.match(/Engine(?:\/Motor)?\s+No\.?\s*[:\-]\s*([A-Z0-9]{6,24})/i);
+  if(!m){const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-Z0-9]{17})/i);if(pair)m=[pair[0],pair[1]]}
+  if(!m){const v=near(rs,/Engine\s+No/i,/[A-Z0-9]{10,24}/);if(v)m=[v,v]}
   if(m)add('engine_no',engine(m[1]),i+1,'engine label/column',4);
   m=raw.match(/(?:Total\s+IDV(?:\s*\(Rs\.?\))?|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value(?:\s*\(IDV\))?)\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
   if(!m){const v=near(rs,/Total\s+IDV|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value/i,numeric);if(v)m=[v,v]}
@@ -134,6 +135,7 @@ function parseInsurance(ps,text){
  confidence.insurer_name=issuer?(issuer.pages.size>=2?'verified:'+issuer.pages.size:'single:'+Math.min(...issuer.pages)):'unverified';
  fieldSources.insurer_name=issuer?[...issuer.pages].sort((a,b)=>a-b):[];
  fieldCandidates.insurer_name=candidates.insurer_name.map(c=>({value:c.value,page:c.page,source:c.source,weight:c.weight}));
+ if(chosen.policy_number&&fieldSources.policy_number.length<2)warnings.push('Policy number was not independently repeated on at least two pages. Verify it before saving.');
  if(chosen.period_from&&chosen.period_to){const from=new Date(chosen.period_from+'T00:00:00Z');from.setUTCFullYear(from.getUTCFullYear()+1);from.setUTCDate(from.getUTCDate()-1);const expected=from.toISOString().slice(0,10);if(expected!==chosen.period_to)warnings.push('Policy end date differs from one-year-minus-one-day expectation ('+expected+').')}
  const d={...chosen,parser:'whole-document-cross-page',confidence,field_sources:fieldSources,field_candidates:fieldCandidates,diagnostics:{page_count:pageTexts.length,pages:roles,fields:Object.fromEntries(Object.keys(candidates).map(k=>[k,{candidates:fieldCandidates[k],chosen:chosen[k],source_pages:fieldSources[k],status:confidence[k]}])),warnings}};
  return d;
