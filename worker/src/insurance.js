@@ -1,4 +1,4 @@
-import { getCache, putCache } from "./cache.js";
+import { getCache, putCache, invalidateCache } from "./cache.js";
 import { supabaseRest } from "./supabase.js";
 
 function istToday(){return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())}
@@ -59,6 +59,6 @@ export async function createInsurancePolicy(env,user,userToken,input){
     if(!refs?.length)await supabaseRest(env,"insurance_history",{method:"POST",body:JSON.stringify({user_id:user.id,car_id:carId,insurance_company:base.previous_insurer,policy_number:base.previous_policy_number,insurance_type:[],insurance_addons:[],issue_date:null,expiry_date:null,event_type:"snapshot",source:"from previous-policy reference",premium_amount:null,gross_premium_amount:null,policy_reg_no:null,policy_chassis_no:null,policy_engine_no:null,insured_name:null,idv_amount:null,previous_policy_number:null,previous_insurer:null,policy_type:null,policy_status:"archive",coverage_gap:false,coverage_gap_days:0,incomplete:true,source_document_id:documentId||null,extraction_meta:{stub:true},claim_taken:null,claim_invoice_no:null})},userToken);
   }
   const currentId=await recompute(env,user,userToken,carId);
-  await putCache(env,"insurance:"+user.id+":"+carId,user.id,"insurance",null);
+  await invalidateCache(env,"insurance:"+user.id+":"+carId);
   return {policy_id:policy.id,current_policy_id:currentId};
 }
