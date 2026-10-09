@@ -38,7 +38,7 @@ function insurer(t){
  found.sort((a,b)=>a.index-b.index);
  return found[0]?.name||null;
 }
-function rows(items){const a=[];for(const q of items.filter(x=>clean(x.str))){const y=+q.transform[5],x=+q.transform[4];let r=a.find(z=>Math.abs(z.y-y)<=3);if(!r){r={y,items:[]};a.push(r)}r.items.push({t:clean(q.str),x,w:+(q.width||0)})}for(const r of a){r.items.sort((a,b)=>a.x-b.x);r.text=r.items.map(x=>x.t).join(' ')}return a.sort((a,b)=>a.y-b.y)}
+function rows(items){const a=[];for(const q of items.filter(x=>clean(x.str))){const y=+q.transform[5],x=+q.transform[4];let r=a.find(z=>Math.abs(z.y-y)<=3);if(!r){r={y,items:[]};a.push(r)}r.items.push({t:clean(q.str),x,w:+(q.width||0)})}for(const r of a){r.items.sort((a,b)=>a.x-b.x);r.text=r.items.map(x=>x.t).join(' ')}return a.sort((a,b)=>b.y-a.y)}
 async function ocr(file,progress,rc=false){const b=await createImageBitmap(file),c=document.createElement('canvas');c.width=b.width;c.height=b.height;c.getContext('2d').drawImage(b,0,0);return ocrCanvas(c,progress,rc)}
 async function ocrPdfPage(doc,progress,rc=false,pageNumber=1){const p=await doc.getPage(pageNumber),v=p.getViewport({scale:2}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return ocrCanvas(c,progress,rc)}
 function rowsFromText(text){return String(text||'').split(/\r?\n/).map((line,i)=>({y:i*12,items:[{t:clean(line),x:0,w:line.length}],text:clean(line)})).filter(r=>r.text)}
@@ -74,7 +74,7 @@ function parseInsurance(ps,text){
  const near=(rs,label,pattern)=>rowValue(rs,label,pattern)||below(rs,label,pattern,220);
  const addPeriod=(i,raw)=>{
   let m=raw.match(/Period\s+of\s+Own\s+Damage\s*:?\s*(\d{1,2}[-/.][A-Z]{3}[-/.]\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})[\s\S]{0,90}?\bTo\b[\s\S]{0,30}?(\d{1,2}[-/.][A-Z]{3}[-/.]\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i);
-  if(!m)m=raw.match(/Period\s+of\s+Insurance\s*:?\s*From[\s\S]{0,100}?\b(?:on\s+)?(\d{1,2}[‐\-/.]\d{1,2}[‐\-/.]\d{4})[\s\S]{0,120}?\bto\b[\s\S]{0,50}?(\d{1,2}[‐\-/.]\d{1,2}[‐\-/.]\d{4})/i);
+  if(!m)m=raw.match(/Period\s+of\s+Insurance\s*:?\s*From[\s\S]{0,100}?\b(?:on\s+)?(\d{1,2}[‐\-/.]\d{1,2}[‐\-/.]\d{4})[\s\S]{0,120}?\bto\b[\s\S]{0,220}?(\d{1,2}[‐\-/.]\d{1,2}[‐\-/.]\d{4})/i);
   if(!m)m=raw.match(/Valid\s+From\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})[\s\S]{0,120}?Valid\s+Till(?:\s*\([^)]*\))?\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/i);
   if(m){add('period_from',date(m[1]),i+1,'policy period label',5);add('period_to',date(m[2]),i+1,'policy period label',5)}
  };
@@ -96,8 +96,10 @@ function parseInsurance(ps,text){
   addPeriod(i,raw);
   m=raw.match(/(?:Vehicle\s+Registration\s+No\.?|Registration\s+No\.?|Regn\.?\s+No\.?)\s*:?\s*([A-Z]{2}\s*\d{2}\s*[A-Z]{1,3}\s*\d{4})/i);
   if(m)add('reg_no',reg(m[1]),i+1,'vehicle registration label',4);
-  m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)\s*:?\s*([A-Z0-9]{17})/i);
-  if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)[^\n]{0,120}\n[^\n]{0,160}?([A-Z0-9]{17})/i);
+  m=null;{const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-HJ-NPR-Z0-9]{17})/i);if(pair)m=[pair[0],pair[2]]}
+  if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)\s*:?\s*([A-HJ-NPR-Z0-9]{17})/i);
+  if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?) [^\n]{0,300}\n[^\n]{0,420}?\b([A-HJ-NPR-Z0-9]{17})\b/i);
+  if(!m)m=raw.match(/Chassis\s+Number\s*:\s*([A-HJ-NPR-Z0-9]{17})/i);
   if(m)add('chassis_no',chassis(m[1]),i+1,'chassis label/column',4);
   m=raw.match(/Engine(?:\/Motor)?\s+No\.?\s*[:\-]\s*([A-Z0-9]{6,24})/i);
   if(!m){const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-Z0-9]{17})/i);if(pair)m=[pair[0],pair[1]]}
