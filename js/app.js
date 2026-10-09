@@ -1922,9 +1922,9 @@ async function printVehicleReport(selection=null){
     '#vehicleReportPdfStage .report-doc-view,#vehicleReportPdfStage button{display:none!important}',
     '#vehicleReportPdfStage .report-incomplete-label{font-size:8pt!important;color:#98a2b3!important;font-style:italic!important}',
     '#vehicleReportPdfStage .report-footer{margin-top:3mm!important;padding-top:2mm!important;font-size:7pt!important;break-inside:avoid!important}',
-    '#vehicleReportPdfStage .report-document-print-page{width:190mm!important;min-height:0!important;height:auto!important;padding:3mm!important;margin:0!important;background:#fff!important;break-before:page!important;page-break-before:always!important;break-after:auto!important;page-break-after:auto!important}',
+    '#vehicleReportPdfStage .report-document-print-page{display:block!important;width:100%!important;min-height:0!important;height:auto!important;padding:2mm 0!important;margin:0!important;background:#fff!important;break-before:page!important;page-break-before:auto!important;break-after:auto!important;page-break-after:auto!important;overflow:hidden!important}',
     '#vehicleReportPdfStage .report-document-print-page h3{font-size:8.5pt!important;margin:0 0 3mm!important;padding-bottom:2mm!important}',
-    '#vehicleReportPdfStage .report-document-print-page img,#vehicleReportPdfStage .report-document-print-page canvas{display:block!important;width:auto!important;height:auto!important;max-width:100%!important;max-height:245mm!important;object-fit:contain!important;margin:0 auto!important;break-inside:avoid!important;page-break-inside:avoid!important}',
+    '#vehicleReportPdfStage .report-document-print-page img,#vehicleReportPdfStage .report-document-print-page canvas{display:block!important;width:auto!important;height:auto!important;max-width:100%!important;max-height:225mm!important;object-fit:contain!important;margin:0 auto!important;break-inside:avoid!important;page-break-inside:avoid!important}',
     '#vehicleReportPdfStage .report-incomplete-row{color:#98a2b3!important}'
   ].join('');
   stage.appendChild(css);
@@ -2024,7 +2024,7 @@ async function printVehicleReport(selection=null){
     image:{type:'jpeg',quality:0.96},
     html2canvas:{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0},
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
-    pagebreak:{mode:['css'],avoid:['.report-head','.report-grid','.report-current-policy','.report-table tr']}
+    pagebreak:{mode:[],avoid:['.report-head','.report-grid','.report-current-policy','.report-table tr']}
   };
   try{
     if(document.fonts?.ready)await document.fonts.ready;
