@@ -613,3 +613,8 @@
  .report-document-print-page{width:auto!important;min-height:0!important;height:auto!important;padding:3mm!important;break-before:page!important;page-break-before:always!important;break-after:auto!important;page-break-after:auto!important}
  .report-document-print-page img,.report-document-print-page canvas{max-width:100%!important;max-height:250mm!important;object-fit:contain!important;display:block!important;margin:0 auto!important}
 }
+
+
+.report-date-provenance{display:block;margin-top:1mm;font-size:6.5pt;font-weight:500;color:#667085;white-space:normal}
+.report-date-provenance.report-estimated{font-weight:700;color:#b54708}
+@media print{.report-date-provenance{font-size:6pt!important}}
