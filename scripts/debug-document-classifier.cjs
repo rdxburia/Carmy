@@ -34,28 +34,27 @@ function loadClassifier(){
  return sandbox.window.CarmyExtraction;
 }
 function ocrImage(file){return execFileSync('tesseract',[file,'stdout','-l','eng','--psm','6'],{encoding:'utf8',maxBuffer:20*1024*1024})}
-function ocrPdfFirstPage(file){
+function ocrPdfPage(file,pageNo){
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'carmy-puc-'));
- try{const prefix=path.join(tmp,'page');execFileSync('pdftoppm',['-f','1','-l','1','-r','220','-png','-singlefile',file,prefix],{stdio:'ignore'});return ocrImage(prefix+'.png')}
+ try{const prefix=path.join(tmp,'page');execFileSync('pdftoppm',['-f',String(pageNo),'-l',String(pageNo),'-r','220','-png','-singlefile',file,prefix],{stdio:'ignore'});return ocrImage(prefix+'.png')}
  finally{fs.rmSync(tmp,{recursive:true,force:true})}
 }
 async function analyzeFile(file,slot){
- const ext=path.extname(file).toLowerCase();let pageTexts=[],text='',pageCount=1,ocrUsed=false;
+ const ext=path.extname(file).toLowerCase();let pageTexts=[],text='',pageCount=1,ocrUsed=false,ocrPages=[];
  if(ext==='.pdf'){
   const data=new Uint8Array(fs.readFileSync(file));
   const doc=await pdfjsLib.getDocument({data,useSystemFonts:true,isEvalSupported:false}).promise;pageCount=doc.numPages;
-  for(let n=1;n<=doc.numPages;n++){const page=await doc.getPage(n),content=await page.getTextContent();pageTexts.push(rows(content.items).map(r=>r.text).join('\n'))}
+  for(let n=1;n<=doc.numPages;n++){const page=await doc.getPage(n),content=await page.getTextContent();let pageText=rows(content.items).map(r=>r.text).join('\n');if(pageText.replace(/\s/g,'').length<30){pageText=ocrPdfPage(file,n);ocrUsed=true;ocrPages.push(n)}pageTexts.push(pageText)}
   text=pageTexts.join('\n\f\n');
-  if(text.replace(/\s/g,'').length<120){text=ocrPdfFirstPage(file);pageTexts=[text];ocrUsed=true}
- }else if(['.jpg','.jpeg','.png'].includes(ext)){text=ocrImage(file);pageTexts=[text];ocrUsed=true}
+ }else if(['.jpg','.jpeg','.png'].includes(ext)){text=ocrImage(file);pageTexts=[text];ocrUsed=true;ocrPages=[1]}
  else throw new Error('Unsupported fixture type: '+ext);
  const result=loadClassifier().classifyDetailed(text,slot,{pageCount});
- return {file:path.basename(file),slot,pageCount,pageLengths:pageTexts.map(x=>x.length),ocrUsed,result,text,classifier:loadClassifier()};
+ return {file:path.basename(file),slot,pageCount,pageLengths:pageTexts.map(x=>x.length),ocrUsed,ocrPages,result,text,classifier:loadClassifier()};
 }
 function printResult(r){
  console.log('\n=== FILE: '+r.file+' ===');console.log('Page count: '+r.pageCount);
  console.log('Per-page extracted text lengths: '+r.pageLengths.map((n,i)=>'p'+(i+1)+'='+n).join(', '));
- console.log('OCR fallback used: '+(r.ocrUsed?'YES':'NO'));
+ console.log('OCR fallback used: '+(r.ocrUsed?'YES on page(s) '+r.ocrPages.join(', '):'NO'));
  console.log('Matched signals (type | weight | label | matched text):');
  for(const s of r.result.matchedSignals)console.log('  '+s.type.toUpperCase()+' | +'+s.weight+' | '+s.label+' | '+JSON.stringify(s.match));
  console.log('Total scores: Insurance='+r.result.scores.insurance+', PUC='+r.result.scores.puc+', RC='+r.result.scores.rc);
