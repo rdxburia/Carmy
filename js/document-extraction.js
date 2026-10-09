@@ -13,7 +13,31 @@ function policyNo(v){const s=clean(v).replace(/\s+/g,'');return /^\d{4}\/\d{8}\/
 function chassis(v){const s=alnum(v);return s&&s.length===17&&!/[IOQ]/.test(s)?s:null}
 function engine(v){const s=alnum(v);return s&&s.length>=6&&s.length<=24?s:null}
 function reg(v){let s=norm(v).replace(/[^A-Z0-9]/g,'');if(s.length<8)return null;s=[...s].map((c,i)=>i<2?({'0':'O','1':'I','2':'Z','5':'S','8':'B'}[c]||c):i<4?({'O':'0','Q':'0','D':'0','I':'1','L':'1','Z':'2','S':'5','B':'8'}[c]||c):c).join('');const m=s.match(/^([A-Z]{2})(\d{2})([A-Z]{1,3})(\d{4})$/);return m?m[1]+m[2]+m[3]+m[4]:null}
-function insurer(t){t=norm(t);for(const [r,n] of [[/CHOLAMANDALAM\s*MS|CHOLAMANDALAM/,'Cholamandalam MS General Insurance Co. Ltd.'],[/RELIANCE\s+GENERAL/,'Reliance General Insurance Co. Ltd.'],[/ROYAL\s+SUNDARAM/,'Royal Sundaram General Insurance Co. Limited'],[/HDFC\s*ERGO/,'HDFC ERGO General Insurance Co. Ltd.'],[/ICICI\s+LOMBARD/,'ICICI Lombard General Insurance Co. Ltd.'],[/BAJAJ\s+ALLIANZ|BAJAJ\s+GENERAL/,'Bajaj Allianz General Insurance Co. Ltd.'],[/NEW\s+INDIA/,'The New India Assurance Co. Ltd.'],[/NATIONAL\s+INSURANCE/,'National Insurance Company Limited'],[/ORIENTAL\s+INSURANCE/,'The Oriental Insurance Co. Ltd.'],[/UNITED\s+INDIA/,'United India Insurance Co. Ltd.'],[/TATA\s+AIG/,'Tata AIG General Insurance Co. Ltd.'],[/SBI\s+GENERAL/,'SBI General Insurance Co. Ltd.'],[/GO\s+DIGIT|DIGIT\s+INSURANCE/,'Go Digit General Insurance Ltd.'],[/ACKO/,'ACKO General Insurance Ltd.'],[/IFFCO\s+TOKIO/,'IFFCO-TOKIO General Insurance Co. Ltd.'],[/UNIVERSAL\s+SOMPO/,'Universal Sompo General Insurance Co. Ltd.']])if(r.test(t))return n;return null}
+function insurer(t){
+ t=norm(t);
+ const rules=[
+ [/CHOLAMANDALAM\s*MS|CHOLAMANDALAM/,'Cholamandalam MS General Insurance Co. Ltd.'],
+ [/RELIANCE\s+GENERAL/,'Reliance General Insurance Co. Ltd.'],
+ [/ROYAL\s+SUNDARAM/,'Royal Sundaram General Insurance Co. Limited'],
+ [/HDFC\s*ERGO/,'HDFC ERGO General Insurance Co. Ltd.'],
+ [/ICICI\s+LOMBARD/,'ICICI Lombard General Insurance Co. Ltd.'],
+ [/BAJAJ\s+ALLIANZ|BAJAJ\s+GENERAL/,'Bajaj Allianz General Insurance Co. Ltd.'],
+ [/NEW\s+INDIA/,'The New India Assurance Co. Ltd.'],
+ [/NATIONAL\s+INSURANCE/,'National Insurance Company Limited'],
+ [/ORIENTAL\s+INSURANCE/,'The Oriental Insurance Co. Ltd.'],
+ [/UNITED\s+INDIA/,'United India Insurance Co. Ltd.'],
+ [/TATA\s+AIG/,'Tata AIG General Insurance Co. Ltd.'],
+ [/SBI\s+GENERAL/,'SBI General Insurance Co. Ltd.'],
+ [/GO\s+DIGIT|DIGIT\s+INSURANCE/,'Go Digit General Insurance Ltd.'],
+ [/ACKO/,'ACKO General Insurance Ltd.'],
+ [/IFFCO\s+TOKIO/,'IFFCO-TOKIO General Insurance Co. Ltd.'],
+ [/UNIVERSAL\s+SOMPO/,'Universal Sompo General Insurance Co. Ltd.']
+ ];
+ const found=[];
+ for(const [re,name] of rules){const m=re.exec(t);if(m)found.push({index:m.index,name})}
+ found.sort((a,b)=>a.index-b.index);
+ return found[0]?.name||null;
+}
 function rows(items){const a=[];for(const q of items.filter(x=>clean(x.str))){const y=+q.transform[5],x=+q.transform[4];let r=a.find(z=>Math.abs(z.y-y)<=3);if(!r){r={y,items:[]};a.push(r)}r.items.push({t:clean(q.str),x,w:+(q.width||0)})}for(const r of a){r.items.sort((a,b)=>a.x-b.x);r.text=r.items.map(x=>x.t).join(' ')}return a.sort((a,b)=>a.y-b.y)}
 async function ocr(file,progress,rc=false){const b=await createImageBitmap(file),c=document.createElement('canvas');c.width=b.width;c.height=b.height;c.getContext('2d').drawImage(b,0,0);return ocrCanvas(c,progress,rc)}
 async function ocrPdfPage(doc,progress,rc=false){const p=await doc.getPage(1),v=p.getViewport({scale:2}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return ocrCanvas(c,progress,rc)}
