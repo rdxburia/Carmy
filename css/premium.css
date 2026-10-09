@@ -592,9 +592,17 @@
 .report-incomplete-label{font-size:11px;color:#98a2b3;font-style:italic}
 .report-incomplete-row td{background:#fafafa;color:#98a2b3}
 @page{size:A4;margin:12mm 12mm 14mm}
+@page{size:A4;margin:12mm}
 @media print{
- html{font-size:9.5pt}
- html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ html{font-size:9.5pt!important;height:auto!important;overflow:visible!important}
+ html,body{background:#fff!important;color:#172033!important;height:auto!important;min-height:0!important;overflow:visible!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ body>*{visibility:hidden!important}
+ #vehicleReportPdfStage,#vehicleReportPdfStage *{visibility:visible!important}
+ #vehicleReportPdfStage{display:block!important;position:static!important;inset:auto!important;width:100%!important;height:auto!important;min-height:0!important;overflow:visible!important;padding:0!important;margin:0!important;z-index:auto!important}
+ #vehicleReportPdfStage .report-print-hint{display:none!important}
+ #vehicleReportPdfStage .report-sheet{width:100%!important;max-width:100%!important;margin:0!important;padding:0!important}
+ #vehicleReportPdfStage .report-head,#vehicleReportPdfStage .report-section-title{break-after:avoid!important;page-break-after:avoid!important}
+ #vehicleReportPdfStage .report-head,#vehicleReportPdfStage .report-grid>div,#vehicleReportPdfStage .report-current-policy,#vehicleReportPdfStage .report-table tr,#vehicleReportPdfStage .report-document-card{break-inside:avoid!important;page-break-inside:avoid!important}
  .report-sheet{width:auto!important;min-height:0!important;height:auto!important;overflow:visible!important;box-shadow:none!important;border:0!important;border-radius:0!important;padding:0!important}
  .report-brand{overflow:visible!important}
  .report-brand-logo{display:block!important;width:48mm!important;height:10.3mm!important;min-width:48mm!important;max-width:48mm!important;max-height:10.3mm!important;object-fit:fill!important;object-position:left center!important;overflow:visible!important;flex:0 0 48mm!important}
