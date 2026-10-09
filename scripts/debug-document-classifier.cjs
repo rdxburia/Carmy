@@ -25,7 +25,7 @@ function rows(items){
   r.items.push({t:clean(q.str),x,w:+(q.width||0)});
  }
  for(const r of a){r.items.sort((a,b)=>a.x-b.x);r.text=r.items.map(x=>x.t).join(' ')}
- return a.sort((a,b)=>a.y-b.y);
+ return a.sort((a,b)=>b.y-a.y);
 }
 function loadClassifier(){
  const source=fs.readFileSync(path.join(ROOT,'js','document-extraction.js'),'utf8');
