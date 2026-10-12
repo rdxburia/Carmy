@@ -1008,3 +1008,83 @@ body.md-info-open{overflow:hidden!important}
   .md-info-content { padding: 16px !important; }
   .md-info-bottom { padding: 10px 15px !important; }
 }
+
+
+/* MotorDesk modal visibility/readability: isolate the dialog from page effects. */
+#mdInfoModal.md-info-modal:not([hidden]) {
+  position: fixed !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 12px !important;
+  background: rgba(15, 29, 43, .48) !important;
+  isolation: isolate !important;
+  contain: layout paint style !important;
+  filter: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 2147483647 !important;
+}
+#mdInfoModal .md-info-backdrop {
+  position: absolute !important;
+  inset: 0 !important;
+  background: rgba(15, 29, 43, .48) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+#mdInfoModal .md-info-panel {
+  position: relative !important;
+  z-index: 1 !important;
+  width: min(500px, calc(100vw - 24px)) !important;
+  max-width: 500px !important;
+  max-height: min(76vh, 600px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  color: #24384a !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  animation: none !important;
+  isolation: isolate !important;
+}
+#mdInfoModal .md-info-brand,
+#mdInfoModal .md-info-badges,
+#mdInfoModal .md-info-tabs,
+#mdInfoModal .md-info-bottom { flex: 0 0 auto !important; }
+#mdInfoModal .md-info-content {
+  position: relative !important;
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-height: 120px !important;
+  overflow: auto !important;
+  background: #fff !important;
+  color: #40566a !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+  -webkit-text-fill-color: #40566a !important;
+  text-shadow: none !important;
+}
+#mdInfoModal .md-info-content * {
+  visibility: visible !important;
+  opacity: 1 !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+#mdInfoModal .md-info-content h1,
+#mdInfoModal .md-info-content h2,
+#mdInfoModal .md-info-content h3,
+#mdInfoModal .md-info-content b { color: #172b3c !important; -webkit-text-fill-color: #172b3c !important; }
+#mdInfoModal .md-info-content p,
+#mdInfoModal .md-info-content li,
+#mdInfoModal .md-info-content blockquote { color: #40566a !important; -webkit-text-fill-color: #40566a !important; }
+#mdInfoModal .md-info-content h2 span { color: #187db7 !important; -webkit-text-fill-color: #187db7 !important; }
+@media (max-width: 560px) {
+  #mdInfoModal .md-info-panel { width: calc(100vw - 20px) !important; max-height: 80vh !important; }
+}
