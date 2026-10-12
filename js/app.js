@@ -2167,15 +2167,16 @@ async function printVehicleReport(selection=null){
           updatePrintWait('Copying document pages','Found '+pdf.numPages+' PDF pages. Rendering for print.','Keep this window open while pages are prepared.',20,'PDF pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
           for(let p=1;p<=pdf.numPages;p++){
             const page=await pdf.getPage(p),baseViewport=page.getViewport({scale:1});
-            // Keep scanned/compressed policy pages legible while cutting raster work vs 1.35x.
+            // Keep document text legible while reducing the raster workload from 1.35x.
             const renderScale=Math.min(1.05,1250/Math.max(baseViewport.width,baseViewport.height));
             const vp=page.getViewport({scale:renderScale}),canvas=document.createElement('canvas');
             canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
             const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw new Error('Canvas rendering is unavailable');
             ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
-            updatePrintWait('Rendering document page','Rendering page '+p+' of '+pdf.numPages+'.','Smaller, print-ready pages are being prepared.',20+Math.round(65*(loadedDocumentCount+((p-1)/pdf.numPages))/Math.max(1,chosen.length)),'Rendering PDF page '+p+' / '+pdf.numPages+' · '+preparedDocumentPages+' pages ready');
+            // Update before rendering; otherwise the wait screen appears stuck on the previous page.
+            updatePrintWait('Rendering document page','Rendering page '+p+' of '+pdf.numPages+'.','Preparing a print-ready page.',20+Math.round(65*(loadedDocumentCount+((p-1)/pdf.numPages))/Math.max(1,chosen.length)),'Rendering PDF page '+p+' / '+pdf.numPages+' · '+preparedDocumentPages+' pages ready');
             await page.render({canvasContext:ctx,viewport:vp,background:'#fff'}).promise;
-            // toBlob avoids the synchronous, base64-heavy toDataURL path on the main thread.
+            // Avoid synchronous base64 encoding on the UI thread.
             const pageBlob=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not encode PDF page image')),'image/jpeg',0.78));
             const pageUrl=URL.createObjectURL(pageBlob);printObjectUrls.push(pageUrl);
             const wrap=document.createElement('section');wrap.className='report-document-print-page';
