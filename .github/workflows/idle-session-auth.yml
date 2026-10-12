@@ -1,0 +1,28 @@
+name: WS-A idle-session regression tests
+
+on:
+  pull_request:
+    paths:
+      - "worker/src/auth.js"
+      - "worker/src/index.js"
+      - "worker/migrations/**"
+      - "tests/idle-session-auth.test.mjs"
+      - ".github/workflows/idle-session-auth.yml"
+  push:
+    branches: [main]
+    paths:
+      - "worker/src/auth.js"
+      - "worker/src/index.js"
+      - "worker/migrations/**"
+      - "tests/idle-session-auth.test.mjs"
+      - ".github/workflows/idle-session-auth.yml"
+
+jobs:
+  idle-session-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/idle-session-auth.test.mjs
