@@ -910,3 +910,38 @@ body:has(#app:not(.hidden)) .md-app-footer{display:block}
 /* Footer information links are real page anchors, styled consistently with the MotorDesk footer. */
 .md-footer-links a{display:inline-flex;align-items:center;border:1px solid transparent;border-radius:999px;background:transparent;padding:8px 12px;color:#526a7d;font:inherit;font-size:11px;font-weight:650;text-decoration:none;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
 .md-footer-links a:hover,.md-footer-links a:focus-visible{outline:none;background:#edf7fd;border-color:#c5e3f4;color:#1479b5}
+
+
+/* MotorDesk: keep company footer visible while scrolling on both auth and app views. */
+.md-site-footer{
+  position:fixed!important;
+  left:0!important;
+  right:0!important;
+  bottom:0!important;
+  width:100%!important;
+  z-index:9000!important;
+  margin:0!important;
+  background:rgba(255,255,255,.98)!important;
+  box-shadow:0 -8px 28px rgba(15,38,58,.08);
+  padding-bottom:env(safe-area-inset-bottom,0px)!important;
+}
+body:not(:has(#app:not(.hidden))){padding-bottom:84px!important}
+body:has(#app:not(.hidden)){padding-bottom:88px!important}
+body.md-info-open{overflow:hidden!important}
+.md-info-modal:not([hidden]){
+  display:grid!important;
+  visibility:visible!important;
+  opacity:1!important;
+  z-index:2147483000!important;
+}
+.md-info-panel{z-index:1}
+@media(max-width:760px){
+  .md-footer-inner{min-height:0!important;padding:7px 0!important;gap:5px!important}
+  .md-footer-copy{font-size:9px!important}
+  .md-footer-links{width:100%;gap:2px!important}
+  .md-footer-links button{font-size:10px!important;padding:7px 8px!important}
+  .md-footer-made{font-size:7px!important;padding:5px 7px!important}
+  body:not(:has(#app:not(.hidden))){padding-bottom:106px!important}
+  body:has(#app:not(.hidden)){padding-bottom:172px!important}
+  body:has(#app:not(.hidden)) .md-app-footer{bottom:64px!important}
+}
