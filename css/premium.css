@@ -851,3 +851,40 @@
 @media (min-width:761px) and (max-height:800px) {
  .auth-password-field > .auth-password-control,.auth-password-field > .auth-password-control > input#password {height:39px!important;min-height:39px!important}
 }
+
+
+/* Definitive password toggle anchor: always centered at the right end of the password input. */
+.auth-field.auth-password-field > .auth-password-control {
+  position: relative !important;
+  isolation: isolate !important;
+  display: block !important;
+  width: 100% !important;
+  height: 42px !important;
+  min-height: 42px !important;
+}
+.auth-field.auth-password-field > .auth-password-control > #password {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding-right: 84px !important;
+  box-sizing: border-box !important;
+}
+.auth-field.auth-password-field > .auth-password-control > #passwordToggle {
+  position: absolute !important;
+  inset-block-start: 50% !important;
+  inset-inline-end: 7px !important;
+  inset-block-end: auto !important;
+  inset-inline-start: auto !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  z-index: 10 !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  line-height: 1 !important;
+}
+@media (min-width: 761px) and (max-height: 800px) {
+  .auth-field.auth-password-field > .auth-password-control { height: 39px !important; min-height: 39px !important; }
+}
