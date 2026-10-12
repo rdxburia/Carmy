@@ -2034,12 +2034,13 @@ async function printVehicleReport(selection=null){
     printWindow=window.open('about:blank','_blank');
     if(printWindow){
       printWindow.document.open();
-      printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preparing vehicle report…</title><style>*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,Arial,sans-serif;background:#f4f7fb;color:#142033}body{min-height:100vh;display:grid;place-items:center;padding:24px}.wait-card{width:min(520px,100%);padding:38px 32px;border:1px solid #e0e7f0;border-radius:24px;background:#fff;box-shadow:0 24px 70px #10213a14;text-align:center}.orbit{width:76px;height:76px;margin:0 auto 24px;border:5px solid #e3edf8;border-top-color:#0788df;border-right-color:#123b68;border-radius:50%;animation:spin .9s linear infinite;position:relative}.orbit:after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;background:#11a6e8;left:4px;bottom:4px;box-shadow:0 0 0 6px #11a6e81a}.eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:#0788df;text-transform:uppercase}.wait-card h1{font-size:25px;line-height:1.2;margin:10px 0 12px}.wait-card p{color:#637187;line-height:1.6;margin:0}.track{height:6px;border-radius:99px;background:#eaf0f7;overflow:hidden;margin:26px 0 12px}.track span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#0788df,#72d5fa);animation:progress 1.7s ease-in-out infinite alternate}.steps{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:20px}.steps span{font-size:11px;color:#52647b;background:#f3f7fb;border:1px solid #e6edf5;border-radius:99px;padding:7px 10px}.note{font-size:12px!important;margin-top:17px!important}@keyframes spin{to{transform:rotate(360deg)}}@keyframes progress{from{transform:translateX(-15%)}to{transform:translateX(170%)}}@media(prefers-reduced-motion:reduce){.orbit,.track span{animation:none}}</style></head><body><main class="wait-card" role="status" aria-live="polite"><div class="orbit" aria-hidden="true"></div><div class="eyebrow">CarCareCloud · A4 Report</div><h1 id="waitTitle">Preparing your vehicle report</h1><p id="waitMessage">Loading vehicle details and arranging the pages for print.</p><div class="track"><span></span></div><p id="waitSub">Please keep this tab open. The print dialog will appear when everything is ready.</p><div class="steps"><span>Vehicle history</span><span>Documents</span><span>Page layout</span></div><p class="note">This can take a few seconds for large PDFs.</p></main></body></html>');
+      printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preparing vehicle report…</title><style>*{box-sizing:border-box}html,body{margin:0;min-height:100%;font:14px Tahoma,Arial,sans-serif;background:#ece9d8;color:#111}body{min-height:100vh;display:grid;place-items:center;padding:24px}.xp-window{width:min(560px,100%);background:#f4f3ee;border:1px solid #003c74;border-radius:7px 7px 3px 3px;box-shadow:0 18px 55px #0003;overflow:hidden}.xp-titlebar{padding:10px 14px;color:#fff;font-weight:bold;background:linear-gradient(180deg,#2f8ae5 0%,#0968c8 48%,#0053b8 50%,#2679dc 100%);text-shadow:1px 1px #003d86;display:flex;align-items:center;gap:9px}.xp-icon{width:22px;height:22px;border-radius:4px;background:linear-gradient(135deg,#fff 0 35%,#4e9ee9 36% 60%,#0872c9 61%);border:1px solid #fff;box-shadow:0 0 0 1px #164b8a}.xp-body{padding:22px 24px 18px}.xp-heading{font-size:18px;font-weight:bold;margin-bottom:7px}.xp-message{line-height:1.5;color:#333;min-height:42px}.xp-file-row{display:flex;align-items:center;gap:12px;margin:18px 0 16px;padding:12px;background:#fff;border:1px solid #c7c7c7}.xp-doc-icon{width:34px;height:40px;flex:0 0 auto;background:linear-gradient(135deg,#fff 0 72%,#dcecff 73%);border:1px solid #7d9db9;position:relative}.xp-doc-icon:after{content:"PDF";position:absolute;bottom:4px;left:3px;font-size:9px;font-weight:bold;color:#0758a5}.xp-track{height:23px;padding:3px;background:#fff;border:1px solid #8b8b8b;box-shadow:inset 1px 1px 2px #999;overflow:hidden}.xp-track span{display:block;width:0;height:100%;background:repeating-linear-gradient(135deg,#1684df 0 8px,#48a8f5 8px 12px);transition:width .18s linear}.xp-meta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:#333}.xp-meta strong{font-size:13px}.xp-sub{font-size:12px;color:#555;line-height:1.5;margin:16px 0 0}.xp-actions{display:flex;justify-content:flex-end;margin-top:20px;padding-top:14px;border-top:1px solid #d4d0c8}.xp-cancel{font:13px Tahoma,Arial,sans-serif;padding:6px 18px;border:1px solid #7f9db9;border-radius:3px;background:linear-gradient(#fff,#e5e5e5);color:#555}</style></head><body><main class="xp-window" role="status" aria-live="polite"><div class="xp-titlebar"><span class="xp-icon" aria-hidden="true"></span>Preparing Vehicle Report</div><div class="xp-body"><div class="xp-heading" id="waitTitle">Preparing your vehicle report</div><div class="xp-message" id="waitMessage">Collecting vehicle history and selected documents.</div><div class="xp-file-row"><span class="xp-doc-icon" aria-hidden="true"></span><div><b>Vehicle report and documents</b><div id="waitSub" class="xp-sub">Please keep this window open. Print starts automatically when ready.</div></div></div><div class="xp-track" role="progressbar" aria-label="Report preparation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="waitProgress"></span></div><div class="xp-meta"><strong id="waitPercent">0%</strong><span id="waitPages">Counting document pages…</span></div><div class="xp-actions"><button class="xp-cancel" type="button" disabled>Preparing…</button></div></div></main></body></html>');
       printWindow.document.close();
     }
   }catch(err){console.warn('Print tab could not be opened; falling back to current tab',err)}
-  const updatePrintWait=(title,message,sub)=>{
-    try{if(printWindow&&!printWindow.closed){const d=printWindow.document;const t=d.getElementById('waitTitle'),m=d.getElementById('waitMessage'),ss=d.getElementById('waitSub');if(t)t.textContent=title;if(m)m.textContent=message;if(ss&&sub)ss.textContent=sub;}}catch(_){}
+  let printProgress=0,preparedDocumentPages=0,totalDocumentPages=0,loadedDocumentCount=0;
+  const updatePrintWait=(title,message,sub,progress=null,pageInfo=null)=>{
+    try{if(printWindow&&!printWindow.closed){const d=printWindow.document;const t=d.getElementById('waitTitle'),m=d.getElementById('waitMessage'),ss=d.getElementById('waitSub'),bar=d.getElementById('waitProgress'),track=d.querySelector('.xp-track'),pct=d.getElementById('waitPercent'),pages=d.getElementById('waitPages');if(t)t.textContent=title;if(m)m.textContent=message;if(ss&&sub)ss.textContent=sub;if(pages&&pageInfo)pages.textContent=pageInfo;if(progress!==null){printProgress=Math.max(printProgress,Math.min(100,Math.round(progress)));if(bar)bar.style.width=printProgress+'%';if(track)track.setAttribute('aria-valuenow',String(printProgress));if(pct)pct.textContent=printProgress+'%';}}}catch(_){}
   };
   const source=document.getElementById('reportArea');
   const original=source?.querySelector('.report-sheet');
@@ -2130,16 +2131,18 @@ async function printVehicleReport(selection=null){
     clone.appendChild(page);
   };
   if(chosen.length){
-    status=document.createElement('div');status.className='report-print-loading';status.textContent='Preparing selected documents…';stage.appendChild(status);updatePrintWait('Loading your documents','Downloading and preparing the selected vehicle documents.','Large PDFs can take a little longer. Please wait—printing starts automatically when ready.');
+    status=document.createElement('div');status.className='report-print-loading';status.textContent='Preparing selected documents…';stage.appendChild(status);updatePrintWait('Copying files','Downloading and preparing selected vehicle documents.','Print starts automatically when all documents are ready.',8,'Counting selected document pages…');
     for(const item of chosen){
       try{
         const url=await getUrl(item.doc);
         const ext=String(item.doc.file_name||'').split('.').pop().toLowerCase();
-        const header='';updatePrintWait('Preparing '+item.label,'Loading and formatting document pages.','Your report will open in the print dialog when all selected documents are ready.');
+        const header='';updatePrintWait('Copying '+item.label,'Loading and formatting document pages.','Print starts automatically when all selected documents are ready.',15,'Document pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
         if(ext==='pdf'){
           const pdfjs=await ensurePdfJs(),resp=await fetch(url);
           if(!resp.ok)throw new Error('Document download failed');
           const pdf=await pdfjs.getDocument({data:await resp.arrayBuffer()}).promise;
+          totalDocumentPages+=pdf.numPages;
+          updatePrintWait('Copying document pages','Found '+pdf.numPages+' PDF pages. Rendering for print.','Keep this window open while pages are prepared.',20,'PDF pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
           for(let p=1;p<=pdf.numPages;p++){
             const page=await pdf.getPage(p),baseViewport=page.getViewport({scale:1}),renderScale=Math.min(1.35,1600/Math.max(baseViewport.width,baseViewport.height)),vp=page.getViewport({scale:renderScale}),canvas=document.createElement('canvas');
             canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
@@ -2147,7 +2150,10 @@ async function printVehicleReport(selection=null){
             await page.render({canvasContext:ctx,viewport:vp}).promise;
             const wrap=document.createElement('section');wrap.className='report-document-print-page';
             wrap.innerHTML='';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label+' page '+p;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
+            preparedDocumentPages++;
+            updatePrintWait('Copying document pages','Preparing PDF page '+p+' of '+pdf.numPages+'.','Print opens automatically when ready.',20+Math.round(65*(loadedDocumentCount+(p/pdf.numPages))/Math.max(1,chosen.length)),'PDF pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
           }
+          loadedDocumentCount++;
         }else{
           const imageResponse=await fetch(url,{mode:'cors',credentials:'omit'});
           if(!imageResponse.ok)throw new Error('Image fetch failed with HTTP '+imageResponse.status);
@@ -2161,6 +2167,8 @@ async function printVehicleReport(selection=null){
           ctx.drawImage(img,0,0,canvas.width,canvas.height);
           const wrap=document.createElement('section');wrap.className='report-document-print-page';
           wrap.innerHTML='';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
+          preparedDocumentPages++;totalDocumentPages++;loadedDocumentCount++;
+          updatePrintWait('Image document ready','Prepared image document '+loadedDocumentCount+'.','Preparing next document.',20+Math.round(65*loadedDocumentCount/Math.max(1,chosen.length)),'Document pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
         }
       }catch(err){
         console.error('Document print load failed: '+item.label,err);failed.push(item.label+': '+String(err?.message||err));addPlaceholder(item);
@@ -2205,7 +2213,7 @@ async function printVehicleReport(selection=null){
     if(printWindow&&!printWindow.closed){
       // Copy the app's CSS and the fully prepared report into a separate document.
       // This prevents Firefox's print preview from reflowing/hiding the live app DOM.
-      updatePrintWait('Finishing the A4 layout','All selected documents are loaded. Checking images, fonts and page breaks.','The print dialog will open in a moment.');
+      updatePrintWait('Finishing the A4 layout','All selected documents are loaded. Checking images, fonts and page breaks.','The print dialog will open in a moment.',94,'Document pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · Preparation almost complete');
       const pd=printWindow.document;
       pd.open();
       pd.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="'+esc(document.baseURI)+'"><title>Vehicle Report</title></head><body></body></html>');
@@ -2223,8 +2231,14 @@ async function printVehicleReport(selection=null){
       if(pd.fonts?.ready)await pd.fonts.ready;
       await new Promise(resolve=>printWindow.requestAnimationFrame(()=>printWindow.requestAnimationFrame(resolve)));
       printWindow.focus();
-      updatePrintWait('Opening print preview','Your A4 report is ready. Opening the browser print dialog now.','Choose Save as PDF in the print dialog.');
-      printWindow.addEventListener('afterprint',()=>{try{printWindow.close()}catch(e){}},{once:true});
+      updatePrintWait('Opening print preview','Your A4 report is ready. Opening the browser print dialog now.','Choose Save as PDF in the print dialog.',100,'Document pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · Preparation complete');
+      const retryBar=pd.createElement('div');
+      retryBar.id='carmyPrintRetryBar';
+      retryBar.innerHTML='<div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#f1f5f9;border-bottom:1px solid #cbd5e1;font:14px system-ui,Arial,sans-serif;color:#172033"><span id="carmyPrintRetryStatus" role="status">Report is ready. If you closed the print dialog, you can open it again.</span><button id="carmyPrintAgain" type="button" style="border:0;border-radius:9px;background:#2563eb;color:#fff;padding:10px 16px;font-weight:700;cursor:pointer">Print again / Save PDF</button></div>';
+      const retryCss=pd.createElement('style');retryCss.textContent='@media print{#carmyPrintRetryBar{display:none!important}}';pd.head.appendChild(retryCss);
+      pd.body.insertBefore(retryBar,pd.body.firstChild);
+      pd.getElementById('carmyPrintAgain').addEventListener('click',()=>{const status=pd.getElementById('carmyPrintRetryStatus');if(status)status.textContent='Opening print dialog…';printWindow.focus();printWindow.requestAnimationFrame(()=>printWindow.print())});
+      printWindow.addEventListener('afterprint',()=>{const status=pd.getElementById('carmyPrintRetryStatus');if(status)status.textContent='Print dialog closed. Click “Print again / Save PDF” to retry.'});
       printWindow.print();
     }else{
       // Popup-blocked fallback retains the previous native-print behavior.
