@@ -842,3 +842,40 @@
 
 /* MotorDesk public information pages */
 .md-info-modal[hidden]{display:none!important}.md-info-modal{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:18px;box-sizing:border-box}.md-info-backdrop{position:absolute;inset:0;background:rgba(8,20,34,.64);backdrop-filter:blur(8px)}.md-info-panel{position:relative;display:flex;flex-direction:column;width:min(760px,100%);max-height:min(88dvh,850px);overflow:hidden;background:#fff;border:1px solid #ffffffb3;border-radius:22px;box-shadow:0 28px 100px #05142647;color:#172b3c;animation:mdInfoIn .25s ease-out}.md-info-close{position:absolute;right:17px;top:15px;width:36px;height:36px;border:1px solid #e4eaf0;border-radius:12px;background:#f7fafc;color:#24384a;font-size:24px;cursor:pointer}.md-info-brand{display:flex;align-items:center;gap:10px;padding:22px 26px 14px;font-weight:800;font-size:16px}.md-info-mark{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#102b43;color:#fff;font-size:12px}.md-info-india{margin-left:auto;margin-right:42px;padding:6px 9px;border-radius:999px;background:#fff7e8;color:#87521b;font-size:9px;letter-spacing:.12em;font-weight:800}.md-info-badges{display:flex;flex-wrap:wrap;gap:8px;padding:0 26px 16px}.md-info-badges span{padding:7px 10px;border:1px solid #e6edf2;border-radius:999px;background:#f8fafc;color:#52677a;font-size:10px;font-weight:700}.md-info-tabs{display:flex;gap:5px;padding:0 26px;border-bottom:1px solid #e8edf1}.md-info-tabs button{padding:12px 14px;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;background:transparent;color:#687b8d;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.md-info-tabs button.active{border-bottom-color:#2c9be8;color:#176fa8}.md-info-content{padding:24px 28px 28px;overflow:auto;overscroll-behavior:contain;font-size:13px;line-height:1.75;color:#506274}.md-info-content h1{margin:0 0 16px;color:#152b3e;font-size:25px;letter-spacing:-.04em;line-height:1.2}.md-info-content h2{margin:0 0 15px;color:#172b3c;font-size:clamp(22px,3vw,32px);letter-spacing:-.05em;line-height:1.2}.md-info-content h2 span{color:#258bd0}.md-info-content h3{margin:20px 0 4px;color:#20384d;font-size:13px}.md-info-content p{margin:10px 0}.md-info-content a{color:#1678b5;font-weight:700;text-decoration:none}.md-info-eyebrow{color:#258bd0!important;font-size:10px;font-weight:800;letter-spacing:.18em}.md-info-muted{color:#8794a0;font-size:11px}.md-info-content blockquote{margin:20px 0;padding:15px 18px;border-left:3px solid #2d9de5;border-radius:0 12px 12px 0;background:linear-gradient(100deg,#eef7fc,#f8fbfd);color:#28485d;font-size:14px;font-weight:600;line-height:1.7}.md-info-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:20px}.md-info-values div{display:grid;gap:7px;padding:13px;border:1px solid #e7edf2;border-radius:12px;background:#fbfcfd}.md-info-values b{font-size:11px;color:#1b354a}.md-info-values span{font-size:10px;line-height:1.55}.md-contact-cards{display:grid;gap:10px;margin:22px 0}.md-contact-cards a{display:flex;align-items:center;gap:13px;padding:15px;border:1px solid #e4ebf0;border-radius:14px;background:#fbfdfe;color:inherit;text-decoration:none;transition:transform .2s,border-color .2s}.md-contact-cards a:hover{transform:translateY(-2px);border-color:#9bcfed}.md-contact-icon{display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:12px;background:#eaf6fd;color:#147cb7;font-size:18px}.md-contact-cards a>span:last-child{display:grid;gap:2px}.md-contact-cards small{font-size:9px;letter-spacing:.12em;color:#748698;font-weight:800}.md-contact-cards b{font-size:14px;color:#1d3d56}.md-contact-cards em{font-size:11px;color:#7b8995;font-style:normal}.md-info-note{padding:11px 13px;border-radius:10px;background:#f5f8fa;color:#74818c;font-size:10px;line-height:1.65}.md-info-bottom{display:flex;justify-content:space-between;gap:12px;padding:12px 26px;border-top:1px solid #edf1f4;color:#83919c;font-size:9px;font-weight:800;letter-spacing:.1em}.md-public-links,.md-drawer-info{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:13px;margin-top:10px}.md-public-links button,.md-drawer-info button{padding:0;border:0;background:transparent;color:#647789;font:inherit;font-size:10px;font-weight:700;cursor:pointer}.md-public-links button:hover,.md-drawer-info button:hover{color:#1683c2;text-decoration:underline}.md-drawer-info{justify-content:flex-start;padding:10px 0 2px}body.md-info-open{overflow:hidden}@keyframes mdInfoIn{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}@media(max-width:560px){.md-info-modal{padding:8px}.md-info-panel{max-height:94dvh;border-radius:17px}.md-info-brand{padding:17px 17px 12px}.md-info-badges{padding:0 17px 12px}.md-info-tabs{padding:0 12px}.md-info-tabs button{padding:11px 9px;font-size:10px}.md-info-content{padding:19px 18px 22px}.md-info-content h1{font-size:22px}.md-info-values{grid-template-columns:1fr}.md-info-bottom{padding:11px 17px;font-size:8px}.md-info-india{margin-right:36px;font-size:8px}}@media(prefers-reduced-motion:reduce){.md-info-panel,.md-contact-cards a{animation:none;transition:none}}
+
+
+/* Password visibility button stays inside the right end of its own input. */
+.auth-field.auth-password-field > .auth-password-control {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 44px !important;
+  min-height: 44px !important;
+}
+.auth-field.auth-password-field > .auth-password-control > #password {
+  display: block !important;
+  width: 100% !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding-right: 78px !important;
+}
+.auth-field.auth-password-field > .auth-password-control > #passwordToggle {
+  position: absolute !important;
+  top: 50% !important;
+  right: 7px !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: translateY(-50%) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 48px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  margin: 0 !important;
+  padding: 0 9px !important;
+  z-index: 2 !important;
+}
