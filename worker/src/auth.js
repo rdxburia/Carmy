@@ -34,10 +34,10 @@ async function enforceIdleSession(request, env, token, user) {
   const sessionId = claims?.session_id;
   const issuedAt = Number(claims?.iat || 0);
   const now = Math.floor(Date.now() / 1000);
-  const reportedActivity = Number(request.headers.get("X-Carmy-Last-Activity") || 0);
-
-  if (!sessionId || !Number.isFinite(reportedActivity) || reportedActivity <= 0 ||
-      reportedActivity > now + 60 || now - reportedActivity > IDLE_SECONDS) {
+  // X-Carmy-Last-Activity is untrusted and MUST NOT participate in expiry or writes.
+  // A stolen token can still be kept alive by a script that successfully sends
+  // authenticated heartbeats; this timeout is not a substitute for token revocation.
+  if (!sessionId) {
     await revokeSession(env, token);
     throw new AuthError("You were signed out after 2 minutes of inactivity.", 401, "SESSION_IDLE_TIMEOUT");
   }
@@ -52,8 +52,13 @@ async function enforceIdleSession(request, env, token, user) {
     throw new AuthError("Session security check is temporarily unavailable. Please try again.", 503, "SESSION_CHECK_UNAVAILABLE");
   }
 
-  if (row && (row.user_id !== user.id ||
-      (now - Number(row.last_seen || 0) > IDLE_SECONDS && reportedActivity <= Number(row.last_seen || 0)))) {
+  if (row && row.user_id !== user.id) {
+    await revokeSession(env, token);
+    throw new AuthError("Session identity mismatch.", 401, "SESSION_IDLE_TIMEOUT");
+  }
+
+  // Never update an expired row before deciding expiry. Client timestamps are ignored.
+  if (row && now - Number(row.last_seen || 0) >= IDLE_SECONDS) {
     try {
       await env.DB.prepare("DELETE FROM session_activity WHERE session_id = ?").bind(sessionId).run();
     } catch (err) {
@@ -63,17 +68,18 @@ async function enforceIdleSession(request, env, token, user) {
     throw new AuthError("You were signed out after 2 minutes of inactivity.", 401, "SESSION_IDLE_TIMEOUT");
   }
 
-  if (!row && (!issuedAt || now - issuedAt > IDLE_SECONDS)) {
+  if (!row && (!issuedAt || now - issuedAt >= IDLE_SECONDS)) {
     await revokeSession(env, token);
-    throw new AuthError("Your session has expired. Please sign in again.", 401, "SESSION_IDLE_TIMEOUT");
+    throw new AuthError("You were signed out after 2 minutes of inactivity.", 401, "SESSION_IDLE_TIMEOUT");
   }
 
+  // The only timestamp written is server time. Writes are throttled to once per 15 s.
   try {
     if (!row || now - Number(row.last_seen || 0) >= SESSION_WRITE_INTERVAL_SECONDS) {
       await env.DB.prepare(
         "INSERT INTO session_activity (session_id, user_id, last_seen) VALUES (?, ?, ?) " +
         "ON CONFLICT(session_id) DO UPDATE SET user_id = excluded.user_id, last_seen = excluded.last_seen"
-      ).bind(sessionId, user.id, reportedActivity).run();
+      ).bind(sessionId, user.id, now).run();
     }
   } catch (err) {
     console.error("Could not update idle-session activity", err);

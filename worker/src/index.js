@@ -54,7 +54,7 @@ export default {
         status: 204,
         headers: {
           "access-control-allow-origin": origin,
-          "access-control-allow-headers": "Authorization, Content-Type, X-Carmy-Last-Activity",
+          "access-control-allow-headers": "Authorization, Content-Type",
           "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
           "access-control-max-age": "86400",
           "vary": "Origin",
@@ -121,7 +121,7 @@ export default {
         return error("Request payload is too large.", 413, origin, "PAYLOAD_TOO_LARGE");
       }
 
-      const parts = route(url.pathname);
+      const parts = route(url.pathname);\n\n      if (request.method === "POST" && parts[0] === "session" && parts[1] === "heartbeat" && parts.length === 2) {\n        // Authentication above checks D1 last_seen before this route can refresh it.\n        const claims = (() => { try { const p = userToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(atob(p + "=".repeat((4 - p.length % 4) % 4))); } catch { return {}; } })();\n        const sessionId = claims.session_id;\n        if (!sessionId) return error("Session identity is missing.", 401, origin, "UNAUTHORIZED");\n        const now = Math.floor(Date.now() / 1000);\n        const previous = await env.DB.prepare("SELECT last_heartbeat FROM session_activity WHERE session_id = ? AND user_id = ?").bind(sessionId, user.id).first();\n        if (previous?.last_heartbeat && now - Number(previous.last_heartbeat) < 15) {\n          const limited = error("Heartbeat rate limit: wait before sending another heartbeat.", 429, origin, "HEARTBEAT_RATE_LIMITED");\n          limited.headers.set("retry-after", String(15 - (now - Number(previous.last_heartbeat))));\n          return limited;\n        }\n        await env.DB.prepare("UPDATE session_activity SET last_heartbeat = ? WHERE session_id = ? AND user_id = ?").bind(now, sessionId, user.id).run();\n        return json({ ok: true, server_time: now }, 200, origin);\n      }
 
       if (request.method === "GET" && parts[0] === "vehicles" && parts.length === 1) {
         return json({ ok: true, data: await listVehicles(env, user, userToken) }, 200, origin);
