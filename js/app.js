@@ -2027,6 +2027,10 @@ function showReportPrintOptions(){
 async function printVehicleReport(selection=null){
   document.getElementById('vehicleReportPdfStage')?.remove();
   if(!selection){showReportPrintOptions();return;}
+  // Open a dedicated print tab synchronously from the user's click so popup blockers allow it.
+  // The tab stays blank while documents are fetched/rendered; printing starts only after it is populated.
+  let printWindow=null;
+  try{printWindow=window.open('about:blank','_blank')}catch(err){console.warn('Print tab could not be opened; falling back to current tab',err)}
   const source=document.getElementById('reportArea');
   const original=source?.querySelector('.report-sheet');
   if(!original||!original.innerHTML.trim()){
@@ -2185,7 +2189,31 @@ async function printVehicleReport(selection=null){
     await Promise.all([...clone.querySelectorAll('img')].map(async img=>{img.loading='eager';if(img.decode)await img.decode();else if(!img.complete)await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject})}));
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     if(button){button.disabled=true;button.textContent='PRINTING…'}
-    window.print();
+    if(printWindow&&!printWindow.closed){
+      // Copy the app's CSS and the fully prepared report into a separate document.
+      // This prevents Firefox's print preview from reflowing/hiding the live app DOM.
+      const pd=printWindow.document;
+      pd.open();
+      pd.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="'+esc(document.baseURI)+'"><title>CarCareCloud Vehicle Report</title></head><body></body></html>');
+      pd.close();
+      document.querySelectorAll('link[rel="stylesheet"],style').forEach(node=>pd.head.appendChild(node.cloneNode(true)));
+      const printStage=stage.cloneNode(true);
+      printStage.style.cssText='display:block!important;position:static!important;width:100%!important;height:auto!important;overflow:visible!important;background:#fff!important;padding:0!important;margin:0!important';
+      pd.body.style.cssText='margin:0!important;padding:0!important;background:#fff!important;color:#172033!important';
+      pd.body.appendChild(printStage);
+      const printCss=pd.createElement('style');
+      printCss.textContent='@page{size:A4;margin:8mm}html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0!important;padding:0!important}#vehicleReportPdfStage{display:block!important;position:static!important;width:100%!important;overflow:visible!important}#vehicleReportPdfStage .report-sheet{break-after:auto!important;page-break-after:auto!important}#vehicleReportPdfStage .report-document-print-page{break-before:page!important;page-break-before:always!important}';
+      pd.head.appendChild(printCss);
+      await Promise.all([...pd.images].map(img=>img.decode?img.decode().catch(()=>{}):Promise.resolve()));
+      if(pd.fonts?.ready)await pd.fonts.ready;
+      await new Promise(resolve=>printWindow.requestAnimationFrame(()=>printWindow.requestAnimationFrame(resolve)));
+      printWindow.focus();
+      printWindow.addEventListener('afterprint',()=>{try{printWindow.close()}catch(e){}},{once:true});
+      printWindow.print();
+    }else{
+      // Popup-blocked fallback retains the previous native-print behavior.
+      window.print();
+    }
   }catch(err){console.error('Vehicle report print preparation failed:',err);toast('Report preparation failed. Check the console for the document error.','error');cleanup()}
   // Firefox can return from window.print() before the preview is closed. Keep the print stage until afterprint; a subsequent report-print attempt also removes a stale stage.
 }
