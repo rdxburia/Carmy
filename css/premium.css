@@ -839,3 +839,15 @@
   .auth-password-field { grid-template-rows: auto 39px auto !important; }
   .auth-password-field > input { height: 39px !important; min-height: 39px !important; }
 }
+
+
+/* Anchor Show/Hide to a dedicated wrapper around the password input. */
+.auth-password-field { display:block!important; position:relative!important; }
+.auth-password-field > label { display:block!important; margin-bottom:6px!important; }
+.auth-password-field > .auth-password-control { position:relative!important; display:block!important; width:100%!important; height:42px!important; }
+.auth-password-field > .auth-password-control > input#password { display:block!important; width:100%!important; height:42px!important; min-height:42px!important; box-sizing:border-box!important; padding-right:82px!important; margin:0!important; }
+.auth-password-field > .auth-password-control > button#passwordToggle.auth-password-toggle { position:absolute!important; top:50%!important; right:7px!important; bottom:auto!important; left:auto!important; transform:translateY(-50%)!important; z-index:5!important; display:inline-flex!important; align-items:center!important; justify-content:center!important; width:auto!important; min-width:48px!important; height:30px!important; min-height:30px!important; margin:0!important; padding:0 9px!important; line-height:1!important; }
+.auth-password-field > .auth-password-meta { margin-top:7px!important; }
+@media (min-width:761px) and (max-height:800px) {
+ .auth-password-field > .auth-password-control,.auth-password-field > .auth-password-control > input#password {height:39px!important;min-height:39px!important}
+}
