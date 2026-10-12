@@ -54,7 +54,7 @@ export default {
         status: 204,
         headers: {
           "access-control-allow-origin": origin,
-          "access-control-allow-headers": "Authorization, Content-Type, X-Carmy-Last-Activity",
+          "access-control-allow-headers": "Authorization, Content-Type",
           "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
           "access-control-max-age": "86400",
           "vary": "Origin",
@@ -122,6 +122,33 @@ export default {
       }
 
       const parts = route(url.pathname);
+
+      if (request.method === "POST" && parts[0] === "session" && parts[1] === "heartbeat" && parts.length === 2) {
+        // Authentication above checks D1 last_seen before this route can refresh it.
+        const claims = (() => { try { const p = userToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(atob(p + "=".repeat((4 - p.length % 4) % 4))); } catch { return {}; } })();
+        const sessionId = claims.session_id;
+        if (!sessionId) return error("Session identity is missing.", 401, origin, "UNAUTHORIZED");
+        const now = Math.floor(Date.now() / 1000);
+        const previous = await env.DB.prepare("SELECT last_heartbeat FROM session_activity WHERE session_id = ? AND user_id = ?").bind(sessionId, user.id).first();
+        if (previous?.last_heartbeat && now - Number(previous.last_heartbeat) < 15) {
+          const limited = error("Heartbeat rate limit: wait before sending another heartbeat.", 429, origin, "HEARTBEAT_RATE_LIMITED");
+          limited.headers.set("retry-after", String(15 - (now - Number(previous.last_heartbeat))));
+          return limited;
+        }
+        // Keep Supabase's independent RLS/Storage idle guard alive from this same
+        // authenticated heartbeat; PostgreSQL supplies its own clock_timestamp().
+        const dbTouch = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/carmy_touch_session`, {
+          method: "POST",
+          headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
+          body: "{}",
+        });
+        if (!dbTouch.ok) {
+          console.error("Database idle-session heartbeat failed", dbTouch.status);
+          return error("Session security check is temporarily unavailable. Please try again.", 503, origin, "SESSION_CHECK_UNAVAILABLE");
+        }
+        await env.DB.prepare("UPDATE session_activity SET last_heartbeat = ? WHERE session_id = ? AND user_id = ?").bind(now, sessionId, user.id).run();
+        return json({ ok: true, server_time: now }, 200, origin);
+      }
 
       if (request.method === "GET" && parts[0] === "vehicles" && parts.length === 1) {
         return json({ ok: true, data: await listVehicles(env, user, userToken) }, 200, origin);

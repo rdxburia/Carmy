@@ -194,7 +194,7 @@ async function workerRequest(path,options={},retry=true){
   let token=await getAccessToken();
   const makeRequest=t=>fetch(WORKER_API+path,{
     ...options,
-    headers:{...(options.headers||{}),Authorization:'Bearer '+t,Accept:'application/json','X-Carmy-Last-Activity':activityHeader}
+    headers:{...(options.headers||{}),Authorization:'Bearer '+t,Accept:'application/json'}
   });
   let res=await makeRequest(token);
   if(res.status===401){
