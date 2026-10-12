@@ -42,7 +42,6 @@ $$;
 create or replace function public.carmy_session_is_active()
 returns boolean
 language sql
-stable
 security definer
 set search_path = public, pg_temp
 as $$
