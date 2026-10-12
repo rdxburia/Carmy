@@ -1,5 +1,88 @@
 
 const U=APP_CONFIG.SUPABASE_URL,K=APP_CONFIG.SUPABASE_KEY;
+
+const IDLE_MS=120000;
+const IDLE_ACTIVITY_KEY='carmy_last_activity';
+const IDLE_LOGOUT_KEY='carmy_idle_logout';
+let idleCheckTimer=null;
+let lastIdleWrite=0;
+let activeLongOperations=0;
+function readIdleActivity(){
+  try{const n=Number(localStorage.getItem(IDLE_ACTIVITY_KEY)||0);return Number.isFinite(n)&&n>0?n:0}catch(e){return 0}
+}
+function writeIdleActivity(force=false){
+  const now=Date.now();
+  if(!force&&now-lastIdleWrite<5000)return;
+  lastIdleWrite=now;
+  try{localStorage.setItem(IDLE_ACTIVITY_KEY,String(now))}catch(e){}
+}
+function idleExpired(){
+  const last=readIdleActivity();
+  return !last||Date.now()-last>IDLE_MS;
+}
+function clearUserMemory(){
+  user=null;cars=[];car=null;records=[];docs=[];ownerProfile=null;
+  insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
+  accessToken='';authRefreshPromise=null;startedUserId=null;
+  const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
+  document.querySelectorAll('.modal-overlay,.modal-backdrop,[role="dialog"][aria-modal="true"]').forEach(el=>el.remove());
+  closeSideMenu();
+}
+async function forceSignOut(reason='idle'){
+  if(window.__carmySigningOut)return;
+  window.__carmySigningOut=true;
+  try{
+    try{localStorage.setItem(IDLE_LOGOUT_KEY,String(Date.now()))}catch(e){}
+    try{if(db)await db.auth.signOut({scope:'global'})}catch(err){console.error('Global sign-out failed:',err)}
+    try{
+      for(let i=localStorage.length-1;i>=0;i--){
+        const key=localStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')))localStorage.removeItem(key);
+      }
+    }catch(e){}
+    clearUserMemory();
+    showLogin();
+    toast(reason==='idle'?'You were signed out after 2 minutes of inactivity.':'Your session has expired. Please sign in again.','error');
+  }finally{
+    window.__carmySigningOut=false;
+  }
+}
+function checkIdleSession(){
+  if(!db||!user)return;
+  if(idleExpired())void forceSignOut('idle');
+}
+function recordUserActivity(){
+  if(window.__carmySigningOut||!db)return;
+  if(document.visibilityState==='hidden')return;
+  writeIdleActivity();
+}
+function initIdleLogout(){
+  if(window.__carmyIdleLogoutInitialized)return;
+  window.__carmyIdleLogoutInitialized=true;
+  const events=['pointerdown','keydown','touchstart','wheel','scroll'];
+  events.forEach(name=>document.addEventListener(name,recordUserActivity,{passive:true,capture:true}));
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      checkIdleSession();
+      if(!idleExpired())writeIdleActivity(true);
+    }
+  });
+  window.addEventListener('focus',checkIdleSession);
+  window.addEventListener('pageshow',checkIdleSession);
+  window.addEventListener('storage',event=>{
+    if(event.key===IDLE_LOGOUT_KEY||(event.key&&event.key.startsWith('sb-')&&event.newValue===null)){
+      if(user)void forceSignOut('expired');
+      return;
+    }
+    if(event.key===IDLE_ACTIVITY_KEY)checkIdleSession();
+  });
+  idleCheckTimer=setInterval(checkIdleSession,5000);
+}
+function idleActivityHeader(){
+  const last=readIdleActivity();
+  return last?String(Math.floor(last/1000)):'';
+}
+
 let db=null;
 let accessToken='';
 let authRefreshPromise=null;
@@ -45,6 +128,7 @@ function tokenExpiresSoon(token,skewSeconds=30){
   }
 }
 async function getAccessToken(forceRefresh=false){
+  if(user&&idleExpired()){await forceSignOut('idle');throw new Error('Session expired after inactivity. Please sign in again.')}
   if(!db)throw new Error('Secure API connection is not ready.');
   if(!forceRefresh&&accessToken&&!tokenExpiresSoon(accessToken))return accessToken;
   if(authRefreshPromise)return authRefreshPromise;
@@ -59,17 +143,26 @@ async function getAccessToken(forceRefresh=false){
 }
 async function workerRequest(path,options={},retry=true){
   if(!db)throw new Error('Secure API connection is not ready.');
+  checkIdleSession();
+  if(user&&idleExpired()){await forceSignOut('idle');throw new Error('Session expired after inactivity. Please sign in again.')}
+  const activityHeader=idleActivityHeader();
   let token=await getAccessToken();
-  let res=await fetch(WORKER_API+path,{
+  const makeRequest=t=>fetch(WORKER_API+path,{
     ...options,
-    headers:{...(options.headers||{}),Authorization:'Bearer '+token,Accept:'application/json'}
+    headers:{...(options.headers||{}),Authorization:'Bearer '+t,Accept:'application/json','X-Carmy-Last-Activity':activityHeader}
   });
-  if(res.status===401&&retry){
-    token=await getAccessToken(true);
-    res=await fetch(WORKER_API+path,{
-      ...options,
-      headers:{...(options.headers||{}),Authorization:'Bearer '+token,Accept:'application/json'}
-    });
+  let res=await makeRequest(token);
+  if(res.status===401){
+    let firstBody=null;
+    try{firstBody=await res.clone().json()}catch(e){}
+    if(firstBody?.error?.code==='SESSION_IDLE_TIMEOUT'||firstBody?.code==='SESSION_IDLE_TIMEOUT'){
+      await forceSignOut('idle');
+      throw new Error('You were signed out after 2 minutes of inactivity.');
+    }
+    if(retry){
+      token=await getAccessToken(true);
+      res=await makeRequest(token);
+    }
   }
   let body=null;
   try{body=await res.json()}catch(e){}
@@ -85,7 +178,7 @@ async function workerPost(path,payload){
 async function workerDelete(path){
   return workerRequest(path,{method:'DELETE'});
 }
-function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K);return true}return false}
+function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>CarCare Cloud</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
 let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
@@ -670,21 +763,32 @@ bindAuthValidation();
 $('email')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('password')?.focus()});
 const legacyLogout=$('logout');if(legacyLogout)legacyLogout.onclick=()=>db.auth.signOut();
 async function boot(){
+ initIdleLogout();
  wireDateInputs(document);
  if(!document.body.dataset.dateMaskWired){document.body.dataset.dateMaskWired='1';document.addEventListener('input',e=>{const el=e.target;if(!el?.matches?.('input[data-date-input]'))return;let s=el.value.replace(/[^0-9]/g,'').slice(0,8);if(s.length>4)s=s.slice(0,2)+'-'+s.slice(2,4)+'-'+s.slice(4);else if(s.length>2)s=s.slice(0,2)+'-'+s.slice(2);el.value=s})}
  if($('date')&&!$('date').value)$('date').value=formatDateNice(istTodayClient());
  handleAuthRedirectError();
  let s=await db.auth.getSession();
+ if(s.data.session&&(idleExpired())){
+   await forceSignOut('idle');
+   s={data:{session:null}};
+ }
  accessToken=s.data.session?.access_token||'';
- if(s.data.session)start(s.data.session.user);
+ if(s.data.session){writeIdleActivity(true);start(s.data.session.user)}
  else showLogin();
- db.auth.onAuthStateChange(async(_e,s)=>{
-   accessToken=s?.access_token||'';
-   if(s){
-     start(s.user);
+ db.auth.onAuthStateChange(async(event,nextSession)=>{
+   accessToken=nextSession?.access_token||'';
+   if(nextSession){
+     if(event==='SIGNED_IN')writeIdleActivity(true);
+     if(event!=='INITIAL_SESSION'&&idleExpired()){
+       await forceSignOut('idle');
+       return;
+     }
+     start(nextSession.user);
    }else{
      accessToken='';
      startedUserId=null;
+     if(!window.__carmySigningOut)clearUserMemory();
      showLogin();
    }
  });
