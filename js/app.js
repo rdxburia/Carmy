@@ -54,6 +54,7 @@ function checkIdleSession(){
 function recordUserActivity(){
   if(window.__carmySigningOut||!db)return;
   if(document.visibilityState==='hidden')return;
+  if(user&&idleExpired()){void forceSignOut('idle');return}
   writeIdleActivity();
 }
 function initIdleLogout(){
