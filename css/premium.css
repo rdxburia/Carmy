@@ -945,3 +945,66 @@ body.md-info-open{overflow:hidden!important}
   body:has(#app:not(.hidden)){padding-bottom:172px!important}
   body:has(#app:not(.hidden)) .md-app-footer{bottom:64px!important}
 }
+
+
+/* MotorDesk popup readability hotfix: compact, opaque panel with crisp text. */
+.md-info-modal:not([hidden]) {
+  position: fixed !important; inset: 0 !important;
+  display: grid !important; place-items: center !important;
+  padding: 12px !important; box-sizing: border-box !important;
+  visibility: visible !important; opacity: 1 !important;
+  z-index: 2147483000 !important;
+  filter: none !important; backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(12, 27, 42, .56) !important;
+}
+.md-info-backdrop {
+  background: rgba(12, 27, 42, .56) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+.md-info-panel {
+  display: flex !important; flex-direction: column !important;
+  position: relative !important;
+  width: min(540px, calc(100vw - 24px)) !important;
+  max-width: 540px !important;
+  max-height: min(78vh, 660px) !important;
+  margin: auto !important; overflow: hidden !important;
+  background: #fff !important; color: #172b3c !important;
+  opacity: 1 !important; visibility: visible !important;
+  filter: none !important; backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  border: 1px solid #dce5ec !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 55px rgba(0,0,0,.24) !important;
+  animation: none !important;
+}
+.md-info-brand, .md-info-badges, .md-info-tabs, .md-info-content, .md-info-bottom {
+  flex-shrink: 0 !important; filter: none !important; opacity: 1 !important;
+}
+.md-info-content {
+  display: block !important; flex: 1 1 auto !important;
+  min-height: 120px !important; overflow-y: auto !important;
+  color: #40566a !important; background: #fff !important;
+  font-size: 13px !important; line-height: 1.65 !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+.md-info-content h1, .md-info-content h2, .md-info-content h3,
+.md-info-content p, .md-info-content span, .md-info-content b,
+.md-info-content em, .md-info-content a, .md-info-content blockquote {
+  opacity: 1 !important; filter: none !important;
+  -webkit-text-fill-color: currentColor;
+}
+.md-info-content h1, .md-info-content h2, .md-info-content h3 { color: #152b3e !important; }
+.md-info-content p { color: #40566a !important; }
+.md-info-content a { color: #087bb5 !important; }
+@media (max-width: 560px) {
+  .md-info-modal:not([hidden]) { padding: 8px !important; }
+  .md-info-panel { width: calc(100vw - 16px) !important; max-height: 82vh !important; border-radius: 14px !important; }
+  .md-info-brand { padding: 14px 15px 10px !important; }
+  .md-info-badges { padding: 0 15px 10px !important; }
+  .md-info-content { padding: 16px !important; }
+  .md-info-bottom { padding: 10px 15px !important; }
+}
