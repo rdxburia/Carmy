@@ -879,3 +879,14 @@
   padding: 0 9px !important;
   z-index: 2 !important;
 }
+
+/* Refined footer navigation tabs and copyright / India badge */
+.md-public-links{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 10px;margin:14px 0 2px;padding:12px 8px 0;border-top:1px solid #e8edf2}
+.md-public-links button,.md-drawer-info button{padding:7px 11px;border:1px solid #e2eaf0;border-radius:999px;background:#f7fafc;color:#425b70;font-size:11px;font-weight:700;transition:background .18s,border-color .18s,color .18s}
+.md-public-links button:hover,.md-drawer-info button:hover{background:#eaf6fd;border-color:#b7dff4;color:#116da7;text-decoration:none}
+.md-public-links>span{font-size:9px;color:#7b8b98;font-weight:700;letter-spacing:.03em}
+.md-public-links .md-made-in-india{padding:6px 9px;border-radius:999px;background:#fff7e8;color:#865a23;letter-spacing:.08em}
+.md-drawer-info{justify-content:flex-start;gap:6px 8px;padding:10px 0}
+.md-drawer-info>span{width:100%;margin-top:3px;font-size:9px;color:#82909c}
+.md-info-tabs button{border-radius:10px 10px 0 0}
+.md-info-tabs button.active{background:#eef7fc}
