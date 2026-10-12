@@ -64,8 +64,10 @@
           </div>
           <div class="auth-field auth-password-field">
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" placeholder=" " aria-describedby="passwordChecklist passwordMessage">
-            <button class="auth-password-toggle" id="passwordToggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+            <div class="auth-password-control">
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder=" " aria-describedby="passwordChecklist passwordMessage">
+              <button class="auth-password-toggle" id="passwordToggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
             <div class="auth-password-meta">
               <div class="auth-checklist" id="passwordChecklist" aria-live="polite"></div>
               <div class="auth-strength" aria-label="Password strength"><span class="auth-strength-bar"><i></i><i></i><i></i></span><b id="passwordStrengthText"></b></div>
