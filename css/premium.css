@@ -751,3 +751,40 @@
   .auth-password-field label + input + .auth-password-toggle { top: 26px !important; }
   .auth-password-field input:focus + .auth-password-toggle { top: 26px !important; }
 }
+
+
+/* Final desktop composition: separate brand tagline, copy and animated car */
+.auth-story { grid-template-rows: auto minmax(88px, 112px); row-gap: 8px; }
+.auth-story-copy { align-self: center; }
+.auth-story-footer { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:15px!important; }
+.auth-footer-tagline { color:#63758a; font-size:9px; font-weight:800; letter-spacing:.13em; white-space:nowrap; }
+.auth-scene { align-self:end; min-height:0; height:112px; overflow:hidden; }
+.auth-car { bottom:22px; }
+.auth-speedometer { bottom:27px; }
+.auth-scene-glow { bottom:15px; }
+.auth-horizon { bottom:22px; }
+.auth-road-line { bottom:21px; }
+@media (min-width:761px) {
+  #auth.login { padding-top:12px; padding-bottom:12px; }
+  .auth-shell { gap:clamp(24px,3.6vw,52px); }
+  .auth-story h2 { font-size:clamp(38px,4.2vw,58px)!important; }
+  .auth-story-copy > p:not(.auth-kicker) { margin:11px 0 14px!important; }
+  .auth-features { gap:7px!important; }
+  .auth-features li { font-size:11px!important; }
+  .auth-features li small { font-size:10px!important; }
+}
+@media (min-width:761px) and (max-height:800px) {
+  .auth-story { grid-template-rows:auto 68px; row-gap:2px; }
+  .auth-story-footer { margin-top:10px!important; }
+  .auth-scene { height:68px; }
+  .auth-car { width:205px; bottom:16px; }
+  .auth-speedometer { width:205px; height:85px; bottom:19px; }
+  .auth-scene-glow { height:75px; bottom:10px; }
+  .auth-horizon { bottom:16px; }
+  .auth-road-line { bottom:15px; }
+}
+@media (max-width:760px) {
+  .auth-story-footer { gap:7px; }
+  .auth-footer-tagline { font-size:8px; }
+  .auth-scene { margin-top:8px; }
+}
