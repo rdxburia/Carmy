@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f6f8fb">
+<title>About MotorDesk | MotorDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/premium.css">
+<style>
+:root{--md-ink:#10223b;--md-blue:#2698e5;--md-muted:#65768a;--md-line:#e4eaf0}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 12% 0%,#eaf3ff 0,transparent 35%),#f7f8fa;color:var(--md-ink);font-family:Inter,system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+.md-page-nav{width:min(1100px,calc(100% - 40px));margin:0 auto;min-height:82px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.md-page-brand{display:flex;align-items:center;gap:11px;color:var(--md-ink);text-decoration:none;font-weight:800;font-size:20px;letter-spacing:-.7px}
+.md-page-mark{width:39px;height:39px;border-radius:12px;background:#10233f;color:white;display:grid;place-items:center;font-size:14px;box-shadow:0 5px 15px #10233f20}
+.md-page-brand em{font-style:normal;color:var(--md-blue)}
+.md-back-link{font-size:13px;font-weight:700;color:#42647e;text-decoration:none;padding:10px 14px;border:1px solid #dce6ef;border-radius:999px;background:#ffffffbd}
+.md-back-link:hover{border-color:#9bcff0;background:white}
+.md-page-main{width:min(920px,calc(100% - 40px));margin:26px auto 64px;flex:1}
+.md-page-hero{position:relative;overflow:hidden;padding:clamp(28px,6vw,58px);border-radius:28px;background:linear-gradient(125deg,#10233f 0%,#183c5a 60%,#217fbd 100%);color:white;box-shadow:0 22px 60px #18395720}
+.md-page-hero:after{content:"";position:absolute;width:300px;height:300px;right:-90px;top:-140px;border:1px solid #ffffff30;border-radius:50%;box-shadow:0 0 0 28px #ffffff08,0 0 0 58px #ffffff06}
+.md-eyebrow{font-size:10px;font-weight:800;letter-spacing:.19em;color:#9fd8ff;text-transform:uppercase}
+.md-page-hero h1{font-size:clamp(34px,6vw,58px);line-height:1.06;letter-spacing:-.055em;max-width:700px;margin:16px 0}
+.md-page-hero h1 span{color:#77c8ff}
+.md-page-hero p{font-size:15px;line-height:1.8;color:#dceaf5;max-width:640px;margin:0}
+.md-page-content{margin:22px 0 0;padding:clamp(24px,5vw,42px);border:1px solid #e4eaf0;border-radius:24px;background:#fff;box-shadow:0 12px 35px #142b4008}
+.md-page-content h2{font-size:21px;letter-spacing:-.035em;margin:25px 0 9px}
+.md-page-content h2:first-child{margin-top:0}
+.md-page-content p,.md-page-content li{color:#536579;font-size:14px;line-height:1.85}
+.md-page-content blockquote{margin:24px 0;padding:18px 22px;border-left:3px solid var(--md-blue);border-radius:0 14px 14px 0;background:#f0f8fe;color:#173b58;font-size:17px;line-height:1.7;font-weight:600}
+.md-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.md-info-tile{padding:18px;border:1px solid var(--md-line);border-radius:16px;background:#fbfcfd}
+.md-info-tile b{display:block;margin:9px 0 5px;font-size:13px}.md-info-tile p{margin:0;font-size:12px;line-height:1.7}
+.md-tile-icon{width:35px;height:35px;border-radius:11px;background:#eaf6ff;color:#187db9;display:grid;place-items:center;font-weight:800}
+.md-contact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:24px}
+.md-contact-card{display:flex;align-items:flex-start;gap:14px;padding:22px;border:1px solid var(--md-line);border-radius:18px;background:#fbfcfd;text-decoration:none;color:inherit;transition:transform .2s,border-color .2s,box-shadow .2s}
+.md-contact-card:hover{transform:translateY(-3px);border-color:#a8d7f4;box-shadow:0 12px 24px #1b5d8410}
+.md-contact-card small{display:block;color:#72849a;font-size:9px;letter-spacing:.15em;font-weight:800;margin-bottom:8px}.md-contact-card strong{display:block;color:#176fa9;font-size:15px;overflow-wrap:anywhere}.md-contact-card p{font-size:12px;margin:7px 0 0}
+.md-page-footer{margin-top:auto;border-top:1px solid #e1e8ee;background:#ffffffd9}
+.md-page-footer .md-footer-inner{width:min(1100px,calc(100% - 40px));margin:0 auto;min-height:68px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.md-page-footer .md-footer-links{display:flex;gap:6px;flex-wrap:wrap}
+.md-page-footer a{color:#526a7d;text-decoration:none;font-size:11px;font-weight:700;padding:8px 10px;border-radius:999px}.md-page-footer a:hover{background:#edf7fd;color:#1479b5}
+.md-page-footer .md-footer-copy{font-size:11px;color:#65768a}.md-page-footer .md-footer-made{font-size:9px;color:#875b24;background:#fffaf1;border:1px solid #f0e1c8;border-radius:999px;padding:7px 10px;font-weight:800;letter-spacing:.05em}
+@media(max-width:640px){.md-page-nav{width:calc(100% - 28px);min-height:70px}.md-page-main{width:calc(100% - 28px);margin:16px auto 36px}.md-page-hero{border-radius:22px}.md-info-grid{grid-template-columns:1fr}.md-contact-grid{grid-template-columns:1fr}.md-page-footer .md-footer-inner{width:calc(100% - 28px);justify-content:center;padding:12px 0;gap:8px}.md-page-footer .md-footer-links{width:100%;justify-content:center}}
+</style>
+</head>
+<body>
+<header class="md-page-nav"><a class="md-page-brand" href="index.html" aria-label="MotorDesk home"><span class="md-page-mark">MD</span><span>Motor<em>Desk</em></span></a><a class="md-back-link" href="index.html">← Back to MotorDesk</a></header>
+<main class="md-page-main">
+<section class="md-page-hero"><div class="md-eyebrow">OUR STORY · BUILT FOR THE LONG RUN</div><h1>Some people see a car.<br><span>We see a thousand stories.</span></h1><p>Every engine has a character. Every repair has a reason. Every kilometre leaves a little history behind—and that history deserves a home.</p></section>
+<section class="md-page-content"><h2>A little love for every machine.</h2><p>We love the sound of an engine settling into a steady idle, the engineering behind a perfectly timed gear change, and the clever design that keeps a machine moving year after year.</p><p>We also love history. Human history teaches us that small details matter: the dates, the turning points, the lessons passed forward. A vehicle has its own story too—service stamps, replaced parts, road trips, running costs and the care that keeps it alive.</p><blockquote>“An engine is more than metal and motion. It is human ingenuity—and every kilometre adds another chapter.”</blockquote><p>MotorDesk was created to keep those chapters together. Instead of scattered bills, forgotten reminders and documents buried in a glovebox, your vehicle’s story can live in one clear, private place.</p><div class="md-info-grid"><article class="md-info-tile"><span class="md-tile-icon">01</span><b>Respect the engineering</b><p>Make maintenance history easier to understand and preserve.</p></article><article class="md-info-tile"><span class="md-tile-icon">02</span><b>Keep the details</b><p>Bring services, costs, documents and milestones into one timeline.</p></article><article class="md-info-tile"><span class="md-tile-icon">03</span><b>Made for the journey</b><p>Thoughtfully designed for the realities of owning a vehicle in India.</p></article></div></section>
+</main><footer class="md-page-footer"><div class="md-footer-inner"><span class="md-footer-copy">© 2026 MotorDesk</span><nav class="md-footer-links" aria-label="Information pages"><a href="about.html">About MotorDesk</a><a href="terms.html">Terms &amp; Conditions</a><a href="contact.html">Contact</a></nav><span class="md-footer-made">🇮🇳 MADE IN INDIA · INDIA-FIRST DATA</span></div></footer></body></html>
