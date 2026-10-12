@@ -1088,3 +1088,110 @@ body.md-info-open{overflow:hidden!important}
 @media (max-width: 560px) {
   #mdInfoModal .md-info-panel { width: calc(100vw - 20px) !important; max-height: 80vh !important; }
 }
+
+
+/* Mobile stability pass: keep auth card in place and footer rows deterministic. */
+@media (max-width: 760px) {
+  html, body { width: 100%; max-width: 100%; overflow-x: clip; }
+  #auth.login {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-height: 100svh !important;
+    min-height: 100dvh !important;
+    height: auto !important;
+    padding: 12px 12px calc(116px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow-x: clip !important;
+    overflow-y: auto !important;
+    align-items: start !important;
+  }
+  #auth .auth-shell {
+    width: 100% !important;
+    min-width: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas: "story" "card" !important;
+    align-items: start !important;
+    justify-items: stretch !important;
+    gap: 12px !important;
+    margin: 0 auto !important;
+  }
+  #auth .auth-story { min-width: 0 !important; width: 100% !important; grid-template-rows: auto auto !important; }
+  #auth .auth-story-copy { width: 100% !important; max-width: none !important; }
+  #auth .auth-story h2 { font-size: clamp(27px, 7vw, 34px) !important; line-height: 1.04 !important; }
+  #auth .auth-story-copy > p:not(.auth-kicker) { margin: 9px 0 12px !important; font-size: 12px !important; line-height: 1.45 !important; }
+  #auth .auth-features { display: none !important; }
+  #auth .auth-story-footer { margin-top: 8px !important; }
+  #auth .auth-scene { display: none !important; }
+  #auth .auth-card {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    justify-self: stretch !important;
+    align-self: start !important;
+    margin: 0 !important;
+    padding: 18px 16px !important;
+    border-radius: 16px !important;
+    overflow: visible !important;
+    scroll-margin: 12px !important;
+    transform: none;
+  }
+  #auth.auth-mobile-open .auth-shell { grid-template-areas: "card" !important; }
+  #auth.auth-mobile-open .auth-story { display: none !important; }
+  #auth .auth-verification { width: 100% !important; box-sizing: border-box !important; }
+  #auth .auth-card-head { margin-bottom: 12px !important; }
+  #auth .auth-card h1 { font-size: 24px !important; }
+  #auth .auth-card-copy { margin: 7px 0 10px !important; }
+  .md-site-footer {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    z-index: 9000 !important;
+    padding: 0 0 env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
+  }
+  .md-footer-inner {
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 6px 8px !important;
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-areas: "copy made" "links links" !important;
+    justify-content: stretch !important;
+    align-items: center !important;
+    gap: 4px 8px !important;
+    box-sizing: border-box !important;
+  }
+  .md-footer-copy { grid-area: copy !important; justify-self: start !important; order: unset !important; }
+  .md-footer-made { grid-area: made !important; justify-self: end !important; order: unset !important; white-space: nowrap !important; }
+  .md-footer-links {
+    grid-area: links !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 2px !important;
+    order: unset !important;
+    min-width: 0 !important;
+  }
+  .md-footer-links button, .md-footer-links a {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    padding: 6px 6px !important;
+    font-size: clamp(9px, 2.5vw, 10px) !important;
+    white-space: nowrap !important;
+    line-height: 1.2 !important;
+  }
+  body:not(:has(#app:not(.hidden))) { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important; }
+  body:has(#app:not(.hidden)) { padding-bottom: calc(158px + env(safe-area-inset-bottom, 0px)) !important; }
+  body:has(#app:not(.hidden)) .md-app-footer { bottom: 64px !important; }
+}
+@media (max-width: 360px) {
+  .md-footer-links button, .md-footer-links a { padding-left: 4px !important; padding-right: 4px !important; font-size: 9px !important; }
+  .md-footer-made { font-size: 6.5px !important; padding: 4px 5px !important; }
+  #auth .auth-card { padding: 15px 12px !important; }
+}
