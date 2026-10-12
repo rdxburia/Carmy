@@ -669,3 +669,85 @@
  .auth-kicker-dot,.auth-features li,.auth-animated .auth-story-copy,.auth-animated .auth-card,.auth-animated .auth-scene-glow,.auth-animated .auth-speedometer{animation:none!important}
  .auth-features li{opacity:1!important;transform:none!important}
 }
+
+
+/* MotorDesk login: fit the full experience in a standard desktop viewport */
+@media (min-width: 761px) {
+  #auth.login {
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    box-sizing: border-box;
+    padding: clamp(12px, 2.2vh, 24px) clamp(24px, 4vw, 56px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .auth-shell {
+    width: min(1160px, 100%);
+    grid-template-columns: minmax(0, 1fr) minmax(350px, 410px);
+    gap: clamp(28px, 4.5vw, 68px);
+    align-items: center;
+  }
+  .auth-story { grid-template-rows: auto minmax(0, 105px); }
+  .auth-story-copy { max-width: 590px; }
+  .auth-story h2 { font-size: clamp(40px, 4.8vw, 64px) !important; }
+  .auth-story-copy > p:not(.auth-kicker) { margin: 13px 0 16px; font-size: 14px; line-height: 1.5; }
+  .auth-features { gap: 8px; }
+  .auth-features li { font-size: 11px; }
+  .auth-scene { min-height: 105px; }
+  .auth-speedometer { width: 250px; height: 125px; bottom: 36px; }
+  .auth-scene-glow { height: 115px; bottom: 24px; }
+  .auth-car { width: 250px; bottom: 35px; }
+  .auth-horizon { bottom: 36px; }
+  .auth-road-line { bottom: 35px; }
+  .auth-card { max-width: 410px; padding: 22px; }
+  .auth-card-head { margin-bottom: 12px; }
+  .auth-card-copy { margin: 6px 0 10px; }
+  .auth-card h1 { font-size: 25px !important; }
+  .auth-form { gap: 7px; }
+  .auth-field input { height: 42px !important; min-height: 42px !important; }
+  .auth-submit { height: 42px !important; }
+}
+@media (min-width: 761px) and (max-height: 800px) {
+  #auth.login { padding-top: 10px; padding-bottom: 10px; }
+  .auth-story h2 { font-size: clamp(38px, 4.1vw, 56px) !important; }
+  .auth-story-copy > p:not(.auth-kicker) { margin: 10px 0 12px; }
+  .auth-features { gap: 6px; }
+  .auth-features li { font-size: 10.5px; }
+  .auth-story { grid-template-rows: auto minmax(0, 72px); }
+  .auth-scene { min-height: 72px; }
+  .auth-car { width: 215px; bottom: 25px; }
+  .auth-speedometer { width: 215px; height: 100px; bottom: 26px; }
+  .auth-scene-glow { width: 240px; height: 90px; bottom: 18px; }
+  .auth-horizon { bottom: 26px; }
+  .auth-road-line { bottom: 25px; }
+  .auth-card { padding: 18px 20px; }
+  .auth-card-head { margin-bottom: 9px; }
+  .auth-card-copy { margin: 4px 0 8px; font-size: 12px; }
+  .auth-form { gap: 6px; }
+  .auth-field input { height: 39px !important; min-height: 39px !important; }
+  .auth-submit { height: 40px !important; }
+}
+/* Keep the password action anchored to the input itself on login and signup. */
+.auth-password-field { display: grid; grid-template-columns: minmax(0, 1fr); }
+.auth-password-field input { box-sizing: border-box; padding-right: 76px !important; }
+.auth-password-toggle {
+  top: auto !important;
+  right: 7px !important;
+  bottom: auto !important;
+  transform: none !important;
+  height: 30px !important;
+  min-width: 48px !important;
+  padding: 0 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+.auth-password-field label + input + .auth-password-toggle { top: 29px !important; }
+.auth-password-field input:focus + .auth-password-toggle { top: 29px !important; }
+@media (min-width: 761px) and (max-height: 800px) {
+  .auth-password-field label + input + .auth-password-toggle { top: 26px !important; }
+  .auth-password-field input:focus + .auth-password-toggle { top: 26px !important; }
+}
