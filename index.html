@@ -82,7 +82,7 @@
     </section>
   </div>
 </div>
-<footer class="md-site-footer md-auth-footer" aria-label="MotorDesk footer"><div class="md-footer-inner"><span class="md-footer-copy">© 2026 MotorDesk</span><nav class="md-footer-links" aria-label="Company information"><button type="button" onclick="window.openMotorDeskInfo('about')">About MotorDesk</button><button type="button" onclick="window.openMotorDeskInfo('terms')">Terms &amp; Conditions</button><button type="button" onclick="window.openMotorDeskInfo('contact')">Contact</button></nav><span class="md-footer-made">🇮🇳 MADE IN INDIA <i></i> INDIA-FIRST DATA</span></div></footer>
+<footer class="md-site-footer md-auth-footer" aria-label="MotorDesk footer"><div class="md-footer-inner"><span class="md-footer-copy">© 2026 MotorDesk</span><nav class="md-footer-links" aria-label="Company information"><button type="button" data-info-tab="about" onclick="window.openMotorDeskInfo('about')">About MotorDesk</button><button type="button" data-info-tab="terms" onclick="window.openMotorDeskInfo('terms')">Terms &amp; Conditions</button><button type="button" data-info-tab="contact" onclick="window.openMotorDeskInfo('contact')">Contact</button></nav><span class="md-footer-made">🇮🇳 MADE IN INDIA <i></i> INDIA-FIRST DATA</span></div></footer>
 <div id="app" class="hidden"><header class="top"><a class="brand" id="brandHome" href="#dashboard" title="Go to Home" aria-label="Go to Home"><img class="brand-logo" src="assets/carcarecloud-logo.svg?v=2026.10.12-motordesk" alt="MotorDesk"></a><div class="top-actions"><span id="userEmail" class="muted"></span><button id="headerLogout" class="ghost header-logout" type="button">Sign Out</button><button id="menuToggle" class="menu-toggle" aria-label="Open navigation menu" aria-expanded="false"><span></span><span></span><span></span></button></div></header>
 <div id="sideMenu" class="side-menu-shell" aria-hidden="true">
   <div class="side-menu-backdrop" id="sideMenuBackdrop"></div>
@@ -123,11 +123,11 @@ const modal=document.getElementById('mdInfoModal'),content=document.getElementBy
 if(!modal||!content){console.error('MotorDesk information panel is missing');return;}
 const key=pages[tab]?tab:'about',p=pages[key];
 content.innerHTML='<h1 id="mdInfoTitle">'+p.title+'</h1>'+p.html;
-modal.hidden=false;modal.style.display='grid';document.body.classList.add('md-info-open');
+modal.hidden=false;modal.removeAttribute('hidden');modal.style.setProperty('display','grid','important');modal.style.setProperty('visibility','visible','important');modal.style.setProperty('opacity','1','important');modal.style.setProperty('z-index','2147483000','important');document.body.classList.add('md-info-open');
 modal.querySelectorAll('[data-info-tab]').forEach(function(b){b.classList.toggle('active',b.dataset.infoTab===key);});
 const close=modal.querySelector('.md-info-close');if(close)close.focus();
 };
-window.closeMotorDeskInfo=function(){const modal=document.getElementById('mdInfoModal');if(modal){modal.hidden=true;modal.style.display='none';}document.body.classList.remove('md-info-open');};
+window.closeMotorDeskInfo=function(){const modal=document.getElementById('mdInfoModal');if(modal){modal.hidden=true;modal.setAttribute('hidden','');modal.style.removeProperty('display');modal.style.removeProperty('visibility');modal.style.removeProperty('opacity');modal.style.removeProperty('z-index');}document.body.classList.remove('md-info-open');};
 document.addEventListener('click',function(e){const tab=e.target.closest('[data-info-tab]');if(tab){e.preventDefault();window.openMotorDeskInfo(tab.dataset.infoTab);return;}if(e.target.closest('[data-info-close]'))window.closeMotorDeskInfo();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeMotorDeskInfo();});
 })();
