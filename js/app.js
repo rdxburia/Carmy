@@ -2169,6 +2169,8 @@ async function printVehicleReport(selection=null){
     status.remove();
   }
 
+  // Keep application branding out of the exported/printed PDF.
+  clone.querySelectorAll('.report-brand-logo,.report-brand-fallback').forEach(el=>el.remove());
   const logo=clone.querySelector('.report-brand-logo');
   if(logo){
     logo.loading='eager';
@@ -2208,7 +2210,7 @@ async function printVehicleReport(selection=null){
       updatePrintWait('Finishing the A4 layout','All selected documents are loaded. Checking images, fonts and page breaks.','The print dialog will open in a moment.');
       const pd=printWindow.document;
       pd.open();
-      pd.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="'+esc(document.baseURI)+'"><title>Vehicle Report</title></head><body></body></html>');
+      pd.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="'+esc(document.baseURI)+'"><title></title></head><body></body></html>');
       pd.close();
       document.querySelectorAll('link[rel="stylesheet"],style').forEach(node=>pd.head.appendChild(node.cloneNode(true)));
       const printStage=stage.cloneNode(true);
@@ -2217,7 +2219,7 @@ async function printVehicleReport(selection=null){
       pd.body.appendChild(printStage);
       const printCss=pd.createElement('style');
       const printDate=formatDateNice(new Date().toISOString().slice(0,10));
-      printCss.textContent='@page{size:A4;margin:12mm 8mm 14mm 8mm;@top-left{content:""}@top-center{content:""}@top-right{content:""}@bottom-left{content:"'+printDate+'";font:8pt Inter,Arial,sans-serif;color:#526071}@bottom-center{content:""}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:8pt Inter,Arial,sans-serif;color:#526071}}html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0!important;padding:0!important}#vehicleReportPdfStage{display:block!important;position:static!important;width:100%!important;overflow:visible!important}#vehicleReportPdfStage .report-sheet{break-after:auto!important;page-break-after:auto!important}#vehicleReportPdfStage .report-document-print-page{break-before:page!important;page-break-before:always!important}#vehicleReportPdfStage .report-footer{display:flex!important;justify-content:flex-end!important;align-items:center!important;margin-top:3mm!important;padding-top:2mm!important;border-top:1px solid #e5e7eb!important;font-size:8pt!important;color:#526071!important}.print-page-number:after{content:"Page " counter(page)}#vehicleReportPdfStage .report-document-error{font-size:9pt!important;color:#9a3412!important}';
+      printCss.textContent='@page{size:A4;margin:0;@top-left{content:""}@top-center{content:""}@top-right{content:""}@bottom-left{content:"'+printDate+'";font:8pt Inter,Arial,sans-serif;color:#526071}@bottom-center{content:""}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:8pt Inter,Arial,sans-serif;color:#526071}}html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0!important;padding:12mm 8mm 14mm!important}#vehicleReportPdfStage{display:block!important;position:static!important;width:100%!important;overflow:visible!important}#vehicleReportPdfStage .report-sheet{break-after:auto!important;page-break-after:auto!important}#vehicleReportPdfStage .report-document-print-page{break-before:page!important;page-break-before:always!important}#vehicleReportPdfStage .report-footer{display:flex!important;justify-content:flex-end!important;align-items:center!important;margin-top:3mm!important;padding-top:2mm!important;border-top:1px solid #e5e7eb!important;font-size:8pt!important;color:#526071!important}.print-page-number:after{content:"Page " counter(page)}#vehicleReportPdfStage .report-document-error{font-size:9pt!important;color:#9a3412!important}';
       pd.head.appendChild(printCss);
       await Promise.all([...pd.images].map(img=>img.decode?img.decode().catch(()=>{}):Promise.resolve()));
       if(pd.fonts?.ready)await pd.fonts.ready;
