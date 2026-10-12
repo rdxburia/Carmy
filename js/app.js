@@ -30,8 +30,8 @@ function installIdleFetchGuard(){
   window.fetch=function(input,init){
     let url='';
     try{url=typeof input==='string'?input:(input&&input.url)||''}catch(e){}
-    const isSupabaseRequest=!!U&&url.startsWith(U+'/')&&(/\\/(rest\\/v1|storage\\/v1|graphql\\/v1|functions\\/v1|auth\\/v1)\\//.test(url));
-    const isLogoutRequest=/\\/auth\\/v1\\/logout(?:\\?|$)/.test(url);
+    const isSupabaseRequest=!!U&&url.startsWith(U+'/')&&/\/(rest\/v1|storage\/v1|graphql\/v1|functions\/v1|auth\/v1)\//.test(url);
+    const isLogoutRequest=/\/auth\/v1\/logout(?:\?|$)/.test(url);
     if(isSupabaseRequest&&!isLogoutRequest&&user&&idleExpired()){
       void forceSignOut('idle');
       return Promise.reject(new Error('Session expired after 2 minutes of inactivity. Please sign in again.'));
