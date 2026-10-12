@@ -52,7 +52,8 @@ async function enforceIdleSession(request, env, token, user) {
     throw new AuthError("Session security check is temporarily unavailable. Please try again.", 503, "SESSION_CHECK_UNAVAILABLE");
   }
 
-  if (row && (row.user_id !== user.id || now - Number(row.last_seen || 0) > IDLE_SECONDS)) {
+  if (row && (row.user_id !== user.id ||
+      (now - Number(row.last_seen || 0) > IDLE_SECONDS && reportedActivity <= Number(row.last_seen || 0)))) {
     try {
       await env.DB.prepare("DELETE FROM session_activity WHERE session_id = ?").bind(sessionId).run();
     } catch (err) {
