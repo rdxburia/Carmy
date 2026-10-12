@@ -13,7 +13,7 @@ if (!nextTag || !/^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-z0-9-]+$/.test(nextTag)) {
 }
 
 const indexPath = path.join(root, 'index.html');
-const html = fs.readFileSync(indexPath, 'utf8');
+let html = fs.readFileSync(indexPath, 'utf8');
 const meta = html.match(/<meta name="carmy-build" content="([^"]+)">/);
 
 if (!meta) {
@@ -21,21 +21,22 @@ if (!meta) {
 }
 
 const oldTag = meta[1];
-if (oldTag === nextTag) {
-  console.log('Build tag already current:', nextTag);
-  process.exit(0);
-}
+html = html.replace(/(<meta name="carmy-build" content=")[^"]+(")/, `$1${nextTag}$2`);
+html = html.replace(/([?&]v=)[^"'&\s]+/g, `$1${nextTag}`);
 
-const updated = html.replaceAll(oldTag, nextTag);
-if (updated.includes(oldTag)) {
-  throw new Error('Some old build-tag references remain in index.html');
-}
-
-const metaAfter = updated.match(/<meta name="carmy-build" content="([^"]+)">/);
+const metaAfter = html.match(/<meta name="carmy-build" content="([^"]+)">/);
 if (!metaAfter || metaAfter[1] !== nextTag) {
   throw new Error('Build metadata did not update correctly');
 }
 
-fs.writeFileSync(indexPath, updated);
-console.log('Updated all index.html build references:', oldTag, '->', nextTag);
-console.log('js/build-info.js reads this meta tag dynamically; no hard-coded version is required there.');
+const remainingAssetVersions = [...html.matchAll(/[?&]v=([^"'&\s]+)/g)]
+  .map(match => match[1])
+  .filter(version => version !== nextTag);
+if (remainingAssetVersions.length) {
+  throw new Error('Inconsistent asset build versions remain: ' + remainingAssetVersions.join(', '));
+}
+
+fs.writeFileSync(indexPath, html);
+console.log('Updated build tag:', oldTag, '->', nextTag);
+console.log('Updated meta carmy-build and all versioned asset URLs in index.html.');
+console.log('js/build-info.js reads the meta tag dynamically.');
