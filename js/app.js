@@ -819,7 +819,7 @@ async function boot(){
    s={data:{session:null}};
  }
  accessToken=s.data.session?.access_token||'';
- if(s.data.session){writeIdleActivity(true);user=s.data.session.user;if(!await touchServerSessionActivity(true))return;start(s.data.session.user)}
+ if(s.data.session){writeIdleActivity(true);user=s.data.session.user;if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return;}start(s.data.session.user)}
  else showLogin();
  db.auth.onAuthStateChange(async(event,nextSession)=>{
    accessToken=nextSession?.access_token||'';
