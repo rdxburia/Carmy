@@ -260,6 +260,27 @@ function collectServiceItems(){
    return {item_name:name,quantity:Number(val('.si-qty')||1),brand:val('.si-brand').trim()||null,part_number:val('.si-part').trim()||null,cost:Number(val('.si-cost')||0),labour:Number(val('.si-labour')||0),warranty:val('.si-warranty').trim()||null,notes:val('.si-notes').trim()||null};
  }).filter(x=>x.quantity>=0&&x.cost>=0&&x.labour>=0);
 }
+function generateServiceDescription(){
+ const type=$('type')?.value||'Service';
+ const selected=collectServiceItems().map(x=>x.item_name+(x.quantity>1?' (Qty '+x.quantity+')':''));
+ const customNotes=String([...document.querySelectorAll('#items .service-item-check:checked')].map(ch=>ch.closest('.service-item-row')?.querySelector('.si-notes')?.value.trim()||'').filter(Boolean).join('; '));
+ const templates={
+  'Regular Service':'Regular service completed',
+  'Engine Service':'Engine service / maintenance completed',
+  'Brake Work':'Brake inspection and repair completed',
+  'Tyre Work':'Tyre service / replacement completed',
+  'Battery':'Battery inspection / service completed',
+  'Accident / Repair':'Accident repair work completed',
+  'Other':'Vehicle maintenance / repair completed'
+ };
+ const lines=[templates[type]||type+' completed'];
+ if(selected.length)lines.push('Work/items: '+selected.join(', '));
+ if(customNotes)lines.push('Item notes: '+customNotes);
+ const desc=$('description'),generated=lines.join('. ')+'.';
+ if(desc.value.trim()&&!confirm('Replace the existing description with generated text?'))return;
+ desc.value=generated;desc.dispatchEvent(new Event('input',{bubbles:true}));desc.focus();
+ toast('Description text generated. Review it before saving.');
+}
 function resetRecordForm(){
  ['description','workshop','invoice','notes'].forEach(id=>{$(id).value=''});
  $('parts').value='0';$('labour').value='0';$('other').value='0';$('total').value='0';
@@ -1318,6 +1339,7 @@ function carsView(){
 window.editSpecificCar=async id=>{let previous=car;car=cars.find(x=>x.id===id)||previous;if(car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Open History to view its complete lifecycle.','error');car=previous;return}updateCarTab();await window.editCar();await loadCars();let fresh=cars.find(x=>x.id===car?.id);if(fresh)car=fresh;updateCarTab();await loadData();carsView()};
 function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(car.vehicle_status==='sold'){$('guard').innerHTML='<div class="dangerbox"><b>VEHICLE SOLD</b> — Service entries are locked. Historical records and documents remain available.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
 renderServiceItems(); $('type').onchange=renderServiceItems;
+$('autoDescription')?.addEventListener('click',generateServiceDescription);
 ['parts','labour','other'].forEach(id=>$(id).oninput=()=>{$('total').value=Number($('parts').value||0)+Number($('labour').value||0)+Number($('other').value||0)});
 $('save').onclick=async()=>{
  if(!car)return;
