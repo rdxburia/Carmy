@@ -552,9 +552,11 @@ function bindMobileAuthTabs(){
    signup=mode;
    auth?.classList.add('auth-mobile-open');
    updateAuthModeUI();
+   /* Keep the login/signup card anchored in its current mobile viewport.
+      Auto-scroll here made the card and fixed footer appear to jump. */
    requestAnimationFrame(()=>{
      const card=$('authCard')||document.querySelector('.auth-card');
-     card?.scrollIntoView({behavior:'smooth',block:'start'});
+     if(card) card.style.scrollMarginTop='12px';
    });
  };
 
