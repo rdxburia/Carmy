@@ -2030,7 +2030,17 @@ async function printVehicleReport(selection=null){
   // Open a dedicated print tab synchronously from the user's click so popup blockers allow it.
   // The tab stays blank while documents are fetched/rendered; printing starts only after it is populated.
   let printWindow=null;
-  try{printWindow=window.open('about:blank','_blank')}catch(err){console.warn('Print tab could not be opened; falling back to current tab',err)}
+  try{
+    printWindow=window.open('about:blank','_blank');
+    if(printWindow){
+      printWindow.document.open();
+      printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preparing vehicle report…</title><style>*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,Arial,sans-serif;background:#f4f7fb;color:#142033}body{min-height:100vh;display:grid;place-items:center;padding:24px}.wait-card{width:min(520px,100%);padding:38px 32px;border:1px solid #e0e7f0;border-radius:24px;background:#fff;box-shadow:0 24px 70px #10213a14;text-align:center}.orbit{width:76px;height:76px;margin:0 auto 24px;border:5px solid #e3edf8;border-top-color:#0788df;border-right-color:#123b68;border-radius:50%;animation:spin .9s linear infinite;position:relative}.orbit:after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;background:#11a6e8;left:4px;bottom:4px;box-shadow:0 0 0 6px #11a6e81a}.eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:#0788df;text-transform:uppercase}.wait-card h1{font-size:25px;line-height:1.2;margin:10px 0 12px}.wait-card p{color:#637187;line-height:1.6;margin:0}.track{height:6px;border-radius:99px;background:#eaf0f7;overflow:hidden;margin:26px 0 12px}.track span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#0788df,#72d5fa);animation:progress 1.7s ease-in-out infinite alternate}.steps{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:20px}.steps span{font-size:11px;color:#52647b;background:#f3f7fb;border:1px solid #e6edf5;border-radius:99px;padding:7px 10px}.note{font-size:12px!important;margin-top:17px!important}@keyframes spin{to{transform:rotate(360deg)}}@keyframes progress{from{transform:translateX(-15%)}to{transform:translateX(170%)}}@media(prefers-reduced-motion:reduce){.orbit,.track span{animation:none}}</style></head><body><main class="wait-card" role="status" aria-live="polite"><div class="orbit" aria-hidden="true"></div><div class="eyebrow">CarCareCloud · A4 Report</div><h1 id="waitTitle">Preparing your vehicle report</h1><p id="waitMessage">Loading vehicle details and arranging the pages for print.</p><div class="track"><span></span></div><p id="waitSub">Please keep this tab open. The print dialog will appear when everything is ready.</p><div class="steps"><span>Vehicle history</span><span>Documents</span><span>Page layout</span></div><p class="note">This can take a few seconds for large PDFs.</p></main></body></html>');
+      printWindow.document.close();
+    }
+  }catch(err){console.warn('Print tab could not be opened; falling back to current tab',err)}
+  const updatePrintWait=(title,message,sub)=>{
+    try{if(printWindow&&!printWindow.closed){const d=printWindow.document;const t=d.getElementById('waitTitle'),m=d.getElementById('waitMessage'),ss=d.getElementById('waitSub');if(t)t.textContent=title;if(m)m.textContent=message;if(ss&&sub)ss.textContent=sub;}}catch(_){}
+  };
   const source=document.getElementById('reportArea');
   const original=source?.querySelector('.report-sheet');
   if(!original||!original.innerHTML.trim()){
@@ -2083,6 +2093,9 @@ async function printVehicleReport(selection=null){
   stage.appendChild(clone);
   document.body.appendChild(stage);
   if(selection.hideIncomplete)clone.querySelectorAll('[data-incomplete="1"]').forEach(row=>row.remove());
+  // Printed footer intentionally contains only the date and page number—no generated-by text, name, or link.
+  const reportFooter=clone.querySelector('.report-footer');
+  if(reportFooter)reportFooter.innerHTML='<span>'+esc(formatDateNice(new Date().toISOString().slice(0,10)))+'</span><span class="print-page-number"></span>';
 
   const activeDocs=Array.isArray(docs)?docs:[];
   const curIns=(insuranceHistory||[]).find(x=>x.car_id===car?.id&&x.policy_status==='current');
@@ -2113,16 +2126,16 @@ async function printVehicleReport(selection=null){
   };
   const addPlaceholder=(item)=>{
     const page=document.createElement('section');page.className='report-document-print-page report-document-load-error';
-    page.innerHTML='<h3>'+esc(item.label)+'</h3><p>Document could not be loaded: '+esc(item.label)+'</p>';
+    page.innerHTML='<p class="report-document-error">A selected document could not be loaded. Check the original document in your garage before printing.</p>';
     clone.appendChild(page);
   };
   if(chosen.length){
-    status=document.createElement('div');status.className='report-print-loading';status.textContent='Preparing selected documents…';stage.appendChild(status);
+    status=document.createElement('div');status.className='report-print-loading';status.textContent='Preparing selected documents…';stage.appendChild(status);updatePrintWait('Loading your documents','Downloading and preparing the selected vehicle documents.','Large PDFs can take a little longer. Please wait—printing starts automatically when ready.');
     for(const item of chosen){
       try{
         const url=await getUrl(item.doc);
         const ext=String(item.doc.file_name||'').split('.').pop().toLowerCase();
-        const header=item.label+' | Number: '+(item.number||item.doc.file_name||'—')+' | Valid until: '+(item.validity?formatDateNice(item.validity):'—');
+        const header='';updatePrintWait('Preparing '+item.label,'Loading and formatting document pages.','Your report will open in the print dialog when all selected documents are ready.');
         if(ext==='pdf'){
           const pdfjs=await ensurePdfJs(),resp=await fetch(url);
           if(!resp.ok)throw new Error('Document download failed');
@@ -2133,7 +2146,7 @@ async function printVehicleReport(selection=null){
             const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
             await page.render({canvasContext:ctx,viewport:vp}).promise;
             const wrap=document.createElement('section');wrap.className='report-document-print-page';
-            wrap.innerHTML='<h3>'+esc(header)+' — Page '+p+' of '+pdf.numPages+'</h3>';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label+' page '+p;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
+            wrap.innerHTML='';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label+' page '+p;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
           }
         }else{
           const imageResponse=await fetch(url,{mode:'cors',credentials:'omit'});
@@ -2147,7 +2160,7 @@ async function printVehicleReport(selection=null){
           const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
           ctx.drawImage(img,0,0,canvas.width,canvas.height);
           const wrap=document.createElement('section');wrap.className='report-document-print-page';
-          wrap.innerHTML='<h3>'+esc(header)+'</h3>';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
+          wrap.innerHTML='';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
         }
       }catch(err){
         console.error('Document print load failed: '+item.label,err);failed.push(item.label+': '+String(err?.message||err));addPlaceholder(item);
@@ -2192,9 +2205,10 @@ async function printVehicleReport(selection=null){
     if(printWindow&&!printWindow.closed){
       // Copy the app's CSS and the fully prepared report into a separate document.
       // This prevents Firefox's print preview from reflowing/hiding the live app DOM.
+      updatePrintWait('Finishing the A4 layout','All selected documents are loaded. Checking images, fonts and page breaks.','The print dialog will open in a moment.');
       const pd=printWindow.document;
       pd.open();
-      pd.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="'+esc(document.baseURI)+'"><title>CarCareCloud Vehicle Report</title></head><body></body></html>');
+      pd.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="'+esc(document.baseURI)+'"><title>Vehicle Report</title></head><body></body></html>');
       pd.close();
       document.querySelectorAll('link[rel="stylesheet"],style').forEach(node=>pd.head.appendChild(node.cloneNode(true)));
       const printStage=stage.cloneNode(true);
@@ -2202,12 +2216,13 @@ async function printVehicleReport(selection=null){
       pd.body.style.cssText='margin:0!important;padding:0!important;background:#fff!important;color:#172033!important';
       pd.body.appendChild(printStage);
       const printCss=pd.createElement('style');
-      printCss.textContent='@page{size:A4;margin:8mm}html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0!important;padding:0!important}#vehicleReportPdfStage{display:block!important;position:static!important;width:100%!important;overflow:visible!important}#vehicleReportPdfStage .report-sheet{break-after:auto!important;page-break-after:auto!important}#vehicleReportPdfStage .report-document-print-page{break-before:page!important;page-break-before:always!important}';
+      printCss.textContent='@page{size:A4;margin:8mm}html,body{background:#fff!important;color:#172033!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0!important;padding:0!important}#vehicleReportPdfStage{display:block!important;position:static!important;width:100%!important;overflow:visible!important}#vehicleReportPdfStage .report-sheet{break-after:auto!important;page-break-after:auto!important}#vehicleReportPdfStage .report-document-print-page{break-before:page!important;page-break-before:always!important}#vehicleReportPdfStage .report-footer{display:flex!important;justify-content:space-between!important;align-items:center!important;margin-top:4mm!important;padding-top:2mm!important;border-top:1px solid #dce4ed!important;font-size:8pt!important;color:#536175!important}.print-page-number:after{content:"Page " counter(page)}#vehicleReportPdfStage .report-document-error{font-size:9pt!important;color:#9a3412!important}';
       pd.head.appendChild(printCss);
       await Promise.all([...pd.images].map(img=>img.decode?img.decode().catch(()=>{}):Promise.resolve()));
       if(pd.fonts?.ready)await pd.fonts.ready;
       await new Promise(resolve=>printWindow.requestAnimationFrame(()=>printWindow.requestAnimationFrame(resolve)));
       printWindow.focus();
+      updatePrintWait('Opening print preview','Your A4 report is ready. Opening the browser print dialog now.','Choose Save as PDF in the print dialog.');
       printWindow.addEventListener('afterprint',()=>{try{printWindow.close()}catch(e){}},{once:true});
       printWindow.print();
     }else{
