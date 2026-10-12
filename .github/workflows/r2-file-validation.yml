@@ -1,0 +1,32 @@
+name: R2 file signature validation
+
+on:
+  pull_request:
+    paths:
+      - "worker/src/file-validation.mjs"
+      - "worker/src/r2-files.js"
+      - "tests/r2-file-validation.test.mjs"
+      - ".github/workflows/r2-file-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "worker/src/file-validation.mjs"
+      - "worker/src/r2-files.js"
+      - "tests/r2-file-validation.test.mjs"
+      - ".github/workflows/r2-file-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  file-signature-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run R2 file signature tests
+        run: node --test tests/r2-file-validation.test.mjs
