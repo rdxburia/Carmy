@@ -8,5 +8,6 @@
  includeDocuments:'Include documents with this report?',
  preparingDocuments:'Preparing documents...',
  documentLoadFailed:'Some documents could not be loaded. Print without the unavailable documents?',
- supabaseLoadFailed:'The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.'
+ supabaseLoadFailed:'The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.',
+ idleLogout:'You were signed out after 2 minutes of inactivity.'
 })})();
