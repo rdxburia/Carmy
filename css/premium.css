@@ -1090,108 +1090,130 @@ body.md-info-open{overflow:hidden!important}
 }
 
 
-/* Mobile stability pass: keep auth card in place and footer rows deterministic. */
+/* MotorDesk mobile layout and company-dialog stability.
+   Consolidated override: replaces the previous overlapping mobile hotfix blocks. */
 @media (max-width: 760px) {
-  html, body { width: 100%; max-width: 100%; overflow-x: clip; }
+  html, body { width:100%; max-width:100%; overflow-x:hidden; }
   #auth.login {
-    box-sizing: border-box !important;
-    width: 100% !important;
-    min-height: 100svh !important;
-    min-height: 100dvh !important;
-    height: auto !important;
-    padding: 12px 12px calc(116px + env(safe-area-inset-bottom, 0px)) !important;
-    overflow-x: clip !important;
-    overflow-y: auto !important;
-    align-items: start !important;
+    box-sizing:border-box !important; width:100% !important;
+    min-height:100dvh !important; height:auto !important;
+    padding:12px 12px calc(24px + env(safe-area-inset-bottom,0px)) !important;
+    overflow:visible !important; align-items:start !important;
   }
   #auth .auth-shell {
-    width: 100% !important;
-    min-width: 0 !important;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) !important;
-    grid-template-areas: "story" "card" !important;
-    align-items: start !important;
-    justify-items: stretch !important;
-    gap: 12px !important;
-    margin: 0 auto !important;
+    width:100% !important; min-width:0 !important; min-height:0 !important;
+    display:grid !important; grid-template-columns:minmax(0,1fr) !important;
+    grid-template-areas:"story" "actions" "card" !important;
+    align-items:start !important; justify-items:stretch !important;
+    gap:12px !important; margin:0 auto !important;
   }
-  #auth .auth-story { min-width: 0 !important; width: 100% !important; grid-template-rows: auto auto !important; }
-  #auth .auth-story-copy { width: 100% !important; max-width: none !important; }
-  #auth .auth-story h2 { font-size: clamp(27px, 7vw, 34px) !important; line-height: 1.04 !important; }
-  #auth .auth-story-copy > p:not(.auth-kicker) { margin: 9px 0 12px !important; font-size: 12px !important; line-height: 1.45 !important; }
-  #auth .auth-features { display: none !important; }
-  #auth .auth-story-footer { margin-top: 8px !important; }
-  #auth .auth-scene { display: none !important; }
+  #auth .auth-story { min-width:0 !important; width:100% !important; grid-template-rows:auto !important; }
+  #auth .auth-story-copy { width:100% !important; max-width:none !important; padding:0 2px !important; }
+  #auth .auth-story h2 { font-size:clamp(27px,7vw,34px) !important; line-height:1.04 !important; }
+  #auth .auth-story-copy > p:not(.auth-kicker) { margin:9px 0 12px !important; font-size:12px !important; line-height:1.45 !important; }
+  #auth .auth-features, #auth .auth-scene { display:none !important; }
+  #auth .auth-story-footer { margin-top:8px !important; }
+  #auth .auth-mobile-actions { display:grid !important; grid-area:actions !important; width:100% !important; }
   #auth .auth-card {
-    display: block !important;
-    width: 100% !important;
-    max-width: none !important;
-    min-width: 0 !important;
-    box-sizing: border-box !important;
-    justify-self: stretch !important;
-    align-self: start !important;
-    margin: 0 !important;
-    padding: 18px 16px !important;
-    border-radius: 16px !important;
-    overflow: visible !important;
-    scroll-margin: 12px !important;
-    transform: none;
+    display:none !important; grid-area:card !important; width:100% !important;
+    max-width:none !important; min-width:0 !important; box-sizing:border-box !important;
+    justify-self:stretch !important; align-self:start !important; margin:0 !important;
+    padding:18px 16px !important; border-radius:16px !important;
+    overflow:visible !important; transform:none !important;
   }
-  #auth.auth-mobile-open .auth-shell { grid-template-areas: "card" !important; }
-  #auth.auth-mobile-open .auth-story { display: none !important; }
-  #auth .auth-verification { width: 100% !important; box-sizing: border-box !important; }
-  #auth .auth-card-head { margin-bottom: 12px !important; }
-  #auth .auth-card h1 { font-size: 24px !important; }
-  #auth .auth-card-copy { margin: 7px 0 10px !important; }
+  #auth.auth-mobile-open .auth-shell { grid-template-areas:"card" !important; }
+  #auth.auth-mobile-open .auth-story, #auth.auth-mobile-open .auth-mobile-actions { display:none !important; }
+  #auth.auth-mobile-open .auth-card { display:block !important; }
+  #auth .auth-card-head { margin-bottom:12px !important; }
+  #auth .auth-card h1 { font-size:24px !important; }
+  #auth .auth-card-copy { margin:7px 0 10px !important; }
+  #auth .auth-verification { width:100% !important; box-sizing:border-box !important; }
   .md-site-footer {
-    position: fixed !important;
-    inset: auto 0 0 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    z-index: 9000 !important;
-    padding: 0 0 env(safe-area-inset-bottom, 0px) !important;
-    box-sizing: border-box !important;
+    position:relative !important; inset:auto !important; width:100% !important;
+    z-index:10 !important; margin:0 !important; padding:0 0 env(safe-area-inset-bottom,0px) !important;
+    box-sizing:border-box !important;
   }
   .md-footer-inner {
-    width: 100% !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 6px 8px !important;
-    display: grid !important;
-    grid-template-columns: 1fr auto !important;
-    grid-template-areas: "copy made" "links links" !important;
-    justify-content: stretch !important;
-    align-items: center !important;
-    gap: 4px 8px !important;
-    box-sizing: border-box !important;
+    width:100% !important; min-height:0 !important; margin:0 !important;
+    padding:8px 8px !important; display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto !important;
+    grid-template-areas:"copy made" "links links" !important;
+    align-items:center !important; justify-content:stretch !important; gap:5px 8px !important;
+    box-sizing:border-box !important;
   }
-  .md-footer-copy { grid-area: copy !important; justify-self: start !important; order: unset !important; }
-  .md-footer-made { grid-area: made !important; justify-self: end !important; order: unset !important; white-space: nowrap !important; }
+  .md-footer-copy { grid-area:copy !important; justify-self:start !important; order:unset !important; }
+  .md-footer-made { grid-area:made !important; justify-self:end !important; order:unset !important; white-space:nowrap !important; }
   .md-footer-links {
-    grid-area: links !important;
-    width: 100% !important;
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    justify-content: center !important;
-    align-items: center !important;
-    gap: 2px !important;
-    order: unset !important;
-    min-width: 0 !important;
+    grid-area:links !important; display:flex !important; width:100% !important;
+    flex-wrap:nowrap !important; justify-content:center !important; align-items:center !important;
+    gap:2px !important; min-width:0 !important; order:unset !important;
   }
   .md-footer-links button, .md-footer-links a {
-    flex: 0 1 auto !important;
-    min-width: 0 !important;
-    padding: 6px 6px !important;
-    font-size: clamp(9px, 2.5vw, 10px) !important;
-    white-space: nowrap !important;
-    line-height: 1.2 !important;
+    flex:0 1 auto !important; min-width:0 !important;
+    padding:6px clamp(3px,1.5vw,6px) !important;
+    font-size:clamp(9px,2.5vw,10px) !important; line-height:1.2 !important;
+    white-space:nowrap !important;
   }
-  body:not(:has(#app:not(.hidden))) { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important; }
-  body:has(#app:not(.hidden)) { padding-bottom: calc(158px + env(safe-area-inset-bottom, 0px)) !important; }
-  body:has(#app:not(.hidden)) .md-app-footer { bottom: 64px !important; }
+  body:has(#app:not(.hidden)) .md-auth-footer { display:none !important; }
+  body:has(#app:not(.hidden)) .md-app-footer { display:block !important; margin-top:24px !important; }
+  body:has(#app:not(.hidden)) .mobile-nav { position:fixed !important; bottom:0 !important; z-index:1000 !important; }
 }
 @media (max-width: 360px) {
-  .md-footer-links button, .md-footer-links a { padding-left: 4px !important; padding-right: 4px !important; font-size: 9px !important; }
-  .md-footer-made { font-size: 6.5px !important; padding: 4px 5px !important; }
-  #auth .auth-card { padding: 15px 12px !important; }
+  .md-footer-links button, .md-footer-links a { padding-left:3px !important; padding-right:3px !important; font-size:9px !important; }
+  .md-footer-made { font-size:6.5px !important; padding:4px 5px !important; }
+  #auth .auth-card { padding:15px 12px !important; }
+}
+/* Keep info dialog independent of body scroll, while allowing its content to scroll. */
+#mdInfoModal.md-info-modal[hidden] { display:none !important; }
+#mdInfoModal.md-info-modal:not([hidden]) {
+  position:fixed !important; inset:0 !important; z-index:2147483647 !important;
+  display:grid !important; place-items:center !important;
+  box-sizing:border-box !important; padding:12px !important;
+  overflow:hidden !important; isolation:isolate !important; contain:layout paint style !important;
+  background:rgba(15,29,43,.52) !important; opacity:1 !important; visibility:visible !important;
+}
+#mdInfoModal .md-info-backdrop {
+  position:absolute !important; inset:0 !important; background:transparent !important;
+  filter:none !important; backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+}
+#mdInfoModal .md-info-panel {
+  position:relative !important; z-index:1 !important; display:flex !important; flex-direction:column !important;
+  width:min(500px,100%) !important; max-width:500px !important;
+  max-height:calc(100dvh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) !important;
+  min-height:0 !important; margin:0 !important; overflow:hidden !important;
+  box-sizing:border-box !important; background:#fff !important; color:#24384a !important;
+  opacity:1 !important; visibility:visible !important; filter:none !important;
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+  transform:none !important; animation:none !important; isolation:isolate !important;
+  border:1px solid #dce5ec !important; border-radius:16px !important;
+  box-shadow:0 20px 55px rgba(0,0,0,.24) !important;
+}
+#mdInfoModal .md-info-brand, #mdInfoModal .md-info-badges,
+#mdInfoModal .md-info-tabs, #mdInfoModal .md-info-bottom { flex:0 0 auto !important; }
+#mdInfoModal .md-info-content {
+  position:relative !important; display:block !important; flex:1 1 auto !important;
+  min-height:0 !important; overflow-y:auto !important; overscroll-behavior:contain !important;
+  -webkit-overflow-scrolling:touch !important; background:#fff !important; color:#40566a !important;
+  opacity:1 !important; visibility:visible !important; filter:none !important;
+  font-size:13px !important; line-height:1.6 !important;
+  -webkit-text-fill-color:#40566a !important; text-shadow:none !important;
+}
+#mdInfoModal .md-info-content * { visibility:visible !important; opacity:1 !important; filter:none !important; text-shadow:none !important; }
+#mdInfoModal .md-info-content h1, #mdInfoModal .md-info-content h2,
+#mdInfoModal .md-info-content h3, #mdInfoModal .md-info-content b {
+  color:#172b3c !important; -webkit-text-fill-color:#172b3c !important;
+}
+#mdInfoModal .md-info-content p, #mdInfoModal .md-info-content li,
+#mdInfoModal .md-info-content blockquote { color:#40566a !important; -webkit-text-fill-color:#40566a !important; }
+#mdInfoModal .md-info-content h2 span { color:#187db7 !important; -webkit-text-fill-color:#187db7 !important; }
+#mdInfoModal .md-info-content a { color:#087bb5 !important; overflow-wrap:anywhere !important; }
+@media (max-width:560px) {
+  #mdInfoModal.md-info-modal:not([hidden]) {
+    padding:calc(8px + env(safe-area-inset-top,0px)) 8px calc(8px + env(safe-area-inset-bottom,0px)) !important;
+    align-items:center !important;
+  }
+  #mdInfoModal .md-info-panel { width:100% !important; max-height:calc(100dvh - 16px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) !important; border-radius:14px !important; }
+  #mdInfoModal .md-info-content { min-height:0 !important; padding:14px !important; }
+  #mdInfoModal .md-info-tabs { gap:4px !important; }
+  #mdInfoModal .md-info-tabs button { min-width:0 !important; padding:8px 6px !important; font-size:10px !important; white-space:normal !important; }
 }
