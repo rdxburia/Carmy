@@ -2166,14 +2166,25 @@ async function printVehicleReport(selection=null){
           totalDocumentPages+=pdf.numPages;
           updatePrintWait('Copying document pages','Found '+pdf.numPages+' PDF pages. Rendering for print.','Keep this window open while pages are prepared.',20,'PDF pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
           for(let p=1;p<=pdf.numPages;p++){
-            const page=await pdf.getPage(p),baseViewport=page.getViewport({scale:1}),renderScale=Math.min(1.35,1600/Math.max(baseViewport.width,baseViewport.height)),vp=page.getViewport({scale:renderScale}),canvas=document.createElement('canvas');
+            const page=await pdf.getPage(p),baseViewport=page.getViewport({scale:1});
+            // Keep document text legible while reducing the raster workload from 1.35x.
+            const renderScale=Math.min(1.05,1250/Math.max(baseViewport.width,baseViewport.height));
+            const vp=page.getViewport({scale:renderScale}),canvas=document.createElement('canvas');
             canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
-            const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering is unavailable');
-            await page.render({canvasContext:ctx,viewport:vp}).promise;
+            const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw new Error('Canvas rendering is unavailable');
+            ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+            // Update before rendering; otherwise the wait screen appears stuck on the previous page.
+            updatePrintWait('Rendering document page','Rendering page '+p+' of '+pdf.numPages+'.','Preparing a print-ready page.',20+Math.round(65*(loadedDocumentCount+((p-1)/pdf.numPages))/Math.max(1,chosen.length)),'Rendering PDF page '+p+' / '+pdf.numPages+' · '+preparedDocumentPages+' pages ready');
+            await page.render({canvasContext:ctx,viewport:vp,background:'#fff'}).promise;
+            // Avoid synchronous base64 encoding on the UI thread.
+            const pageBlob=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not encode PDF page image')),'image/jpeg',0.78));
+            const pageUrl=URL.createObjectURL(pageBlob);printObjectUrls.push(pageUrl);
             const wrap=document.createElement('section');wrap.className='report-document-print-page';
-            wrap.innerHTML='';const docImg=new Image();docImg.loading='eager';docImg.alt=item.label+' page '+p;docImg.src=canvas.toDataURL('image/jpeg',0.85);canvas.width=canvas.height=1;wrap.appendChild(docImg);clone.appendChild(wrap);
+            const docImg=new Image();docImg.loading='eager';docImg.decoding='async';docImg.alt=item.label+' page '+p;docImg.src=pageUrl;wrap.appendChild(docImg);clone.appendChild(wrap);
+            canvas.width=canvas.height=1;
+            page.cleanup();
             preparedDocumentPages++;
-            updatePrintWait('Copying document pages','Preparing PDF page '+p+' of '+pdf.numPages+'.','Print opens automatically when ready.',20+Math.round(65*(loadedDocumentCount+(p/pdf.numPages))/Math.max(1,chosen.length)),'PDF pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
+            updatePrintWait('Copying document pages','Prepared PDF page '+p+' of '+pdf.numPages+'.','Print opens automatically when ready.',20+Math.round(65*(loadedDocumentCount+(p/pdf.numPages))/Math.max(1,chosen.length)),'PDF pages prepared: '+preparedDocumentPages+' / '+totalDocumentPages+' · '+loadedDocumentCount+' / '+chosen.length+' documents');
           }
           loadedDocumentCount++;
         }else{
