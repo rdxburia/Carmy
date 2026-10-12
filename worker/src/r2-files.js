@@ -1,5 +1,6 @@
 import { presignR2 } from "./r2-signing.js";
 import { supabaseRest } from "./supabase.js";
+import { validateFileSignature } from "./file-validation.mjs";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["application/pdf", "image/jpeg", "image/png"]);
@@ -77,6 +78,9 @@ function validateUploadInput(input) {
 
   const ext = fileName.split(".").pop()?.toLowerCase() || "";
   if (!ALLOWED_EXT.has(ext)) throw new Error("Unsupported file extension.");
+  if (mimeType !== ({ pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" })[ext]) {
+    throw new Error("File extension does not match its declared content type.");
+  }
   if (!["rc", "puc", "insurance", "other"].includes(documentType)) {
     throw new Error("Invalid document type.");
   }
@@ -112,28 +116,37 @@ export async function finalizeUpload(env, user, userToken, input) {
   }
 
   const object = await env.R2.get(pendingKey);
-  if (!object || !("body" in object) || !object.body) {
+  if (!object || typeof object.arrayBuffer !== "function") {
     const err = new Error("Uploaded R2 object was not found.");
     err.status = 404;
     err.code = "UPLOAD_NOT_FOUND";
     throw err;
   }
 
-  // Enforce the same limits again at finalization. The client controls the
-  // initial file_size metadata, so it must never be treated as authoritative.
-  if (Number(object.size) <= 0 || Number(object.size) > MAX_FILE_SIZE) {
+  if (!Number.isFinite(Number(object.size)) || Number(object.size) <= 0 || Number(object.size) > MAX_FILE_SIZE) {
     await env.R2.delete(pendingKey);
     throw new Error("Uploaded file exceeds the 10 MB limit.");
   }
 
-  const uploadedContentType = String(object.httpMetadata?.contentType || "");
+  const uploadedContentType = String(object.httpMetadata?.contentType || "").toLowerCase().split(";")[0].trim();
   if (!ALLOWED_MIME.has(uploadedContentType)) {
     await env.R2.delete(pendingKey);
     throw new Error("Uploaded file type is not allowed.");
   }
 
+  // Content-Type and filename are client-controlled metadata. Inspect the actual
+  // bytes before moving an uploaded object into the permanent documents prefix.
+  const uploadedBytes = new Uint8Array(await object.arrayBuffer());
+  const fileName = pendingKey.slice(expectedPrefix.length + 37);
+  try {
+    validateFileSignature(fileName, uploadedContentType, uploadedBytes);
+  } catch (err) {
+    await env.R2.delete(pendingKey);
+    throw err;
+  }
+
   const finalKey = pendingKey.replace(/^pending\//, "documents/");
-  const saved = await env.R2.put(finalKey, object.body, {
+  const saved = await env.R2.put(finalKey, uploadedBytes, {
     httpMetadata: object.httpMetadata,
     customMetadata: {
       ...(object.customMetadata || {}),
@@ -190,11 +203,8 @@ export async function deleteR2Document(env, user, userToken, documentId, carId) 
     throw new Error("Document storage path verification failed.");
   }
 
-  // Delete the R2 object first. The document was already ownership-checked above.
   await env.R2.delete(key);
 
-  // Remove metadata only after the R2 object deletion succeeds.
-  // This keeps the operation atomic from the frontend's point of view.
   const deletedRows = await supabaseRest(
     env,
     `documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}&car_id=eq.${encodeURIComponent(carId)}&storage_backend=eq.r2`,
