@@ -2239,7 +2239,25 @@ async function printVehicleReport(selection=null){
       await new Promise(resolve=>printWindow.requestAnimationFrame(()=>printWindow.requestAnimationFrame(resolve)));
       printWindow.focus();
       updatePrintWait('Opening print preview','Your A4 report is ready. Opening the browser print dialog now.','Choose Save as PDF in the print dialog.',100,`Estimated total: ${reportPageEstimate()} pages · Preparation complete`);
-      printWindow.addEventListener('afterprint',()=>{try{printWindow.close()}catch(e){}},{once:true});
+      // Keep the prepared report tab open after the native print dialog closes.
+      // Users can safely reopen the browser print dialog without downloading documents again.
+      const retryBar=pd.createElement('div');
+      retryBar.id='carmyPrintRetryBar';
+      retryBar.innerHTML='<div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#f1f5f9;border-bottom:1px solid #cbd5e1;font:14px system-ui,Arial,sans-serif;color:#172033"><span id="carmyPrintRetryStatus" role="status">Report is ready. If you closed the print dialog, you can open it again.</span><button id="carmyPrintAgain" type="button" style="border:0;border-radius:9px;background:#2563eb;color:#fff;padding:10px 16px;font-weight:700;cursor:pointer">Print again / Save PDF</button></div>';
+      const retryCss=pd.createElement('style');
+      retryCss.textContent='#carmyPrintRetryBar{display:block;position:sticky;top:0;z-index:99999}#carmyPrintRetryBar button:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}@media print{#carmyPrintRetryBar{display:none!important}}';
+      pd.head.appendChild(retryCss);
+      pd.body.insertBefore(retryBar,pd.body.firstChild);
+      pd.getElementById('carmyPrintAgain').addEventListener('click',()=>{
+        const status=pd.getElementById('carmyPrintRetryStatus');
+        if(status)status.textContent='Opening print dialog…';
+        printWindow.focus();
+        printWindow.requestAnimationFrame(()=>printWindow.print());
+      });
+      printWindow.addEventListener('afterprint',()=>{
+        const status=pd.getElementById('carmyPrintRetryStatus');
+        if(status)status.textContent='Print dialog closed. Click “Print again / Save PDF” to retry.';
+      });
       printWindow.print();
     }else{
       // Popup-blocked fallback retains the previous native-print behavior.
