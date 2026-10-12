@@ -906,3 +906,7 @@
 body:has(#app:not(.hidden)) .md-auth-footer{display:none}
 body:has(#app:not(.hidden)) .md-app-footer{display:block}
 @media(max-width:760px){.md-footer-inner{width:calc(100% - 28px);justify-content:center;flex-wrap:wrap;gap:8px;padding:12px 0}.md-footer-copy{order:1}.md-footer-made{order:2;font-size:8px}.md-footer-links{order:3;width:100%;gap:3px}.md-footer-links button{font-size:10px;padding:7px 9px}.md-app-footer{margin-top:16px}}
+
+/* Footer information links are real page anchors, styled consistently with the MotorDesk footer. */
+.md-footer-links a{display:inline-flex;align-items:center;border:1px solid transparent;border-radius:999px;background:transparent;padding:8px 12px;color:#526a7d;font:inherit;font-size:11px;font-weight:650;text-decoration:none;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
+.md-footer-links a:hover,.md-footer-links a:focus-visible{outline:none;background:#edf7fd;border-color:#c5e3f4;color:#1479b5}
