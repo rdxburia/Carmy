@@ -71,11 +71,35 @@ function checkIdleSession(){
   if(!db||!user)return;
   if(idleExpired())void forceSignOut('idle');
 }
+let lastServerActivityTouch=0;
+let serverActivityTouchPromise=null;
+async function touchServerSessionActivity(force=false){
+  if(!db||!user||window.__carmySigningOut||idleExpired())return false;
+  const now=Date.now();
+  if(!force&&now-lastServerActivityTouch<15000)return true;
+  if(serverActivityTouchPromise)return serverActivityTouchPromise;
+  lastServerActivityTouch=now;
+  serverActivityTouchPromise=(async()=>{
+    try{
+      const result=await db.rpc('carmy_touch_session');
+      if(result?.error)throw result.error;
+      return true;
+    }catch(err){
+      console.error('Server idle-session heartbeat failed:',err);
+      return false;
+    }
+  })().finally(()=>{serverActivityTouchPromise=null});
+  return serverActivityTouchPromise;
+}
 function recordUserActivity(){
   if(window.__carmySigningOut||!db)return;
   if(document.visibilityState==='hidden')return;
   if(user&&idleExpired()){void forceSignOut('idle');return}
+  writeUserActivityAndTouchServer();
+}
+function writeUserActivityAndTouchServer(){
   writeIdleActivity();
+  void touchServerSessionActivity();
 }
 function initIdleLogout(){
   if(window.__carmyIdleLogoutInitialized)return;
@@ -795,7 +819,7 @@ async function boot(){
    s={data:{session:null}};
  }
  accessToken=s.data.session?.access_token||'';
- if(s.data.session){writeIdleActivity(true);start(s.data.session.user)}
+ if(s.data.session){writeIdleActivity(true);user=s.data.session.user;if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return;}start(s.data.session.user)}
  else showLogin();
  db.auth.onAuthStateChange(async(event,nextSession)=>{
    accessToken=nextSession?.access_token||'';
@@ -805,6 +829,8 @@ async function boot(){
        await forceSignOut('idle');
        return;
      }
+     user=nextSession.user;
+     if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return}
      start(nextSession.user);
    }else{
      accessToken='';
