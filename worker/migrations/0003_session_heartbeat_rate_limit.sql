@@ -1,1 +1,2 @@
--- Per-session heartbeat rate limit. Apply with: wrangler d1 migrations apply carmy-cache --remote\nALTER TABLE session_activity ADD COLUMN last_heartbeat INTEGER;\n
+-- Per-session heartbeat rate limit. Apply with: wrangler d1 migrations apply carmy-cache --remote
+ALTER TABLE session_activity ADD COLUMN last_heartbeat INTEGER;
