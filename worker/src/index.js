@@ -136,6 +136,17 @@ export default {
           return limited;
         }
         await env.DB.prepare("UPDATE session_activity SET last_heartbeat = ? WHERE session_id = ? AND user_id = ?").bind(now, sessionId, user.id).run();
+        // Keep Supabase's independent RLS/Storage idle guard alive from this same
+        // authenticated heartbeat; PostgreSQL supplies its own clock_timestamp().
+        const dbTouch = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/carmy_touch_session`, {
+          method: "POST",
+          headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
+          body: "null",
+        });
+        if (!dbTouch.ok) {
+          console.error("Database idle-session heartbeat failed", dbTouch.status);
+          return error("Session security check is temporarily unavailable. Please try again.", 503, origin, "SESSION_CHECK_UNAVAILABLE");
+        }
         return json({ ok: true, server_time: now }, 200, origin);
       }
 
