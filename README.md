@@ -1,4 +1,4 @@
-# CarCare Cloud
+# MotorDesk
 Private car maintenance web app using Supabase Auth, Postgres and private Storage.
 
 ## Setup
