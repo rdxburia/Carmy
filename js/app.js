@@ -830,7 +830,7 @@ async function boot(){
        return;
      }
      user=nextSession.user;
-     await touchServerSessionActivity(true);
+     if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return}
      start(nextSession.user);
    }else{
      accessToken='';
