@@ -1,0 +1,24 @@
+/* Clear sign-in and account creation choices for owners and garages. */
+.td-shared-header .td-auth-actions{gap:8px}
+.td-auth-dropdown{position:relative;flex:0 0 auto}
+.td-auth-dropdown>summary{list-style:none;cursor:pointer;user-select:none;white-space:nowrap}
+.td-auth-dropdown>summary::-webkit-details-marker{display:none}
+.td-auth-dropdown>summary span{font-size:10px;margin-left:4px}
+.td-auth-menu{position:absolute;right:0;top:calc(100% + 10px);z-index:1100;width:min(320px,calc(100vw - 28px));padding:7px;background:#fff;border:1px solid #dce5f2;border-radius:15px;box-shadow:0 18px 45px rgba(11,31,59,.18);display:grid;gap:3px}
+.td-auth-menu a{display:grid;gap:4px;padding:12px;border-radius:10px;text-decoration:none;color:#0b1f3b;white-space:normal}
+.td-auth-menu a:hover,.td-auth-menu a:focus-visible{background:#f0f6ff;outline:none}
+.td-auth-menu strong{font-size:13px;font-weight:800}
+.td-auth-menu small{font-size:11px;line-height:1.45;color:#5e6f85}
+.td-auth-dropdown[open]>summary{box-shadow:0 0 0 3px rgba(30,107,255,.14)}
+.td-auth-dropdown>summary:focus-visible{outline:3px solid rgba(30,107,255,.45);outline-offset:3px}
+@media(max-width:900px){
+ .td-shared-header .td-actions .td-btn{display:inline-flex}
+ .td-shared-header .td-auth-actions{gap:6px}
+ .td-shared-header .td-auth-dropdown>summary{padding:9px 10px;font-size:11px}
+ .td-auth-menu{position:fixed;top:74px;right:14px;width:min(320px,calc(100vw - 28px))}
+}
+@media(max-width:560px){
+ .td-shared-header .td-auth-actions{gap:5px}
+ .td-shared-header .td-auth-dropdown>summary{min-height:40px;padding:8px 9px;font-size:11px}
+ .td-auth-menu{top:72px}
+}
