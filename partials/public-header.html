@@ -9,7 +9,22 @@
       <a data-nav-page="faq.html" href="faq.html">FAQ</a>
       <a class="td-workshop-nav" data-nav-page="for-workshops.html" href="for-workshops.html"><span>For workshops</span><small>Early access</small></a>
     </nav>
-    <div class="td-actions"><a class="td-btn secondary" href="index.html#auth-login">Sign in</a><a class="td-btn" href="index.html#auth-signup">Get started</a></div>
+    <div class="td-actions td-auth-actions">
+      <details class="td-auth-dropdown td-signin-dropdown">
+        <summary class="td-btn secondary">Sign in <span aria-hidden="true">▾</span></summary>
+        <div class="td-auth-menu" role="group" aria-label="Choose sign-in type">
+          <a href="index.html#auth-login"><strong>Vehicle owner sign in</strong><small>Access your vehicle records</small></a>
+          <a href="for-workshops.html#early-access"><strong>Garage sign in</strong><small>Workshop workspace · Early access</small></a>
+        </div>
+      </details>
+      <details class="td-auth-dropdown td-get-started-dropdown">
+        <summary class="td-btn">Get started <span aria-hidden="true">▾</span></summary>
+        <div class="td-auth-menu" role="group" aria-label="Choose account type">
+          <a href="index.html#auth-signup"><strong>Create vehicle owner account</strong><small>Free to start · Manage your car records</small></a>
+          <a href="for-workshops.html#early-access"><strong>Create garage account</strong><small>Join workshop early access</small></a>
+        </div>
+      </details>
+    </div>
     <button class="td-menu" data-td-menu aria-label="Open navigation" aria-expanded="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   </div>
 </header>
