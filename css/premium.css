@@ -1220,3 +1220,7 @@ body.md-info-open{overflow:hidden!important}
 
 /* Torq Desk brand tokens */
 :root{--torq-navy:#0B1220;--torq-blue:#2563EB;--torq-sky:#38B2FF;}
+
+/* Torq Desk identity: use the brand symbol without letter monograms. */
+.auth-footer-mark,.md-info-mark{display:block;width:32px;height:32px;object-fit:cover;border-radius:9px;flex:0 0 auto;background:transparent;box-shadow:none}
+.auth-footer-mark{width:24px;height:24px;border-radius:7px}
