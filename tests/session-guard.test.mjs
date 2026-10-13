@@ -11,7 +11,7 @@ function harness(){
  const window={fetch:async(input)=>new Response("ok"),__carmyIdleFetchGuardInstalled:false};
  const context={window,localStorage:{getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,String(v))},Date,Promise,Number,String,Object,Error,RegExp};
  vm.runInNewContext(fs.readFileSync(path.join(root,"js/session-guard.js"),"utf8"),context);
- return {window,store,guard:window.CarmySessionGuard.create({supabaseUrl:"https://example.supabase.co",idleMs:120000,activityKey:"carmy_last_activity",getUser:()=>({id:"test"}),onIdle:()=>{window.idleCalled=(window.idleCalled||0)+1}})};
+ return {window,store,guard:window.CarmySessionGuard.create({supabaseUrl:"https://example.supabase.co",idleMs:120000,activityKey:"carmy_last_activity",getUser:()=>({id:"test"}),onIdle:()=>{window.idleCalled=(window.idleCalled||0)+1},timeoutMessage:"Session expired after 2 minutes of inactivity. Please sign in again."})};
 }
 test("session guard reads valid activity and treats missing activity as expired",()=>{
  const h=harness();
