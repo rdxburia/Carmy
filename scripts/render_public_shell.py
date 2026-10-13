@@ -9,7 +9,7 @@ header = (repo_root / "partials" / "public-header.html").read_text(encoding="utf
 footer = (repo_root / "partials" / "public-footer.html").read_text(encoding="utf-8").strip()
 pages = ["index.html", "features.html", "how-it-works.html", "pricing.html",
          "for-workshops.html", "faq.html", "about.html", "terms.html",
-         "privacy.html", "contact.html"]
+         "privacy.html", "contact.html", "garage-login.html", "garage-portal.html"]
 for name in pages:
     path = root / name
     if not path.exists():
