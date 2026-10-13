@@ -1,5 +1,5 @@
-# MotorDesk
-Private car maintenance web app using Supabase Auth, Postgres and private Storage.
+# Torq Desk
+Customer-first vehicle ownership and maintenance records web app using Supabase Auth, Postgres and private Storage.
 
 ## Setup
 1. In Supabase SQL Editor run supabase/schema.sql.

@@ -4,6 +4,6 @@
   var version=el&&el.content?el.content:'unknown';
   window.CARMY_BUILD=version;
   if(window.console&&typeof window.console.info==='function'){
-    window.console.info('[MotorDesk] Build '+version);
+    window.console.info('[Torq Desk] Build '+version);
   }
 })();
