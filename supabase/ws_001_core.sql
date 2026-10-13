@@ -107,11 +107,14 @@ begin
 
   if exists (select 1 from public.ws_organizations o where o.id = target_org)
      and not exists (
-       select 1 from public.ws_staff s
-       where s.org_id = target_org
+       select 1
+       from public.ws_organizations o
+       join public.ws_staff s
+         on s.org_id = o.id
+        and s.user_id = o.owner_user_id
+       where o.id = target_org
          and s.role = 'owner'
          and s.is_active
-         and s.user_id is not null
      ) then
     raise exception 'Each workshop organization must have at least one active owner with a login.'
       using errcode = '23514', constraint = 'ws_organization_requires_active_owner';
@@ -119,7 +122,7 @@ begin
 
   if tg_op = 'UPDATE' and tg_table_name = 'ws_staff' and old.org_id is distinct from new.org_id then
     if exists (select 1 from public.ws_organizations o where o.id = old.org_id)
-       and not exists (select 1 from public.ws_staff s where s.org_id=old.org_id and s.role='owner' and s.is_active and s.user_id is not null) then
+       and not exists (select 1 from public.ws_organizations o join public.ws_staff s on s.org_id=o.id and s.user_id=o.owner_user_id where o.id=old.org_id and s.role='owner' and s.is_active) then
       raise exception 'Each workshop organization must have at least one active owner with a login.'
         using errcode = '23514', constraint = 'ws_organization_requires_active_owner';
     end if;
