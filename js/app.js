@@ -584,8 +584,8 @@ function showAppLoading(){
  o.setAttribute('aria-label','Loading Torq Desk');
  o.innerHTML='<div class="app-loading-panel">'+
    '<div class="app-loading-brand" aria-label="Torq Desk">'+
-     '<img class="app-loading-brand-mark" src="assets/carcarecloud-icon.svg?v=2026.10.12-torqdesk" alt="">'+
-     '<span class="app-loading-brand-name">Motor<i>Desk</i></span>'+
+     '<img class="app-loading-brand-mark" src="assets/torqdesk-icon.svg?v=2026.10.13-home" alt="">'+
+     '<span class="app-loading-brand-name">Torq <i>Desk</i></span>'+
    '</div>'+
    '<div class="app-loading-visual" aria-hidden="true">'+
      '<div class="app-loading-sky"><div class="app-loading-hills"></div></div>'+
@@ -843,7 +843,7 @@ async function boot(){
  }
  accessToken=s.data.session?.access_token||'';
  if(s.data.session){writeIdleActivity(true);user=s.data.session.user;if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return;}start(s.data.session.user)}
- else showLogin();
+ else showPublicLanding();
  db.auth.onAuthStateChange(async(event,nextSession)=>{
    accessToken=nextSession?.access_token||'';
    if(nextSession){
@@ -859,11 +859,29 @@ async function boot(){
      accessToken='';
      startedUserId=null;
      if(!window.__carmySigningOut)clearUserMemory();
-     showLogin();
+     if(event==='INITIAL_SESSION')showPublicLanding();else showLogin();
    }
  });
 }
+function showPublicLanding(){
+ const landing=$('torqLanding'),auth=$('auth'),app=$('app');
+ if(landing)landing.classList.remove('hidden');
+ if(auth)auth.classList.add('hidden');
+ if(app)app.classList.add('hidden');
+ const loading=document.getElementById('appLoadingOverlay');if(loading)loading.remove();
+}
+function showTorqDeskAuth(mode='login'){
+ const landing=$('torqLanding'),auth=$('auth');
+ if(landing)landing.classList.add('hidden');
+ if(auth)auth.classList.remove('hidden');
+ signup=mode==='signup';
+ updateAuthModeUI();bindMobileAuthTabs();prepareLoginExperience();
+ window.scrollTo({top:0,behavior:'smooth'});
+}
+window.showTorqDeskAuth=showTorqDeskAuth;
+document.addEventListener('click',event=>{const trigger=event.target.closest('[data-torq-auth]');if(trigger){event.preventDefault();showTorqDeskAuth(trigger.dataset.torqAuth||'login');}});
 function showLogin(){
+ $('torqLanding')?.classList.add('hidden');
  closeSideMenu();
  stopVerificationCountdown();
  hideVerificationView(false);
@@ -889,6 +907,7 @@ async function start(u){
  pendingVerificationEmail='';
  try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
  $('auth').classList.add('hidden');
+ $('torqLanding')?.classList.add('hidden');
  $('app').classList.add('hidden');
  $('userEmail').textContent=u.email;
  showAppLoading();
