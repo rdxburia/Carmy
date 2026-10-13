@@ -25,3 +25,17 @@ alter table public.ws_onboarding_applications enable row level security;
 revoke all on public.ws_onboarding_applications from anon, authenticated;
 grant all on public.ws_onboarding_applications to service_role;
 commit;
+-- Extend the workshop application table for the 4-step partner wizard.
+-- Run after the base workshop_onboarding_migration.sql migration.
+begin;
+alter table public.ws_onboarding_applications
+ add column if not exists whatsapp_updates boolean not null default false,
+ add column if not exists owner_mpin_salt text,
+ add column if not exists owner_mpin_hash text,
+ add column if not exists operating_hours jsonb not null default '{}'::jsonb,
+ add column if not exists specializations text[] not null default '{}',
+ add column if not exists udyam_no text,
+ add column if not exists pan text,
+ add column if not exists team jsonb not null default '[]'::jsonb,
+ add column if not exists logo_filename text;
+commit;
