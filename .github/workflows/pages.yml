@@ -1,9 +1,9 @@
 name: Deploy CarCare Cloud to GitHub Pages
 on:
   push:
-    branches: [main]
+    branches: [main, feat/home-first-screen-audience-switch]
   pull_request:
-    branches: [main]
+    branches: [main, fix/shared-public-shell-nav-glossary]
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,9 +31,48 @@ jobs:
           cp _redirects _site/ 2>/dev/null || true
           python3 scripts/render_public_shell.py _site
           bash scripts/check-pages-output.sh
-  deploy:
+      - name: Upload rendered preview site
+        uses: actions/upload-artifact@v4
+        with:
+          name: torqdesk-rendered-preview
+          path: _site
+          retention-days: 2
+  visual-acceptance:
     needs: validate-pages
-    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: torqdesk-rendered-preview
+          path: _site
+      - name: Install browser test runtime
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Serve preview and capture responsive screenshots
+        run: |
+          mkdir -p /tmp/td-preview/Carmy
+          cp -a _site/. /tmp/td-preview/Carmy/
+          python3 -m http.server 4173 --directory /tmp/td-preview >/tmp/td-http.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/Carmy/ >/dev/null; then break; fi
+            sleep 1
+          done
+          TORQ_PREVIEW_URL=http://127.0.0.1:4173/Carmy/ node scripts/capture-home-screenshots.mjs
+      - name: Upload homepage screenshots and visual report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torqdesk-home-screenshots
+          path: artifacts/torqdesk-home
+          retention-days: 14
+  deploy:
+    needs: [validate-pages, visual-acceptance]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
