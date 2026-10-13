@@ -54,6 +54,7 @@ jobs:
           cp offline.html _site/ 2>/dev/null || true
           cp sitemap.xml robots.txt _site/ 2>/dev/null || true
           cp _redirects _site/ 2>/dev/null || true
+          python3 scripts/render_public_shell.py _site
           bash scripts/check-pages-output.sh
       - uses: actions/upload-pages-artifact@v3
         with:
