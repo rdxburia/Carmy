@@ -30,7 +30,7 @@ test("owner app uses shared session module without changing 120-second policy",(
  assert.match(index,/js\/session-guard\.js\?v=2026\.10\.13-workshop-m0/);
  assert.match(guard,/lastWrite<5000/);
  assert.match(guard,/carmy_last_activity/);
- assert.match(guard,/auth\/v1\/logout/);
+ assert.ok(guard.includes("isLogoutRequest=") && guard.includes("logout"),"logout bypass must remain");
 });
 test("migration has a paired rollback and workshop deferrals are documented",()=>{
  assert.ok(fs.existsSync(path.join(root,"supabase/rollback/ws_001_core.rollback.sql")));
