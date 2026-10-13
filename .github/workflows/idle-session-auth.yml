@@ -6,7 +6,13 @@ on:
       - "worker/src/auth.js"
       - "worker/src/index.js"
       - "worker/migrations/**"
+      - "supabase/ws_*.sql"
+      - "supabase/tests/**"
+      - "js/app.js"
+      - "js/session-guard.js"
       - "tests/idle-session-auth.test.mjs"
+      - "tests/session-guard.test.mjs"
+      - "tests/workshop-m0-contract.test.mjs"
       - ".github/workflows/idle-session-auth.yml"
   push:
     branches: [main]
@@ -25,4 +31,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test tests/idle-session-auth.test.mjs
+      - run: node --test tests/idle-session-auth.test.mjs tests/session-guard.test.mjs tests/workshop-m0-contract.test.mjs
