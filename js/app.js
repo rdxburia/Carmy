@@ -5,40 +5,19 @@ const IDLE_MS=120000;
 const IDLE_ACTIVITY_KEY='carmy_last_activity';
 const IDLE_LOGOUT_KEY='carmy_idle_logout';
 let idleCheckTimer=null;
-let lastIdleWrite=0;
 let activeLongOperations=0;
-function readIdleActivity(){
-  try{const n=Number(localStorage.getItem(IDLE_ACTIVITY_KEY)||0);return Number.isFinite(n)&&n>0?n:0}catch(e){return 0}
-}
-function writeIdleActivity(force=false){
-  const now=Date.now();
-  if(!force&&now-lastIdleWrite<5000)return;
-  lastIdleWrite=now;
-  try{localStorage.setItem(IDLE_ACTIVITY_KEY,String(now))}catch(e){}
-}
-function idleExpired(){
-  const last=readIdleActivity();
-  return !last||Date.now()-last>IDLE_MS;
-}
-// Defense in depth: guard every Supabase REST/Auth/Storage request from this page,
-// not only the Worker wrapper. This closes stale-action paths through direct db.from(),
-// db.rpc(), and db.storage calls after the shared idle deadline has elapsed.
-function installIdleFetchGuard(){
-  if(window.__carmyIdleFetchGuardInstalled)return;
-  window.__carmyIdleFetchGuardInstalled=true;
-  const nativeFetch=window.fetch.bind(window);
-  window.fetch=function(input,init){
-    let url='';
-    try{url=typeof input==='string'?input:(input&&input.url)||''}catch(e){}
-    const isSupabaseRequest=!!U&&url.startsWith(U+'/')&&/\/(rest\/v1|storage\/v1|graphql\/v1|functions\/v1|auth\/v1)\//.test(url);
-    const isLogoutRequest=/\/auth\/v1\/logout(?:\?|$)/.test(url);
-    if(isSupabaseRequest&&!isLogoutRequest&&user&&idleExpired()){
-      void forceSignOut('idle');
-      return Promise.reject(new Error('Session expired after 2 minutes of inactivity. Please sign in again.'));
-    }
-    return nativeFetch(input,init);
-  };
-}
+const sessionGuard=window.CarmySessionGuard.create({
+  supabaseUrl:U,
+  idleMs:IDLE_MS,
+  activityKey:IDLE_ACTIVITY_KEY,
+  getUser:()=>user,
+  onIdle:()=>forceSignOut('idle'),
+  timeoutMessage:'Session expired after 2 minutes of inactivity. Please sign in again.'
+});
+function readIdleActivity(){return sessionGuard.readActivity()}
+function writeIdleActivity(force=false){return sessionGuard.writeActivity(force)}
+function idleExpired(){return sessionGuard.isExpired()}
+function installIdleFetchGuard(){sessionGuard.installFetchGuard()}
 installIdleFetchGuard();
 function clearUserMemory(){
   user=null;cars=[];car=null;records=[];docs=[];ownerProfile=null;
