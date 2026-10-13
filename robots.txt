@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /Carmy/
+Disallow: /Carmy/api-test.html
+Disallow: /Carmy/logo-preview.html
+Sitemap: https://rdxburia.github.io/Carmy/sitemap.xml
