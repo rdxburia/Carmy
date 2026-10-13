@@ -1429,3 +1429,31 @@ body{background:linear-gradient(180deg,#f6faff 0%,#f1f7ff 100%)}
  #app .itemgrid{grid-template-columns:minmax(0,1fr)}
 }
 @media(prefers-reduced-motion:reduce){#app .view{animation:none}}
+
+
+/* High-specificity component overrides: supersede legacy dashboard theme rules. */
+#dashboard#dashboard.active .garage-hero{
+ background:radial-gradient(circle at 72% 20%,rgba(56,189,248,.22),transparent 30%),linear-gradient(120deg,#e8f5ff 0%,#d9edff 48%,#eef8ff 100%)!important;
+ border:1px solid #cfe4ff!important;box-shadow:0 14px 36px rgba(19,105,190,.09)!important;color:#102b4e!important;border-radius:24px!important
+}
+#dashboard#dashboard.active .garage-hero-info h2{color:#102b4e!important}
+#dashboard#dashboard.active .garage-hero-info p,#dashboard#dashboard.active .garage-hero-info small{color:#536e8c!important}
+#dashboard#dashboard.active .garage-hero .health-badge{background:#fff!important;border-color:#d4e5f7!important;color:#102b4e!important}
+#dashboard#dashboard.active .garage-avatar span{color:#557596!important}
+#dashboard#dashboard.active .digital-cluster{background:#fff!important;border:1px solid #cfe4ff!important;box-shadow:0 8px 22px rgba(20,91,160,.07)!important}
+#dashboard#dashboard.active .digital-cluster strong{color:#1677e8!important;text-shadow:none!important}
+#dashboard#dashboard.active .digital-cluster span,#dashboard#dashboard.active .digital-cluster em{color:#617b98!important}
+#dashboard#dashboard.active .glass-panel,#dashboard#dashboard.active .glass-stat{background:#fff!important;border:1px solid #dbe7f5!important;box-shadow:0 8px 26px rgba(14,56,105,.045)!important;border-radius:18px!important;backdrop-filter:none!important}
+#dashboard#dashboard.active .glass-stat b,#dashboard#dashboard.active .digital-cluster strong{color:#102b4e!important;text-shadow:none!important}
+#dashboard#dashboard.active .glass-stat b.ok,#dashboard#dashboard.active .health-badge.ok,#dashboard#dashboard.active .health-badge.ok *{color:#16835f!important}
+#dashboard#dashboard.active .glass-stat b.warn,#dashboard#dashboard.active .health-badge.warn,#dashboard#dashboard.active .health-badge.warn *{color:#b7791f!important}
+#dashboard#dashboard.active .glass-stat b.danger,#dashboard#dashboard.active .glass-stat b.bad,#dashboard#dashboard.active .health-badge.danger,#dashboard#dashboard.active .health-badge.danger *{color:#c43d4b!important}
+#dashboard#dashboard.active .spend-bars i{background:linear-gradient(180deg,#38bdf8,#1677e8)!important}
+#dashboard#dashboard.active .radial-gauge{background:conic-gradient(#1677e8 var(--gauge,0%),#e2edf9 0)!important}
+#dashboard#dashboard.active .timeline-event{background:#f8fbff!important;border-color:#dbe7f5!important}
+#dashboard#dashboard.active .timeline-event:hover{background:#edf6ff!important}
+#dashboard#dashboard.active .timeline-node{background:#1677e8!important}
+#dashboard#dashboard.active .maintenance-timeline:before{background:#dbe7f5!important}
+#dashboard#dashboard.active .panel-heading h3,#dashboard#dashboard.active .panel-heading h2{color:#102b4e!important}
+#dashboard#dashboard.active .garage-hero::before,#dashboard#dashboard.active .garage-hero::after{display:none!important}
+#app .md-site-footer{color:#61738c}
