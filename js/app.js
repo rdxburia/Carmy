@@ -527,8 +527,8 @@ function handleAuthRedirectError(){
 }
 function updateAuthModeUI(){
  const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),authBtn=$('authBtn'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
- if(title)title.textContent=signup?'Create your account':'Private Car Manager';
- if(kicker)kicker.textContent=signup?'NEW GARAGE':'SECURE GARAGE';
+ if(title)title.textContent=signup?'Create your account':'Vehicle Records';
+ if(kicker)kicker.textContent=signup?'NEW GARAGE':'YOUR VEHICLE RECORDS';
  if(copy)copy.textContent=signup?'Create a private garage for your vehicle history and documents.':'Sign in to keep your vehicle history, documents and reports together.';
  if(toggle)toggle.textContent=signup?'Back to login':'Create account';
  if(authBtn&&!authBtn.disabled)authBtn.textContent=signup?'Create account':'Login';
