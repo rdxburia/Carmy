@@ -1,6 +1,34 @@
 (() => {
  'use strict';
  const authTarget=location.hash==='#auth-signup'?'signup':(location.hash==='#auth-login'||location.hash==='#auth'?'login':null);if(authTarget){const trigger=document.querySelector('[data-torq-auth="'+authTarget+'"]');if(trigger)trigger.click();}
+
+ const home=document.querySelector('.td-home-v2');
+ if(home){
+  const buttons=[...home.querySelectorAll('[data-audience-select]')];
+  const panels=[...home.querySelectorAll('[data-audience-panel]')];
+  const previews=[...home.querySelectorAll('[data-preview-panel]')];
+  let active='owners';
+  const valid=value=>value==='workshops'?'workshops':'owners';
+  const fromHash=()=>{const value=location.hash.slice(1);return value==='owners'||value==='workshops'?value:null;};
+  const fromSession=()=>{try{return sessionStorage.getItem('td-audience-choice');}catch(_){return null;}};
+  const saveSession=value=>{try{sessionStorage.setItem('td-audience-choice',value);}catch(_){}};
+  const setAudience=(value,opts={})=>{
+   const next=valid(value),previous=active;active=next;
+   buttons.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.audienceSelect===next)));
+   [...panels,...previews].forEach(panel=>{
+    if(panel.dataset.audiencePanel===next||panel.dataset.previewPanel===next){panel.dataset.active='true';panel.removeAttribute('data-exiting');panel.setAttribute('aria-hidden','false');}
+    else if(panel.dataset.active==='true'){panel.dataset.active='false';panel.dataset.exiting='true';panel.setAttribute('aria-hidden','true');window.setTimeout(()=>{if(panel.dataset.active!=='true')panel.removeAttribute('data-exiting');},180);}
+    else{panel.dataset.active='false';panel.setAttribute('aria-hidden','true');}
+   });
+   if(opts.remember!==false)saveSession(next);
+   if(opts.hash&&location.hash!=='#'+next){history.replaceState(null,'','#'+next);}
+  };
+  const initial=fromHash()||fromSession()||'owners';
+  setAudience(initial,{remember:false});
+  home.classList.add('js-audience-enhanced');
+  buttons.forEach(button=>button.addEventListener('click',()=>setAudience(button.dataset.audienceSelect,{hash:true})));
+  window.addEventListener('hashchange',()=>{const hashChoice=fromHash();if(hashChoice&&hashChoice!==active)setAudience(hashChoice,{remember:false});});
+ }
  const menu=document.querySelector('[data-td-menu]');
  const nav=document.querySelector('[data-td-nav]');
  if(menu&&nav){menu.addEventListener('click',()=>{const open=nav.classList.toggle('is-open');menu.setAttribute('aria-expanded',String(open));});nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{nav.classList.remove('is-open');menu.setAttribute('aria-expanded','false');}));}
