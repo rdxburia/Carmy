@@ -13,7 +13,7 @@ self.addEventListener('fetch',event=>{
  if(url.pathname.startsWith(BASE+'api/')||url.pathname.includes('/auth/')||url.pathname.includes('/rest/v1/')||url.pathname.includes('/storage/'))return;
  if(request.headers.has('authorization'))return;
  if(request.mode==='navigate'){
-  event.respondWith(fetch(request).then(response=>{if(response.ok&&url.origin===self.location.origin){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy));}return response;}).catch(async()=> (await caches.match(request))||(await caches.match(BASE+'offline.html'))));
+  event.respondWith(fetch(request).then(response=>{if(response.ok&&url.origin===self.location.origin){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy));}return response;}).catch(async()=> (await caches.match(request))||(await caches.match(BASE+'index.html'))||(await caches.match(BASE+'offline.html'))));
   return;
  }
  if(url.pathname.startsWith(BASE+'css/')||url.pathname.startsWith(BASE+'js/')||url.pathname.startsWith(BASE+'assets/')||url.pathname.startsWith(BASE+'icons/')||url.pathname===BASE+'manifest.webmanifest'||url.pathname===BASE+'favicon.svg'){
