@@ -2,6 +2,8 @@ name: Deploy CarCare Cloud to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,7 +13,26 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
+  validate-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare and validate public pages
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          find . -maxdepth 1 -type f -name '*.html' ! -name 'api-test.html' ! -name 'logo-preview.html' -exec cp {} _site/ \;
+          cp -r css js assets icons _site/
+          cp favicon.svg _site/
+          cp manifest.webmanifest _site/ 2>/dev/null || true
+          cp sw.js _site/ 2>/dev/null || true
+          cp offline.html _site/ 2>/dev/null || true
+          cp sitemap.xml robots.txt _site/ 2>/dev/null || true
+          cp _redirects _site/ 2>/dev/null || true
+          bash scripts/check-pages-output.sh
   deploy:
+    needs: validate-pages
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
