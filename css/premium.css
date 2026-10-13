@@ -1255,3 +1255,177 @@ body.td-auth-open #auth .auth-card-head{position:relative;padding-right:38px}
 body.td-auth-open #auth .auth-card-head .auth-private{margin-right:0}
 body.td-auth-open #auth .auth-card-body{padding-top:8px}
 @media(max-width:600px){body.td-auth-open #auth.login{padding:14px}body.td-auth-open #auth .auth-card{border-radius:18px;max-height:calc(100dvh - 28px);overflow-y:auto}body.td-auth-open #auth .auth-card-head{padding-top:20px}}
+
+
+/* ===== Torq Desk unified visual system — homepage to garage ===== */
+:root{
+ --c-bg:#f3f8ff;--c-soft:#edf5ff;--c-line:#dbe7f5;--c-ink:#10233f;--c-mute:#61738c;
+ --c-accent:#1677e8;--c-accent-2:#0b56bf;--c-ok:#16835f;--c-warn:#b7791f;--c-bad:#c43d4b;
+ --bg-0:#f3f8ff;--bg-1:#edf5ff;--surface-1:#fff;--surface-2:#f7fbff;--hairline:#dbe7f5;
+ --accent-a:#1677e8;--accent-b:#0b56bf;--accent-gradient:linear-gradient(135deg,#38bdf8,#1677e8 58%,#0b56bf);
+ --shadow:0 12px 32px rgba(14,56,105,.07);--shadow-soft:0 12px 32px rgba(14,56,105,.07);--shadow-lifted:0 24px 70px rgba(11,42,82,.18);
+ --premium-shadow:0 12px 32px rgba(14,56,105,.07);--premium-panel:#fff;--premium-ink:#10233f;--premium-line:#dbe7f5;--premium-soft:#edf5ff;--premium-muted:#61738c;--premium-accent:#1677e8;--premium-accent-soft:#e5f3ff;--premium-deep:#0b1f3a;
+ color-scheme:light;
+}
+html,body{background:#f3f8ff;color:#10233f}
+body{background:linear-gradient(180deg,#f6faff 0%,#f1f7ff 100%)}
+#app{min-height:100dvh;background:transparent}
+#app .top{height:76px;min-height:76px;padding:0 clamp(16px,3vw,38px);background:rgba(255,255,255,.94);border-bottom:1px solid #dbe7f5;box-shadow:0 4px 18px rgba(14,56,105,.04);backdrop-filter:blur(16px)}
+#app .brand-logo{display:block;width:174px;max-height:46px;object-fit:contain}
+#app .top-actions{gap:12px}
+#app #userEmail{color:#61738c;font-weight:600}
+#app .layout{min-height:calc(100dvh - 76px);gap:0}
+#app .layout>aside{flex:0 0 236px;width:236px;background:linear-gradient(180deg,#102b4e 0%,#0b1f3a 100%);padding:20px 14px;border-right:1px solid rgba(255,255,255,.08)}
+#app .layout>aside button{display:flex;align-items:center;gap:10px;min-height:46px;margin:5px 0;padding:12px 13px;border:1px solid transparent;border-radius:12px;color:#d5e6fb;font-weight:600;transition:background .18s,border-color .18s,transform .18s}
+#app .layout>aside button:hover{background:rgba(76,169,255,.13);border-color:rgba(125,190,255,.16);transform:translateX(2px)}
+#app .layout>aside button.active{background:linear-gradient(110deg,#1677e8,#2399f5);border-color:rgba(255,255,255,.2);color:#fff;box-shadow:0 8px 22px rgba(22,119,232,.22)}
+#app .main{max-width:1600px;padding:clamp(20px,3vw,42px);min-width:0}
+#app .view{animation:tdViewIn .24s ease both}
+@keyframes tdViewIn{from{opacity:.6;transform:translateY(4px)}to{opacity:1;transform:none}}
+#app .hero,#app .toolbar{align-items:center;margin-bottom:24px;gap:16px}
+#app .hero h1,#app .toolbar h2{color:#102b4e;font-weight:750;letter-spacing:-.04em}
+#app .hero h1{font-size:clamp(28px,3vw,38px)}
+#app .toolbar h2{font-size:clamp(23px,2.5vw,30px)}
+#app .muted,#app .toolbar p{color:#61738c}
+#app .card,#app .glass-panel,#app .glass-stat,#app .doc-archive,#app .doc-col{background:#fff;border:1px solid #dbe7f5;border-radius:18px;box-shadow:0 8px 26px rgba(14,56,105,.045)}
+#app .card{padding:clamp(15px,2vw,22px)}
+#app .grid,#app .dashboard-grid{gap:16px}
+#app .dashboard-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+#app .glass-stat{padding:20px;min-width:0}
+#app .glass-stat>span,#app .panel-kicker,#app .eyebrow{color:#6483a8!important}
+#app .glass-stat b{color:#102b4e!important;font-size:clamp(22px,2.2vw,29px)}
+#app .garage-hero{grid-template-columns:1.1fr .85fr .7fr;min-height:230px;padding:clamp(20px,2.5vw,32px);border:1px solid #cfe4ff;border-radius:24px;background:radial-gradient(circle at 72% 20%,rgba(56,189,248,.22),transparent 30%),linear-gradient(120deg,#e8f5ff 0%,#d9edff 48%,#eef8ff 100%);box-shadow:0 14px 36px rgba(19,105,190,.09);color:#102b4e}
+#app .garage-hero-info h2{color:#102b4e!important;font-size:clamp(26px,3vw,40px);letter-spacing:-.045em}
+#app .garage-hero-info p,#app .garage-hero-info small{color:#536e8c!important}
+#app .garage-hero .health-badge{background:#fff;border-color:#d4e5f7;color:#102b4e}
+#app .garage-avatar .avatar-car{filter:none}
+#app .garage-avatar span{color:#557596!important}
+#app .digital-cluster{background:#fff;border:1px solid #cfe4ff;box-shadow:0 8px 22px rgba(20,91,160,.07);border-radius:16px}
+#app .digital-cluster span,#app .digital-cluster em{color:#617b98!important}
+#app .digital-cluster strong{color:#1677e8!important;text-shadow:none;font-size:clamp(24px,2.5vw,32px)}
+#app .dashboard-analytics{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}
+#app .panel-heading h3,#app .panel-heading h2{color:#102b4e}
+#app .spend-bars i{background:linear-gradient(180deg,#38bdf8,#1677e8)!important}
+#app .radial-gauge{background:conic-gradient(#1677e8 var(--gauge,0%),#e2edf9 0)!important}
+#app .radial-gauge>div{background:#fff!important}
+#app .timeline-event{background:#f8fbff!important;border:1px solid #dbe7f5!important;border-radius:14px!important}
+#app .timeline-event:hover{background:#edf6ff!important}
+#app .timeline-node{background:#1677e8!important}
+#app .maintenance-timeline:before{background:#dbe7f5!important}
+#app .table th{color:#61738c;background:#f2f7fd}
+#app .table td{color:#243b59}
+#app .table th,#app .table td{border-bottom-color:#e4edf8}
+#app input,#app select,#app textarea,#app .field input,#app .field select,#app .field textarea{border-color:#d4e1f0;background:#fff;color:#10233f;border-radius:11px}
+#app input:focus,#app select:focus,#app textarea:focus{border-color:#38a5f5;box-shadow:0 0 0 3px rgba(56,165,245,.16)}
+#app button.primary,#app .primary{background:linear-gradient(135deg,#2398f4,#1269d3);border-color:#1677e8;color:#fff;box-shadow:0 5px 14px rgba(22,119,232,.16);transition:transform .18s,box-shadow .18s,filter .18s}
+#app button.primary:hover,#app .primary:hover{filter:brightness(1.04);box-shadow:0 8px 20px rgba(22,119,232,.22);transform:translateY(-1px)}
+#app button.ghost,#app .ghost{background:#fff;color:#1769c5;border:1px solid #cfe0f3;transition:background .18s,border-color .18s}
+#app button.ghost:hover,#app .ghost:hover{background:#edf6ff;border-color:#9fcdf8}
+#app button.danger,#app .danger{background:#fff;color:#bd3546;border-color:#f0c8ce}
+#app .service-item-row{background:#f6faff!important;border:1px solid #dbe7f5!important;border-radius:12px!important}
+#app .service-item-detail{border-top-color:#dbe7f5!important}
+#app .doc-col{background:#f7fbff;border-color:#dbe7f5}
+#app .doc-row{border-color:#dbe7f5;border-radius:13px}
+#app .doc-row.active{border-color:#b6e4d0;background:#f1fbf7}
+#app .doc-row.soon{border-color:#f3d89c;background:#fffbef}
+#app .doc-row.expired{border-color:#f2c3ca;background:#fff5f6}
+#app .doc-icon{background:#e8f4ff;color:#1769c5}
+#app .doc-archive{border-color:#dbe7f5}
+#app .doc-archive summary span{background:#e5f2ff;color:#1769c5}
+#app .doc-popup,#app .doc-upload-card,#app .edit-modal-card{border-color:#dbe7f5;box-shadow:0 24px 80px rgba(11,42,82,.2);border-radius:20px}
+#app .doc-popup-icon{color:#1677e8}
+#app .mobile-nav{border-top:1px solid #dbe7f5;background:rgba(255,255,255,.96);box-shadow:0 -8px 24px rgba(14,56,105,.07);backdrop-filter:blur(16px)}
+#app .mobile-nav button{color:#61738c}
+#app .mobile-nav button.active{color:#1677e8}
+#app .mobile-car-tab{color:#102b4e}
+#app .side-drawer{background:linear-gradient(180deg,#102b4e,#0b1f3a)!important;border-right:1px solid rgba(255,255,255,.12)!important;color:#fff!important}
+#app .drawer-head h3,#app .drawer-brand h3{color:#fff!important}
+#app .drawer-kicker{color:#78c8ff!important}
+#app .drawer-link{color:#e3efff!important;border-color:transparent!important}
+#app .drawer-link b{color:#fff!important}
+#app .drawer-link span,#app .drawer-link em{color:#aac8e8!important}
+#app .drawer-link:hover,#app .drawer-link.active{background:rgba(35,152,244,.18)!important;border-color:rgba(123,196,255,.28)!important}
+#app .drawer-link.active{box-shadow:inset 3px 0 #38bdf8}
+#app .drawer-car,#app .drawer-utility{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.15)!important;color:#fff!important}
+#app .drawer-car b,#app .drawer-utility{color:#fff!important}
+#app .drawer-car small,#app .drawer-secure{color:#aac8e8!important}
+#app .drawer-close{color:#fff!important}
+#app .md-app-footer{background:#fff;border-top:1px solid #dbe7f5}
+#app .md-app-footer .md-footer-links button{color:#456583}
+#app .md-app-footer .md-footer-made{color:#61738c}
+#appLoadingOverlay{background:#f4f9ff!important;color:#10233f!important}
+.app-loading-brand{color:#102b4e!important}
+.app-loading-brand-mark{background:linear-gradient(135deg,#38bdf8,#1677e8)!important}
+.app-loading-brand-name i{color:#1677e8!important}
+.app-loading-hills{background:#e3f2ff!important}
+.app-loading-hills:after{background:#d1e9ff!important}
+.app-loading-road{border-color:#c8def4!important;background:#eaf5ff!important;box-shadow:0 15px 30px rgba(22,119,232,.08)!important}
+.app-loading-road:before{background:#e1f1ff!important}
+.app-loading-road-markings span{background:#9bc8f2!important}
+.app-loading-finish{background:#1677e8!important}
+.app-loading-ground-shadow{background:rgba(22,119,232,.13)!important}
+.loading-car-svg .car-body{fill:#1677e8!important}.loading-car-svg .car-roof{fill:#0b56bf!important}.loading-car-svg .car-window{fill:#d9f1ff!important}.loading-car-svg .car-trim{fill:#b8dfff!important}.loading-car-svg .car-wheel{fill:#102b4e!important}.loading-car-svg .car-hub{fill:#a8d5fb!important}
+.app-loading-progress-track{background:#e1edf9!important;border-color:#d3e4f6!important}
+.app-loading-progress-fill{background:linear-gradient(90deg,#38bdf8,#1677e8)!important}
+.app-loading-percent,.app-loading-title{color:#102b4e!important}.app-loading-sub{color:#61738c!important}
+/* Auth overlay inherits the same Torq Desk blue language. */
+#auth.login{background:rgba(7,22,43,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+#auth .auth-card{border-color:#dbe7f5;box-shadow:0 24px 80px rgba(7,38,78,.2)}
+#auth .auth-card h1{color:#102b4e}
+#auth .auth-kicker{color:#1677e8}
+#auth .auth-field input:focus{border-color:#1677e8!important;box-shadow:0 0 0 3px rgba(22,119,232,.14)!important}
+#auth .auth-field.is-valid input{border-color:#87c9f5!important}
+#auth .auth-feature-icon{color:#1677e8;border-color:#cfe4fb}
+#auth .auth-story h2 span{color:#1677e8}
+#auth .auth-car-line{stroke:#1677e8}
+#auth .auth-car-window-line{stroke:#75bdf5}
+#auth .auth-car-wheel{stroke:#1677e8}
+#auth .auth-submit{background:linear-gradient(135deg,#2398f4,#1269d3)!important;border-color:#1677e8!important;color:#fff!important}
+#auth .auth-switch{color:#1769c5!important;border-color:#cfe0f3!important}
+#auth .auth-switch:hover{background:#edf6ff!important}
+#auth .auth-private span{color:#1677e8}
+#auth .auth-strength.s1 .auth-strength-bar i:nth-child(1),#auth .auth-strength.s2 .auth-strength-bar i:nth-child(-n+2),#auth .auth-strength.s3 .auth-strength-bar i{background:#1677e8}
+#auth .auth-mobile-tab:hover,#auth .auth-mobile-tab.is-active{border-color:#1677e8;background:#1677e8}
+#auth .auth-verification-icon{background:#e5f3ff;color:#1677e8}
+#app .md-info-mark{background:linear-gradient(135deg,#38bdf8,#1677e8)!important}
+#app .md-info-panel{border-color:#dbe7f5}
+#app .md-info-tabs button.active{color:#1677e8;border-color:#1677e8}
+#app .md-info-bottom{color:#61738c}
+@media(max-width:900px){
+ #app .layout>aside{flex-basis:205px;width:205px;padding:14px 10px}
+ #app .main{padding:22px 18px}
+ #app .garage-hero{grid-template-columns:minmax(0,1fr) minmax(130px,.7fr);gap:14px}
+ #app .digital-cluster{grid-column:1/-1;justify-self:stretch;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:12px}
+}
+@media(max-width:760px){
+ #app .top{height:66px;min-height:66px;padding:0 14px}
+ #app .brand-logo{width:148px}
+ #app .layout{min-height:calc(100dvh - 66px)}
+ #app .layout>aside{display:none}
+ #app .main{padding:18px 14px 94px}
+ #app .hero{align-items:flex-start}
+ #app .hero>div:last-child{justify-content:flex-start!important}
+ #app .dashboard-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #app .dashboard-analytics{grid-template-columns:1fr}
+ #app .garage-hero{grid-template-columns:minmax(0,1fr) minmax(100px,.55fr);padding:18px;gap:12px;border-radius:18px}
+ #app .garage-avatar .avatar-car{font-size:58px}
+ #app .digital-cluster{grid-column:1/-1;padding:13px 15px}
+ #app .mobile-nav{position:fixed;left:0;right:0;bottom:0;z-index:9000;padding-bottom:env(safe-area-inset-bottom)}
+ #app .mobile-nav button{min-height:56px}
+ #app .md-app-footer{padding-bottom:calc(74px + env(safe-area-inset-bottom))}
+}
+@media(max-width:420px){
+ #app .main{padding:14px 10px 90px}
+ #app .dashboard-stats{gap:9px}
+ #app .glass-stat{padding:14px}
+ #app .glass-stat b{font-size:22px!important}
+ #app .garage-hero{grid-template-columns:minmax(0,1fr) 90px;padding:14px}
+ #app .garage-hero-info h2{font-size:24px!important}
+ #app .garage-avatar .avatar-car{font-size:48px}
+ #app .digital-cluster strong{font-size:24px!important}
+ #app .toolbar-actions,#app .doc-toolbar-actions{width:100%;display:flex;flex-wrap:wrap}
+ #app .toolbar-actions button,#app .doc-toolbar-actions button{flex:1 1 auto}
+ #app .form{grid-template-columns:minmax(0,1fr)}
+ #app .itemgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media(prefers-reduced-motion:reduce){#app .view{animation:none}}
