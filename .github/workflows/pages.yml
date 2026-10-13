@@ -1,7 +1,7 @@
 name: Deploy CarCare Cloud to GitHub Pages
 on:
   push:
-    branches: [main]
+    branches: [main, feat/home-first-screen-audience-switch]
   pull_request:
     branches: [main, fix/shared-public-shell-nav-glossary]
   workflow_dispatch:
@@ -72,7 +72,7 @@ jobs:
           retention-days: 14
   deploy:
     needs: [validate-pages, visual-acceptance]
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
