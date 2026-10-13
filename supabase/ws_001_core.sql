@@ -88,6 +88,59 @@ create table if not exists public.ws_platform_admins (
   created_at timestamptz not null default now()
 );
 
+create or replace function public.ws_assert_active_owner()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  target_org uuid;
+begin
+  if tg_table_name = 'ws_organizations' then
+    target_org := coalesce(new.id, old.id);
+  elsif tg_op = 'DELETE' then
+    target_org := old.org_id;
+  else
+    target_org := new.org_id;
+  end if;
+
+  if exists (select 1 from public.ws_organizations o where o.id = target_org)
+     and not exists (
+       select 1 from public.ws_staff s
+       where s.org_id = target_org
+         and s.role = 'owner'
+         and s.is_active
+         and s.user_id is not null
+     ) then
+    raise exception 'Each workshop organization must have at least one active owner with a login.'
+      using errcode = '23514', constraint = 'ws_organization_requires_active_owner';
+  end if;
+
+  if tg_op = 'UPDATE' and tg_table_name = 'ws_staff' and old.org_id is distinct from new.org_id then
+    if exists (select 1 from public.ws_organizations o where o.id = old.org_id)
+       and not exists (select 1 from public.ws_staff s where s.org_id=old.org_id and s.role='owner' and s.is_active and s.user_id is not null) then
+      raise exception 'Each workshop organization must have at least one active owner with a login.'
+        using errcode = '23514', constraint = 'ws_organization_requires_active_owner';
+    end if;
+  end if;
+  return null;
+end;
+$;
+revoke all on function public.ws_assert_active_owner() from public, anon, authenticated;
+
+drop trigger if exists ws_organizations_active_owner on public.ws_organizations;
+create constraint trigger ws_organizations_active_owner
+after insert or update on public.ws_organizations
+deferrable initially deferred
+for each row execute function public.ws_assert_active_owner();
+
+drop trigger if exists ws_staff_active_owner on public.ws_staff;
+create constraint trigger ws_staff_active_owner
+after insert or update or delete on public.ws_staff
+deferrable initially deferred
+for each row execute function public.ws_assert_active_owner();
+
 create or replace function public.ws_set_updated_at()
 returns trigger language plpgsql
 set search_path = public, pg_temp
