@@ -865,6 +865,7 @@ async function boot(){
 }
 function showPublicLanding(){
  const landing=$('torqLanding'),auth=$('auth'),app=$('app');
+ document.body.classList.remove('td-auth-open');
  if(landing)landing.classList.remove('hidden');
  if(auth)auth.classList.add('hidden');
  if(app)app.classList.add('hidden');
@@ -872,16 +873,18 @@ function showPublicLanding(){
 }
 function showTorqDeskAuth(mode='login'){
  const landing=$('torqLanding'),auth=$('auth');
- if(landing)landing.classList.add('hidden');
- if(auth)auth.classList.remove('hidden');
+ document.body.classList.add('td-auth-open');
+ if(landing)landing.classList.remove('hidden');
+ if(auth)auth.classList.remove('hidden','auth-session-pending','auth-success','auth-mobile-open');
  signup=mode==='signup';
  updateAuthModeUI();bindMobileAuthTabs();prepareLoginExperience();
  window.scrollTo({top:0,behavior:'smooth'});
 }
 window.showTorqDeskAuth=showTorqDeskAuth;
-document.addEventListener('click',event=>{const trigger=event.target.closest('[data-torq-auth]');if(trigger){event.preventDefault();showTorqDeskAuth(trigger.dataset.torqAuth||'login');}});
+document.addEventListener('click',event=>{if(event.target.closest('[data-td-auth-close]')){event.preventDefault();showPublicLanding();return;}const trigger=event.target.closest('[data-torq-auth]');if(trigger){event.preventDefault();showTorqDeskAuth(trigger.dataset.torqAuth||'login');}});
 function showLogin(){
- $('torqLanding')?.classList.add('hidden');
+ document.body.classList.add('td-auth-open');
+ $('torqLanding')?.classList.remove('hidden');
  closeSideMenu();
  stopVerificationCountdown();
  hideVerificationView(false);
@@ -907,6 +910,7 @@ async function start(u){
  pendingVerificationEmail='';
  try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
  $('auth').classList.add('hidden');
+ document.body.classList.remove('td-auth-open');
  $('torqLanding')?.classList.add('hidden');
  $('app').classList.add('hidden');
  $('userEmail').textContent=u.email;
@@ -954,7 +958,7 @@ async function start(u){
    console.error('Dashboard boot failed:',e);
    hideAppLoading();
    $('app').classList.add('hidden');
-   $('auth').classList.remove('hidden');
+   showLogin();
    toast('Dashboard load failed: '+(e?.message||e),'error');
    startedUserId=null;
  }

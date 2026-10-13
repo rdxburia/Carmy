@@ -1241,3 +1241,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(prefers-reduced-motion:reduce){.td-landing *{scroll-behavior:auto!important;transition:none!important}}
 
 .auth-footer-logo{display:block;width:25px;height:25px;flex:0 0 25px;object-fit:contain;border-radius:7px}
+
+
+/* Torq Desk auth is a modal over the public homepage, not a second landing page. */
+body.td-auth-open{overflow:hidden}
+body.td-auth-open #auth.login{position:fixed;inset:0;z-index:100000;min-height:100dvh;height:100dvh;padding:20px;overflow:auto;background:rgba(7,16,31,.58);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);display:grid;place-items:center}
+body.td-auth-open #auth .auth-shell{width:min(430px,100%);min-height:0;display:block;grid-template-columns:minmax(0,1fr);grid-template-areas:"card";gap:0;margin:auto}
+body.td-auth-open #auth .auth-story,body.td-auth-open #auth .auth-mobile-actions{display:none!important}
+body.td-auth-open #auth .auth-card{position:relative;width:100%;max-width:430px;margin:auto;border:1px solid #dce5ef;border-radius:22px;box-shadow:0 24px 75px rgba(0,0,0,.22);overflow:hidden}
+body.td-auth-open #auth .auth-card-head{position:relative;padding-right:38px}
+.td-auth-close{position:absolute;right:15px;top:14px;z-index:5;width:32px;height:32px;border:1px solid #dce5ef;border-radius:50%;background:#f7f9fc;color:#26374d;font-size:23px;line-height:1;display:grid;place-items:center;cursor:pointer}
+.td-auth-close:hover{background:#eaf2ff;color:#1d4ed8}
+body.td-auth-open #auth .auth-card-head .auth-private{margin-right:0}
+body.td-auth-open #auth .auth-card-body{padding-top:8px}
+@media(max-width:600px){body.td-auth-open #auth.login{padding:14px}body.td-auth-open #auth .auth-card{border-radius:18px;max-height:calc(100dvh - 28px);overflow-y:auto}body.td-auth-open #auth .auth-card-head{padding-top:20px}}
