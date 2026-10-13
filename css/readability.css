@@ -1,0 +1,50 @@
+/* Torq Desk readability pass — intentionally not linked from terms.html. */
+:root{--td-readable-body:18px;--td-readable-small:15px}
+body.td-public{font-size:var(--td-readable-body)!important;line-height:1.75!important;-webkit-font-smoothing:auto}
+body.td-public p,
+body.td-public li,
+body.td-public dd,
+body.td-public .td-copy,
+body.td-public .td-card p,
+body.td-public .td-faq-answer,
+body.td-public .td-step p,
+body.td-public .td-plan p{font-size:1em!important;line-height:1.75!important}
+body.td-public small,
+body.td-public .td-muted,
+body.td-public .td-note,
+body.td-public .td-footnote{font-size:var(--td-readable-small)!important;line-height:1.65!important}
+body.td-public .td-links a,
+body.td-public .td-foot-links a,
+body.td-public .td-nav a,
+body.td-public .td-btn,
+body.td-public button,
+body.td-public input,
+body.td-public select,
+body.td-public textarea{font-size:16px!important;line-height:1.5}
+body.td-public .td-kicker,
+body.td-public .td-eyebrow,
+body.td-public .td-badge,
+body.td-public .td-tag{font-size:14px!important;line-height:1.5}
+body.td-public h1{line-height:1.15}
+body.td-public h2{line-height:1.2}
+body.td-public h3{line-height:1.3}
+body.td-public :where(.td-card,.td-step,.td-faq-item,.td-plan,.td-panel) :where(p,li){line-height:1.75!important}
+body.td-public .td-footer,
+body.td-public footer{font-size:15px}
+body.td-public .td-footer :where(a,p,small,span),
+body.td-public footer :where(a,p,small,span){font-size:15px!important;line-height:1.6!important}
+body.td-public :where(a,button,input,select,textarea){scroll-margin-top:100px}
+body:not(.td-public) #app{font-size:16px}
+body:not(.td-public) #app :where(p,li,.muted,.hint,.helper,.field small,.form-hint,.empty-state,.card-description,.drawer-footer,.drawer-secure){font-size:15px!important;line-height:1.65}
+body:not(.td-public) #app :where(label,.field label,.toolbar p,.section-description){font-size:15px!important;line-height:1.5}
+body:not(.td-public) #app :where(input,select,textarea,button){font-size:16px}
+body:not(.td-public) #app :where(td,th){font-size:14px;line-height:1.55}
+body:not(.td-public) #app :where(.drawer-link b,.drawer-utility,.mobile-nav button,.side-menu-shell button){font-size:15px}
+body:not(.td-public) #auth :where(p,li,label,.auth-hint,.auth-message,.auth-card-copy,.auth-card-foot){font-size:15px;line-height:1.65}
+body:not(.td-public) #auth :where(input,button){font-size:16px}
+@media(max-width:600px){
+ body.td-public{font-size:17px!important}
+ body.td-public :where(p,li,dd){font-size:17px!important}
+ body.td-public :where(small,.td-muted,.td-note,.td-footnote){font-size:15px!important}
+ body:not(.td-public) #app :where(p,li,.muted,.hint,.helper,.field small,.form-hint,.empty-state,.card-description){font-size:15px!important}
+}
