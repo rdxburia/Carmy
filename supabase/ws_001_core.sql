@@ -245,6 +245,7 @@ grant select on public.ws_organizations, public.ws_staff to authenticated;
 grant insert, update, delete on public.ws_staff to authenticated;
 grant select on public.ws_audit_log, public.ws_platform_admins to authenticated;
 grant all on public.ws_organizations, public.ws_staff, public.ws_counters, public.ws_audit_log, public.ws_platform_admins to service_role;
+grant usage, select on sequence public.ws_organizations_garage_id_seq, public.ws_audit_log_id_seq to service_role;
 
 commit;
 
