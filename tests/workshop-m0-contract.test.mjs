@@ -24,11 +24,13 @@ test("workshop feature flag defaults off and is checked server-side by helper",(
  assert.match(server,/WORKSHOP_DISABLED/);
 });
 test("owner app uses shared session module without changing 120-second policy",()=>{
- const app=read("js/app.js"),index=read("index.html"),guard=read("js/session-guard.js");
+ const app=read("js/app.js"),index=read("index.html"),guard=read("js/session-guard.js"),sw=read("sw.js");
  assert.match(app,/const IDLE_MS=120000/);
  assert.match(app,/window\.CarmySessionGuard\.create/);
  assert.match(index,/js\/session-guard\.js\?v=2026\.10\.13-workshop-m0/);
  assert.match(guard,/lastWrite<5000/);
+ assert.match(sw,/torq-desk-shell-v2/);
+ assert.ok(sw.includes("js/session-guard.js?v=2026.10.13-workshop-m0"),"session guard must be precached");
  assert.match(guard,/carmy_last_activity/);
  assert.ok(guard.includes("isLogoutRequest=") && guard.includes("logout"),"logout bypass must remain");
 });
