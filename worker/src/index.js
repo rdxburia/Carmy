@@ -1,4 +1,5 @@
 import { requireUser, handleAuthError } from "./auth.js";
+import { createWorkshopOnboarding } from "./workshop-onboarding.js";
 import { error, json } from "./response.js";
 import { listVehicles, getVehicle, patchVehicleRc } from "./vehicles.js";
 import { listServiceHistory } from "./records.js";
@@ -104,6 +105,10 @@ export default {
 
       const ok = Object.values(checks).every((v) => v === "ok");
       return json({ ok, service: "carmy-api" }, ok ? 200 : 503, origin);
+    }
+
+    if (url.pathname === "/api/workshop-onboarding" && request.method === "POST") {
+      return createWorkshopOnboarding(request, env, origin);
     }
 
     let user;
