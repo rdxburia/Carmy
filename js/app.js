@@ -911,7 +911,7 @@ async function start(u){
  try{sessionStorage.removeItem('carmy_pending_verification_email')}catch(e){}
  $('auth').classList.add('hidden');
  document.body.classList.remove('td-auth-open');
- $('torqLanding')?.classList.remove('hidden');
+ $('torqLanding')?.classList.add('hidden');
  $('app').classList.add('hidden');
  $('userEmail').textContent=u.email;
  showAppLoading();
@@ -958,7 +958,7 @@ async function start(u){
    console.error('Dashboard boot failed:',e);
    hideAppLoading();
    $('app').classList.add('hidden');
-   $('auth').classList.remove('hidden');
+   showLogin();
    toast('Dashboard load failed: '+(e?.message||e),'error');
    startedUserId=null;
  }
