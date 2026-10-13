@@ -48,3 +48,9 @@ body:not(.td-public) #auth :where(input,button){font-size:16px}
  body.td-public :where(small,.td-muted,.td-note,.td-footnote){font-size:15px!important}
  body:not(.td-public) #app :where(p,li,.muted,.hint,.helper,.field small,.form-hint,.empty-state,.card-description){font-size:15px!important}
 }
+
+/* Standalone branded pages (About/Contact) and the public landing inside index.html. */
+body:not(.td-public) :where(main p,main li,main dd,.md-content p,.md-content li,.md-card p,.md-card li,.md-info-content p,.md-info-content li){font-size:17px!important;line-height:1.7!important}
+body:not(.td-public) :where(.md-page-nav a,.md-site-footer a,.md-footer-links a,.md-page-nav .md-nav-cta){font-size:15px!important;line-height:1.5}
+body:not(.td-public) :where(.md-eyebrow,.md-kicker,.md-meta,.md-card small,.md-page-nav small){font-size:14px!important;line-height:1.5}
+@media(max-width:600px){body:not(.td-public) :where(main p,main li,main dd,.md-content p,.md-content li,.md-card p,.md-card li,.md-info-content p,.md-info-content li){font-size:16px!important}}
