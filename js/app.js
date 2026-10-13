@@ -33,6 +33,7 @@ async function forceSignOut(reason='idle'){
   try{
     try{localStorage.setItem(IDLE_LOGOUT_KEY,String(Date.now()))}catch(e){}
     try{if(db)await db.auth.signOut({scope:'global'})}catch(err){console.error('Global sign-out failed:',err)}
+    try{if(window.firebase?.auth)await firebase.auth().signOut()}catch(err){console.error('Firebase sign-out failed:',err)}
     try{
       for(let i=localStorage.length-1;i>=0;i--){
         const key=localStorage.key(i);
@@ -776,6 +777,7 @@ $('authVerificationBack')?.addEventListener('click',()=>{
 async function handleAuthSubmit(ev){
  ev?.preventDefault();
  if(!db)return toast('Secure login is still connecting. Please wait a moment.','error');
+ if(!window.firebase?.auth)return toast('Firebase login library is unavailable. Refresh and try again.','error');
  const valid=validateAuthForm(true);
  updateAuthSubmitState();
  if(!valid)return toast('Please fix the highlighted fields.','error');
@@ -784,24 +786,47 @@ async function handleAuthSubmit(ev){
  if(!e)return toast('Enter your email address.','error');
  if(!p)return toast('Enter your password.','error');
  if(btn){btn.disabled=true;btn.dataset.loadingText=btn.textContent;btn.textContent=signup?'Creating account…':'Signing in…'}
+ let firebaseCreated=false;
  try{
-   const r=signup
-     ? await db.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl(),data:{full_name:$('fullName').value.trim(),phone:normalizeMobile($('mobile').value)}}})
-     : await db.auth.signInWithPassword({email:e,password:p});
-   if(r.error){toast(r.error.message||'Login failed. Please check your email and password.','error');return}
    if(signup){
-     if(r.data?.session){
-       toast('Account created and signed in.');
+     const created=await firebase.auth().createUserWithEmailAndPassword(e,p);
+     firebaseCreated=true;
+     const profile={full_name:$('fullName').value.trim(),phone:normalizeMobile($('mobile').value)};
+     try{
+       await created.user.updateProfile({displayName:profile.full_name});
+       await created.user.getIdToken(true);
+     }catch(profileErr){console.warn('Firebase profile metadata could not be updated.',profileErr)}
+     const legacy=await db.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl(),data:profile}});
+     if(legacy.error){
+       try{await created.user.delete()}catch(cleanupErr){console.warn('Could not remove unpaired Firebase account.',cleanupErr)}
+       firebaseCreated=false;
+       throw new Error(legacy.error.message||'Could not prepare the secure vehicle-data account.');
+     }
+     if(legacy.data?.session){
+       toast('Account created securely.');
      }else{
        showVerificationView(e);
      }
+   }else{
+     let firebaseError=null;
+     try{
+       await firebase.auth().signInWithEmailAndPassword(e,p);
+     }catch(err){firebaseError=err}
+     // Existing accounts created before Firebase remain supported through Supabase.
+     const legacy=await db.auth.signInWithPassword({email:e,password:p});
+     if(legacy.error){
+       if(firebaseError)throw new Error('Login failed. Check your email and password. If this is an older account, use its existing password.');
+       try{await firebase.auth().signOut()}catch{}
+       throw new Error(legacy.error.message||'Firebase sign-in worked, but the secure data account needs email verification. Check your inbox and try again.');
+     }
+     toast(firebaseError?'Signed in with your existing account.':'Signed in securely.');
    }
  }catch(err){
    console.error('Authentication error:',err);
-   toast('Login failed: '+(err?.message||'Please try again.'),'error');
+   toast(err?.message||'Login failed. Please try again.','error');
  }finally{
    if(btn){btn.disabled=false;btn.textContent=btn.dataset.loadingText|| (signup?'Create account':'Login')}
- } 
+ }
 }
 $('authBtn').onclick=handleAuthSubmit;
 $('password')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleAuthSubmit(e)});
