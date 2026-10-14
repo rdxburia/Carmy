@@ -20,14 +20,22 @@ try{
  await page.locator('#garageLoginForm button[type="submit"]').click();
  await page.waitForURL('**/garage-portal.html');
  for(const v of ['overview','jobs','estimates','invoices','customers','inventory','bookings','expenses','reports','staff']){
-  await page.locator('[data-gd-view="'+v+'"]').click();
-  await page.locator('[data-gd-panel="'+v+'"].active').waitFor();
+  await page.locator('.gd-sidebar button[data-gd-view="'+v+'"]').click();
+  const panel = page.locator('[data-gd-panel="'+v+'"]');
+  await panel.waitFor({state:'attached'});
+  await page.waitForFunction((name) => {
+    const el = document.querySelector('[data-gd-panel="'+name+'"]');
+    return !!el && el.classList.contains('active');
+  }, v, {timeout:5000}).catch(async () => {
+    const state = await panel.evaluate(el => ({classes:el.className, display:getComputedStyle(el).display}));
+    throw new Error('Garage navigation failed for "'+v+'": '+JSON.stringify(state));
+  });
  }
- await page.locator('[data-gd-view="jobs"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="jobs"]').click();
  await add('job',{customer:'QA Customer',phone:'9800000001',vehicle:'Test Car',reg:'QA-01',concern:'QA check',staff:'Ravi'},'jobs');
  await check(await page.locator('#table-jobs').getByText('QA Customer').count()>0,'Job create failed');
  await page.locator('#table-jobs [data-row-action="advance"]').last().click();
- await page.locator('[data-gd-view="estimates"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="estimates"]').click();
  await add('estimate',{customer:'QA Customer',job:'JOB-QA',parts:500,labour:250},'estimates');
  await check(await page.locator('#table-estimates').getByText('QA Customer').count()>0,'Estimate create failed');
  await page.locator('#table-estimates [data-row-action="approve"]').last().click();
@@ -36,30 +44,30 @@ try{
  await add('invoice',{customer:'QA Customer',job:'JOB-QA',amount:750},'invoices');
  await check(await page.locator('#table-invoices').getByText('QA Customer').count()>0,'Invoice create failed');
  await page.locator('#table-invoices [data-row-action="paid"]').last().click();
- await page.locator('[data-gd-view="customers"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="customers"]').click();
  await add('customer',{customer:'QA Customer Two',phone:'9800000002',vehicle:'Test Car',reg:'QA-02'},'customers');
  await check(await page.locator('#table-customers').getByText('QA Customer Two').count()>0,'Customer create failed');
  page.once('dialog',d=>d.accept()); await page.locator('#table-customers [data-row-action="delete"]').last().click();
  await check(await page.locator('#table-customers').getByText('QA Customer Two').count()===0,'Delete customer failed');
- await page.locator('[data-gd-view="inventory"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="inventory"]').click();
  await add('part',{part:'QA Filter',sku:'QA-1',category:'Filters',qty:8,reorder:2,cost:100,price:150},'inventory');
  await check(await page.locator('#table-inventory').getByText('QA Filter').count()>0,'Inventory create failed');
- await page.locator('[data-gd-view="bookings"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="bookings"]').click();
  await add('booking',{date:'2026-10-14',time:'11:30',customer:'QA Customer',vehicle:'QA-01',service:'QA service'},'bookings');
  await check(await page.locator('#table-bookings').getByText('QA service').count()>0,'Booking create failed');
- await page.locator('[data-gd-view="expenses"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="expenses"]').click();
  await add('expense',{date:'2026-10-14',description:'QA expense',amount:99},'expenses');
  await check(await page.locator('#table-expenses').getByText('QA expense').count()>0,'Expense create failed');
- await page.locator('[data-gd-view="staff"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="staff"]').click();
  await add('staff',{name:'QA Technician'},'staff');
  await check(await page.locator('#table-staff').getByText('QA Technician').count()>0,'Staff create failed');
  await add('profile',{name:'QA Workshop',city:'Shimla',phone:'9800000003'},'staff');
  await check(await page.locator('#profileSummary').getByText('QA Workshop').count()>0,'Profile save failed');
- await page.locator('[data-gd-view="reports"]').click();
+ await page.locator('.gd-sidebar button[data-gd-view="reports"]').click();
  const dl=page.waitForEvent('download'); await page.locator('#exportCsv').click();
  await check((await dl).suggestedFilename().endsWith('.csv'),'CSV export failed');
  await page.evaluate(()=>{window.__prints=0;window.open=()=>({document:{write(){},close(){}},focus(){},print(){window.__prints++}})});
- await page.locator('[data-gd-view="staff"]').click(); await page.locator('#printReport').click();
+ await page.locator('.gd-sidebar button[data-gd-view="staff"]').click(); await page.locator('#printReport').click();
  await check(await page.evaluate(()=>window.__prints)===1,'Print action failed');
  await page.route('https://wa.me/**',r=>r.abort()); await page.locator('#sendSummary').click();
  await check(await page.locator('#gdToast').isVisible(),'Share action failed');
