@@ -13,7 +13,7 @@ while IFS= read -r -d '' source; do
     exit 1
   fi
 done < <(find . -maxdepth 1 -type f -name '*.html' -print0)
-for page in index.html features.html how-it-works.html pricing.html for-workshops.html faq.html about.html terms.html privacy.html contact.html garage-login.html garage-portal.html; do
+for page in index.html features.html how-it-works.html pricing.html for-workshops.html faq.html about.html terms.html privacy.html contact.html garage-login.html garage-portal.html garage-onboarding.html; do
   if ! grep -q 'td-shared-header' "_site/$page"; then
     echo "ERROR: shared header missing from deployed $page" >&2
     exit 1
