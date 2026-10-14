@@ -21,7 +21,15 @@ try{
  await page.waitForURL('**/garage-portal.html');
  for(const v of ['overview','jobs','estimates','invoices','customers','inventory','bookings','expenses','reports','staff']){
   await page.locator('[data-gd-view="'+v+'"]').click();
-  await page.locator('[data-gd-panel="'+v+'"].active').waitFor();
+  const panel = page.locator('[data-gd-panel="'+v+'"]');
+  await panel.waitFor({state:'attached'});
+  await page.waitForFunction((name) => {
+    const el = document.querySelector('[data-gd-panel="'+name+'"]');
+    return !!el && el.classList.contains('active');
+  }, v, {timeout:5000}).catch(async () => {
+    const state = await panel.evaluate(el => ({classes:el.className, display:getComputedStyle(el).display}));
+    throw new Error('Garage navigation failed for "'+v+'": '+JSON.stringify(state));
+  });
  }
  await page.locator('[data-gd-view="jobs"]').click();
  await add('job',{customer:'QA Customer',phone:'9800000001',vehicle:'Test Car',reg:'QA-01',concern:'QA check',staff:'Ravi'},'jobs');
