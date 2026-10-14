@@ -90,6 +90,9 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
+          AWS_S3_ADDRESSING_STYLE: path
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
         run: |
           set -euo pipefail
           mkdir -p backup-work/r2
@@ -133,7 +136,7 @@ jobs:
           set -euo pipefail
           mkdir -p backup-work/r2/documents
           if aws s3api list-objects-v2               --bucket "$R2_BUCKET"               --prefix "documents/"               --endpoint-url "$R2_S3_ENDPOINT"               --query 'Contents[0].Key'               --output text | grep -q '^documents/'; then
-            aws s3 sync               "s3://$R2_BUCKET/documents/"               "backup-work/r2/documents/"               --endpoint-url "$R2_S3_ENDPOINT"               --only-show-errors
+            aws s3 sync               "s3://$R2_BUCKET/documents/"               "backup-work/r2/documents/"               --region auto               --endpoint-url "$R2_S3_ENDPOINT"               --no-progress               --only-show-errors
           else
             echo "No R2 documents found."
           fi
