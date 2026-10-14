@@ -20,7 +20,7 @@ try{
  await page.locator('#garageLoginForm button[type="submit"]').click();
  await page.waitForURL('**/garage-portal.html');
  for(const v of ['overview','jobs','estimates','invoices','customers','inventory','bookings','expenses','reports','staff']){
-  await page.locator('[data-gd-view="'+v+'"]').click();
+  await page.locator('[data-gd-view="'+v+'"]:visible').first().click();
   const panel = page.locator('[data-gd-panel="'+v+'"]');
   await panel.waitFor({state:'attached'});
   await page.waitForFunction((name) => {
