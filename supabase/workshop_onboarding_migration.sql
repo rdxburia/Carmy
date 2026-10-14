@@ -38,4 +38,11 @@ alter table public.ws_onboarding_applications
  add column if not exists pan text,
  add column if not exists team jsonb not null default '[]'::jsonb,
  add column if not exists logo_filename text;
+
+-- The API uses pending_approval for new applications; keep the database constraint aligned.
+alter table public.ws_onboarding_applications
+ drop constraint if exists ws_onboarding_applications_status_check;
+alter table public.ws_onboarding_applications
+ add constraint ws_onboarding_applications_status_check
+ check (status in ('new','pending_approval','contacted','approved','rejected','converted'));
 commit;
