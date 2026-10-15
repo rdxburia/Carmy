@@ -821,7 +821,7 @@ async function boot(){
    s={data:{session:null}};
  }
  accessToken=s.data.session?.access_token||'';
- if(s.data.session){writeIdleActivity(true);user=s.data.session.user;if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return;}start(s.data.session.user)}
+ if(s.data.session){writeIdleActivity(true);user=s.data.session.user;void touchServerSessionActivity(true);start(s.data.session.user)}
  else showPublicLanding();
  db.auth.onAuthStateChange((event,nextSession)=>{
    // Supabase warns against awaiting other Supabase calls inside this callback:
@@ -835,7 +835,7 @@ async function boot(){
          return;
        }
        user=nextSession.user;
-       if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return}
+       void touchServerSessionActivity(true);
        start(nextSession.user);
      }else{
        accessToken='';
@@ -938,11 +938,17 @@ async function start(u){
    hideAppLoading();
    ensureSecurityPassword();
  }catch(e){
-   console.error('Dashboard boot failed:',e);
+   console.error('Dashboard data load failed; keeping the authenticated session:',e);
    hideAppLoading();
-   $('app').classList.add('hidden');
-   showLogin();
-   toast('Dashboard load failed: '+(e?.message||e),'error');
+   // A temporary API/data endpoint failure must not turn a valid login into a logout loop.
+   // Keep the user signed in and expose the dashboard shell so they can retry or navigate.
+   $('app').classList.remove('hidden');
+   $('auth').classList.add('hidden');
+   $('torqLanding')?.classList.add('hidden');
+   document.body.classList.remove('td-auth-open');
+   let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
+   try{await nav('dashboard')}catch(renderErr){console.error('Dashboard fallback render failed:',renderErr)}
+   toast('You are signed in, but some data could not load. Check your connection and refresh to retry.','error');
    startedUserId=null;
  }
 }
