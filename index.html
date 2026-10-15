@@ -189,21 +189,31 @@
 </div>
 <footer class="md-site-footer md-auth-footer" aria-label="Torq Desk footer"><div class="md-footer-inner"><span class="md-footer-copy">© 2026 Torq Desk</span><nav class="md-footer-links" aria-label="Company information"><a href="about.html">About</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="contact.html">Contact</a></nav></div></footer>
 <div id="app" class="hidden"><header class="top"><a class="brand" id="brandHome" href="#dashboard" title="Go to Home" aria-label="Go to Home"><img class="brand-logo" src="assets/torqdesk-logo.svg?v=2026.10.13-workshop-m0" alt="Torq Desk"></a><div class="top-actions"><span id="userEmail" class="muted"></span><button id="headerLogout" class="ghost header-logout" type="button">Sign Out</button><button id="menuToggle" class="menu-toggle" aria-label="Open navigation menu" aria-expanded="false"><span></span><span></span><span></span></button></div></header>
-<div id="sideMenu" class="side-menu-shell" aria-hidden="true">
-  <div class="side-menu-backdrop" id="sideMenuBackdrop"></div>
-  <aside class="side-drawer" aria-label="Main navigation">
-    <div class="drawer-head"><button class="drawer-brand" id="drawerBrandHome" type="button" aria-label="Go to Home"><img class="drawer-brand-mark" src="assets/torqdesk-icon.svg?v=2026.10.13-workshop-m0" alt=""><div><div class="drawer-kicker">TORQ DESK</div><h3>Vehicle Overview</h3><small id="drawerUser">Private account</small></div></button></div><button class="drawer-close" id="menuClose" aria-label="Close menu">×</button>
-    <div class="drawer-car" id="drawerCar"><span class="drawer-car-icon">⌁</span><div><b id="drawerCarReg">No Vehicle</b><small id="drawerCarModel">Select a vehicle</small></div></div>
-    <nav class="drawer-nav">
-      <button class="drawer-link active" data-view="dashboard"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-home"/></svg><div><b>Overview</b><em>Garage dashboard</em></div></button>
-      <button class="drawer-link" data-view="cars"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-car"/></svg><div><b>My Vehicles</b><em>Cars &amp; ownership</em></div></button>
-      <button class="drawer-link" data-view="history"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-wrench"/></svg><div><b>Service &amp; Maintenance</b><em>Records &amp; repairs</em></div></button>
-      <button class="drawer-link" data-view="docs"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-file"/></svg><div><b>Documents</b><em>Private glovebox &amp; vault</em></div></button>
-      <button class="drawer-link" data-view="owner"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-shield"/></svg><div><b>Account &amp; Security</b><em>Identity &amp; session lock</em></div></button>
-    </nav>
-    <div class="drawer-footer"><button class="drawer-utility" data-view="owner">Owner Profile</button><button class="drawer-utility logout-drawer" id="drawerLogout">Sign Out</button><div class="drawer-secure">Private cloud garage <span>●</span></div></div>
-  </aside>
-</div><div class="layout"><aside>
+  <div id="sideMenu" class="side-menu-shell" aria-hidden="true">
+    <div class="side-menu-backdrop" id="sideMenuBackdrop"></div>
+    <aside class="side-drawer" aria-label="Main navigation">
+      <div class="drawer-head">
+        <button class="drawer-brand" id="drawerBrandHome" type="button" aria-label="Go to Home">
+          <img class="drawer-brand-mark" src="assets/torqdesk-icon.svg?v=2026.10.13-workshop-m0" alt="">
+          <div>
+            <div class="drawer-kicker">TORQ DESK</div>
+            <h3>Vehicle Overview</h3>
+            <small id="drawerUser">Private account</small>
+          </div>
+        </button>
+        <button class="drawer-close" id="menuClose" aria-label="Close menu" type="button">×</button>
+      </div>
+      <div class="drawer-car" id="drawerCar"><span class="drawer-car-icon">⌁</span><div><b id="drawerCarReg">No Vehicle</b><small id="drawerCarModel">Select a vehicle</small></div></div>
+      <nav class="drawer-nav">
+        <button class="drawer-link active" data-view="dashboard"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-home"/></svg><div class="drawer-link-text"><b>Overview</b><em>Garage dashboard</em></div></button>
+        <button class="drawer-link" data-view="cars"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-car"/></svg><div class="drawer-link-text"><b>My Vehicles</b><em>Cars &amp; ownership</em></div></button>
+        <button class="drawer-link" data-view="history"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-wrench"/></svg><div class="drawer-link-text"><b>Service &amp; Maintenance</b><em>Records &amp; repairs</em></div></button>
+        <button class="drawer-link" data-view="docs"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-file"/></svg><div class="drawer-link-text"><b>Documents</b><em>Private glovebox &amp; vault</em></div></button>
+        <button class="drawer-link" data-view="owner"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-shield"/></svg><div class="drawer-link-text"><b>Account &amp; Security</b><em>Identity &amp; session lock</em></div></button>
+      </nav>
+      <div class="drawer-footer"><button class="drawer-utility" data-view="owner">Owner Profile</button><button class="drawer-utility logout-drawer" id="drawerLogout">Sign Out</button><div class="drawer-secure">Private cloud garage <span>●</span></div></div>
+    </aside>
+  </div><div class="layout"><aside>
 <button class="active" data-view="dashboard"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-home"/></svg><span>Overview</span></button>
 <button data-view="cars"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-car"/></svg><span>My Vehicles</span></button>
 <button data-view="history"><svg class="nav-icon" aria-hidden="true"><use href="#td-icon-wrench"/></svg><span>Service &amp; Maintenance</span></button>
