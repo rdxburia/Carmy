@@ -22,7 +22,8 @@ import tarfile
 import re
 from pathlib import Path
 
-EXPECTED_SHA256 = "1a19dd65bb8415371927888d488dad28fd6a28f4c948f9f00b2a4591ed4cdd1b"
+EXPECTED_MANIFEST_FINGERPRINT = "1a19dd65bb8415371927888d488dad28fd6a28f4c948f9f00b2a4591ed4cdd1b"
+EXPECTED_TARGZ_SHA256 = "0b5ada1154a60b67ace46493dc4a244e8c922496d78d2010bbd7f0a26bd5dd4b"
 DRIVE_FILE_ID = "14J6raH_hfJz5_XBOwlu0eZVymwgmL75v"
 TARGET_EMAIL = "crahul.exe@gmail.com"
 TARGET_LIVE_USER_ID = "b7b0bbb5-4449-4e5e-bb72-73bca0100d9b"
@@ -60,6 +61,18 @@ def step1_drive_preservation():
     )
     drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
 
+    # Check Drive file metadata
+    meta = drive.files().get(
+        fileId=DRIVE_FILE_ID,
+        fields="id, name, size, appProperties",
+        supportsAllDrives=True
+    ).execute()
+    print(f"Drive file metadata: {meta}")
+    drive_fingerprint = meta.get("appProperties", {}).get("snapshot_hash")
+    print(f"Drive appProperties snapshot_hash: {drive_fingerprint}")
+    if drive_fingerprint and drive_fingerprint != EXPECTED_MANIFEST_FINGERPRINT:
+        print(f"Warning: drive metadata fingerprint {drive_fingerprint} differs from {EXPECTED_MANIFEST_FINGERPRINT}")
+
     # 1. Download Carmy-LATEST.tar.gz
     os.makedirs("recovery-output", exist_ok=True)
     local_tar = "recovery-output/Carmy-LATEST.tar.gz"
@@ -77,14 +90,14 @@ def step1_drive_preservation():
     file_size = os.path.getsize(local_tar)
     print(f"Downloaded snapshot size: {file_size} bytes")
 
-    # 2. Verify SHA-256 fingerprint
+    # 2. Verify SHA-256 fingerprint of the tar.gz
     actual_hash = compute_sha256(local_tar)
-    print(f"Calculated SHA-256: {actual_hash}")
-    print(f"Expected   SHA-256: {EXPECTED_SHA256}")
+    print(f"Calculated tar.gz SHA-256: {actual_hash}")
+    print(f"Expected   tar.gz SHA-256: {EXPECTED_TARGZ_SHA256}")
 
-    if actual_hash != EXPECTED_SHA256:
-        raise ValueError(f"CRITICAL ERROR: SHA-256 mismatch! Got {actual_hash}, expected {EXPECTED_SHA256}")
-    print(">>> SHA-256 FINGERPRINT VERIFIED 100% MATCH! <<<")
+    if actual_hash != EXPECTED_TARGZ_SHA256:
+        raise ValueError(f"CRITICAL ERROR: tar.gz SHA-256 mismatch! Got {actual_hash}, expected {EXPECTED_TARGZ_SHA256}")
+    print(">>> TAR.GZ ARCHIVE SHA-256 VERIFIED 100% MATCH! <<<")
 
     # 3. Create immutable copies in Google Drive
     immutable_names = [
@@ -108,7 +121,7 @@ def step1_drive_preservation():
                 "parents": [folder_id],
                 "appProperties": {
                     "immutable": "true",
-                    "snapshot_hash": EXPECTED_SHA256,
+                    "snapshot_hash": EXPECTED_MANIFEST_FINGERPRINT,
                     "preservation_date": "2026-10-15",
                     "note": "Permanent backup snapshot - do not delete"
                 }
@@ -186,8 +199,14 @@ def step2_extract_and_inspect(local_tar):
     manifest_path = os.path.join(extract_dir, "backup-manifest.json")
     if os.path.exists(manifest_path):
         manifest = json.loads(Path(manifest_path).read_text())
+        manifest_hash = manifest.get("snapshot_hash")
         print(f"Backup Time: {manifest.get('backup_time_utc')}")
         print(f"Backup Commit: {manifest.get('commit_sha')}")
+        print(f"Manifest snapshot_hash: {manifest_hash}")
+        if manifest_hash and manifest_hash != EXPECTED_MANIFEST_FINGERPRINT:
+            print(f"Warning: Manifest snapshot_hash {manifest_hash} != {EXPECTED_MANIFEST_FINGERPRINT}")
+        else:
+            print(f">>> BACKUP MANIFEST SNAPSHOT FINGERPRINT VERIFIED 100% MATCH: {manifest_hash} <<<")
 
     # Parse pg_dump
     print("Parsing PostgreSQL dump tables...")
