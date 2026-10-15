@@ -1,2 +1,4 @@
 # Private customer document fixtures must never be committed
 tests/fixtures/local/
+node_modules/
+package-lock.json

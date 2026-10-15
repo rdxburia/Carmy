@@ -172,7 +172,8 @@ export default {
 
       if (request.method === "GET" && parts[0] === "service-history") {
         const carId = url.searchParams.get("car_id");
-        return json({ ok: true, data: await listServiceHistory(env, user, userToken, carId) }, 200, origin);
+        const bypassCache = url.searchParams.get("bypass_cache") === "1" || request.headers.get("cache-control") === "no-cache";
+        return json({ ok: true, data: await listServiceHistory(env, user, userToken, carId, bypassCache) }, 200, origin);
       }
 
       if (request.method === "GET" && parts[0] === "documents") {
