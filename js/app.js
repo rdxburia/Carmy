@@ -1786,9 +1786,33 @@ function handleDocumentActionClick(event){
 document.addEventListener('click',handleDocumentActionClick,true);
 
 function renderDocRow(d){
- let [status,cls]=docStatus(d),title=docTypeLabel(d);
- return '<div class="doc-row '+cls+'"><div class="doc-icon">'+(d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄')+'</div><div class="doc-main"><b>'+esc(title)+'</b><span>'+esc(d.file_name)+'</span><small>Uploaded: '+formatDateNice(d.created_at?.slice(0,10))+'</small>'+(d.document_expiry?'<span class="doc-expiry">'+(status==='Expired'?'Expired on':'Expiry')+' '+esc(formatDateNice(d.document_expiry))+'</span>':'')+'<span class="doc-badge '+cls+'">'+status+'</span>'+(d.archived_at?'<em>Archive: '+esc(d.archive_name||'Year Wise')+'</em>':'')+'</div><div class="doc-actions"><button type="button" class="ghost" onclick="openDocumentPreview(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\',\''+d.file_name.replace(/'/g,"\\'")+'\')">Preview</button><button type="button" class="ghost" onclick="downloadDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button><button type="button" class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\','+(d.archived_at?'true':'false')+')">Delete</button></div></div>';
+ let [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄';
+ const safePath=(d.storage_path||'').replace(/'/g,"\\'");
+ const safeName=(d.file_name||'').replace(/'/g,"\\'");
+ return '<div class="doc-row '+cls+'">'+
+   '<div class="doc-row-body">'+
+     '<div class="doc-icon-wrap"><span class="doc-icon">'+icon+'</span></div>'+
+     '<div class="doc-details">'+
+       '<div class="doc-title-row">'+
+         '<h4 class="doc-title">'+esc(title)+'</h4>'+
+         '<span class="doc-badge '+cls+'">'+status+'</span>'+
+       '</div>'+
+       '<div class="doc-filename" title="'+esc(d.file_name||'')+'">'+esc(d.file_name||'Untitled document')+'</div>'+
+       '<div class="doc-meta-row">'+
+         '<span class="doc-meta-item">Uploaded: '+formatDateNice(d.created_at?.slice(0,10))+'</span>'+
+         (d.document_expiry?'<span class="doc-meta-item doc-expiry '+(status==='Expired'?'expired':'')+'">'+(status==='Expired'?'Expired: ':'Expiry: ')+esc(formatDateNice(d.document_expiry))+'</span>':'')+
+         (d.archived_at?'<span class="doc-meta-archive">Archive: '+esc(d.archive_name||'Year Wise')+'</span>':'')+
+       '</div>'+
+     '</div>'+
+   '</div>'+
+   '<div class="doc-actions">'+
+     '<button type="button" class="ghost" onclick="openDocumentPreview(\''+d.id+'\',\''+safePath+'\',\''+safeName+'\')">Preview</button>'+
+     '<button type="button" class="ghost" onclick="downloadDoc(\''+d.id+'\',\''+safePath+'\')">Download</button>'+
+     '<button type="button" class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+safePath+'\','+(d.archived_at?'true':'false')+')">Delete</button>'+
+   '</div>'+
+ '</div>';
 }
+window.renderDocRow=renderDocRow;
 async function docsView(){
  if(!car){
   const dl=$('docList');if(dl)dl.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle first to view its private document vault.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
