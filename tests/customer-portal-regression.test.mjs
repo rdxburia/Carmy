@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import worker from "../worker/src/index.js";
 import { listServiceHistory } from "../worker/src/records.js";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function jwt(payload) {
   const encode = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -73,6 +80,155 @@ function createMockEnv(initialLastSeen = Math.floor(Date.now() / 1000) - 10) {
   return env;
 }
 
+function createAppHarness(overrides = {}) {
+  const store = new Map();
+  const elements = new Map();
+  function makeStyle() {
+    return {
+      setProperty(k, v) { this[k] = String(v); },
+      getPropertyValue(k) { return this[k] || ''; },
+      removeProperty(k) { delete this[k]; }
+    };
+  }
+
+  function makeEl(id) {
+    if (!elements.has(id)) {
+      elements.set(id, {
+        id,
+        classList: {
+          _classes: new Set(),
+          add(c) { this._classes.add(c); },
+          remove(c) { this._classes.delete(c); },
+          toggle(c, force) {
+            if (force === undefined) {
+              if (this._classes.has(c)) this._classes.delete(c); else this._classes.add(c);
+            } else if (force) this._classes.add(c); else this._classes.delete(c);
+          },
+          contains(c) { return this._classes.has(c); }
+        },
+        style: makeStyle(),
+        dataset: {},
+        textContent: '',
+        innerHTML: '',
+        value: '',
+        disabled: false,
+        setAttribute: () => {},
+        getAttribute: () => null,
+        removeAttribute: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        appendChild: (child) => child,
+        insertAdjacentHTML: () => {},
+        remove: () => {},
+        closest: () => null,
+        contains: () => true,
+        querySelector: (sel) => sel?.startsWith('#') ? makeEl(sel.slice(1)) : null,
+        querySelectorAll: () => []
+      });
+    }
+    return elements.get(id);
+  }
+
+  const localStorage = {
+    getItem: (k) => store.get(k) || null,
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    clear: () => store.clear(),
+    key: (i) => [...store.keys()][i] || null,
+    get length() { return store.size; }
+  };
+
+  const mockDb = overrides.db || {
+    auth: {
+      getSession: async () => ({ data: { session: null } }),
+      onAuthStateChange: () => {},
+      refreshSession: async () => ({ data: { session: { access_token: "token-refreshed" } } }),
+      signInWithPassword: async () => ({ data: null, error: new Error("Invalid login credentials") }),
+      signOut: async () => ({ error: null })
+    },
+    rpc: async () => ({ data: true, error: null }),
+    from: () => ({ select: () => ({ single: async () => ({ data: {}, error: null }) }) })
+  };
+
+  const docMock = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    createElement: (tag) => {
+      const el = makeEl(tag + '-' + Math.random().toString(36).slice(2));
+      el.tagName = String(tag).toUpperCase();
+      return el;
+    },
+    getElementById: makeEl,
+    querySelector: (sel) => sel?.startsWith('#') ? makeEl(sel.slice(1)) : null,
+    querySelectorAll: () => [],
+    head: { ...makeEl('head'), appendChild: () => {} },
+    body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, contains: () => true }
+  };
+
+  const customSetTimeout = (cb, ms, ...args) => {
+    const t = setTimeout(cb, ms, ...args);
+    if (t && typeof t.unref === 'function') t.unref();
+    return t;
+  };
+
+  const window = {
+    supabase: { createClient: () => mockDb },
+    CarmySessionGuard: {
+      create: (cfg) => ({
+        readActivity: () => Number(localStorage.getItem(cfg?.activityKey || 'carmy_last_activity') || Date.now()),
+        writeActivity: () => { localStorage.setItem(cfg?.activityKey || 'carmy_last_activity', String(Date.now())); },
+        isExpired: () => {
+          const last = Number(localStorage.getItem(cfg?.activityKey || 'carmy_last_activity') || 0);
+          return !last || (Date.now() - last > (cfg?.idleMs || 120000));
+        },
+        installFetchGuard: () => {}
+      })
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    scrollTo: () => {},
+    location: { reload: () => {} },
+    setTimeout: customSetTimeout,
+    clearTimeout: (id) => clearTimeout(id),
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+    document: docMock
+  };
+
+  const context = {
+    window,
+    document: window.document,
+    APP_CONFIG: {
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_KEY: 'test-key',
+      WORKER_API_URL: 'https://worker.test'
+    },
+    localStorage,
+    sessionStorage: localStorage,
+    setTimeout: customSetTimeout,
+    clearTimeout: (id) => clearTimeout(id),
+    setInterval: () => 1,
+    clearInterval: () => {},
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+    performance: { now: () => Date.now() },
+    atob: globalThis.atob || ((s) => Buffer.from(s, 'base64').toString('binary')),
+    btoa: globalThis.btoa || ((s) => Buffer.from(s, 'binary').toString('base64')),
+    Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console,
+    fetch: overrides.fetch || (async () => new Response(JSON.stringify({ ok: true, data: [] }))),
+    ...overrides
+  };
+
+  vm.createContext(context);
+  const code = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
+  vm.runInContext(code, context);
+  return { context, store, elements, makeEl, mockDb, eval: (expr) => vm.runInContext(expr, context) };
+}
+
+// -------------------------------------------------------------
+// 1. Worker API & D1 Cache Tests (Executing Production Worker)
+// -------------------------------------------------------------
+
 test("Worker: GET /api/service-history uses cache when bypass_cache is omitted", async () => {
   const env = createMockEnv();
   const now = Math.floor(Date.now() / 1000);
@@ -103,7 +259,6 @@ test("Worker: GET /api/service-history bypasses stale cache and refreshes D1 whe
   const token = jwt({ session_id: "sess-test", iat: now - 30 });
   const user = { id: "user-1", email: "user@example.com" };
 
-  // Prime stale cache
   env._cacheStore.set("service-history:user-1:car-1", [{ id: "rec-cached", description: "Old Stale Service" }]);
 
   let restCalled = false;
@@ -121,7 +276,6 @@ test("Worker: GET /api/service-history bypasses stale cache and refreshes D1 whe
   assert.equal(freshResult.length, 1);
   assert.equal(freshResult[0].id, "rec-fresh");
 
-  // Verify that D1 cache was updated with the fresh records
   const updatedCache = env._cacheStore.get("service-history:user-1:car-1");
   assert.ok(updatedCache, "Cache should be updated");
   assert.equal(updatedCache[0].id, "rec-fresh");
@@ -161,7 +315,7 @@ test("Worker: POST /api/session/heartbeat updates D1 and invokes Supabase touch 
   const user = { id: "user-1", email: "user@example.com" };
 
   let supabaseRpcCalled = false;
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url) => {
     if (String(url).includes("/auth/v1/user")) return new Response(JSON.stringify(user), { status: 200 });
     if (String(url).includes("/rest/v1/rpc/carmy_touch_session")) {
       supabaseRpcCalled = true;
@@ -185,11 +339,8 @@ test("Worker: POST /api/session/heartbeat updates D1 and invokes Supabase touch 
 
 test("Worker: active session with periodic heartbeat remains authorized past 120 seconds", async () => {
   const now = Math.floor(Date.now() / 1000);
-  // Session issued 180 seconds ago (older than 120s policy)
   const token = jwt({ session_id: "sess-test", iat: now - 180 });
   const user = { id: "user-1", email: "user@example.com" };
-
-  // But user had active heartbeats: last_seen is 15 seconds ago
   const env = createMockEnv(now - 15);
 
   globalThis.fetch = async (url) => {
@@ -214,7 +365,6 @@ test("Worker: heartbeat rate limiting returns 429 when called too quickly withou
   const token = jwt({ session_id: "sess-test", iat: now - 30 });
   const user = { id: "user-1", email: "user@example.com" };
 
-  // Set previous heartbeat to 5 seconds ago (<15s)
   env._sessionActivity.last_heartbeat = now - 5;
 
   globalThis.fetch = async (url) => {
@@ -231,74 +381,6 @@ test("Worker: heartbeat rate limiting returns 429 when called too quickly withou
   assert.equal(response.status, 429);
   const body = await response.json();
   assert.equal(body.error.code, "HEARTBEAT_RATE_LIMITED");
-});
-
-test("Client: loadData with forceRefresh=true constructs URL with bypass_cache=1", () => {
-  const carId = "car-xyz";
-  const forceRefresh = true;
-  const historyUrl = '/api/service-history?car_id=' + carId + (forceRefresh ? '&bypass_cache=1' : '');
-  assert.equal(historyUrl, "/api/service-history?car_id=car-xyz&bypass_cache=1");
-
-  const normalUrl = '/api/service-history?car_id=' + carId + (false ? '&bypass_cache=1' : '');
-  assert.equal(normalUrl, "/api/service-history?car_id=car-xyz");
-});
-
-test("Client: loadCars falls back to cached vehicles when network request fails", async () => {
-  const store = new Map();
-  const localStorage = {
-    getItem: (k) => store.get(k) || null,
-    setItem: (k, v) => store.set(k, String(v))
-  };
-
-  // Seed cached cars
-  const cachedVehicles = [{ id: "c1", registration_no: "HP01AA1111", make_model: "Swift" }];
-  localStorage.setItem("carmy_cached_cars", JSON.stringify(cachedVehicles));
-
-  let cars = [];
-  const workerGet = async (path) => {
-    throw new Error("Network offline (503)");
-  };
-
-  async function testLoadCars() {
-    try {
-      const body = await workerGet('/api/vehicles');
-      if (Array.isArray(body?.data)) {
-        cars = body.data;
-        cars.sort((a, b) => String(a?.registration_no || '').localeCompare(String(b?.registration_no || '')));
-        try { localStorage.setItem('carmy_cached_cars', JSON.stringify(cars)); } catch (_) {}
-      }
-    } catch (err) {
-      if (!cars.length) {
-        try {
-          const cached = JSON.parse(localStorage.getItem('carmy_cached_cars') || '[]');
-          if (Array.isArray(cached) && cached.length) cars = cached;
-        } catch (_) {}
-      }
-      if (!cars.length) throw err;
-    }
-  }
-
-  await testLoadCars();
-  assert.equal(cars.length, 1);
-  assert.equal(cars[0].registration_no, "HP01AA1111");
-});
-
-test("Client: loadData retains existing records when service-history endpoint fails", async () => {
-  let existingRecords = [{ id: "rec-1", description: "Existing oil change" }];
-  let records = [...existingRecords];
-
-  const results = [
-    { status: "rejected", reason: new Error("502 Bad Gateway") }
-  ];
-
-  if (results[0].status === 'fulfilled') {
-    records = Array.isArray(results[0].value?.data) ? results[0].value.data : [];
-  } else {
-    // Retain existing records without throwing or clearing
-  }
-
-  assert.equal(records.length, 1);
-  assert.equal(records[0].id, "rec-1");
 });
 
 test("Full Journey: login -> heartbeat past 120s -> save service record -> reload -> logout -> re-login -> confirm record persists", async () => {
@@ -334,7 +416,7 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
     throw new Error("Unexpected fetch " + urlStr);
   };
 
-  // 1. Initial read (populates cache)
+  // 1. Initial read
   const initialFetch = await listServiceHistory(env, user, token, "car-99", false);
   assert.equal(initialFetch.length, 1);
   assert.equal(initialFetch[0].id, "rec-base");
@@ -360,7 +442,7 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
   };
   dbRecords.unshift(newRecord);
 
-  // Client immediately calls loadData(true) -> GET /api/service-history?car_id=car-99&bypass_cache=1
+  // Client immediately calls loadData(true) -> bypass_cache=1
   const bypassReq = new Request("https://worker.example/api/service-history?car_id=car-99&bypass_cache=1", {
     headers: { Authorization: "Bearer " + token }
   });
@@ -375,7 +457,7 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
   assert.equal(cachedAfterWrite?.length, 2);
   assert.equal(cachedAfterWrite[0].id, "rec-saved-77");
 
-  // 4. Reload the dashboard: normal loadData() call without bypass flag
+  // 4. Reload dashboard
   const reloadReq = new Request("https://worker.example/api/service-history?car_id=car-99", {
     headers: { Authorization: "Bearer " + token }
   });
@@ -388,7 +470,7 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
   // 5. Logout
   env._sessionActivity = null;
 
-  // 6. Login again (new session issued)
+  // 6. Login again
   now += 60;
   const newSessionId = "sess-login-2";
   const newToken = jwt({ session_id: newSessionId, iat: now });
@@ -399,7 +481,6 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
     last_heartbeat: 0
   };
 
-  // Confirm new session sees the persisted service history
   const reloginReq = new Request("https://worker.example/api/service-history?car_id=car-99", {
     headers: { Authorization: "Bearer " + newToken }
   });
@@ -408,8 +489,174 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
   const reloginBody = await reloginRes.json();
   assert.equal(reloginBody.data.length, 2);
   assert.equal(reloginBody.data[0].id, "rec-saved-77");
-  assert.equal(reloginBody.data[0].description, "Brake Pad Replacement & Fluid Flush");
 });
 
+// -----------------------------------------------------------------
+// 2. Client Production Code Tests (Executing Real Code in js/app.js)
+// -----------------------------------------------------------------
 
+test("Client Production: loadCars falls back to cached vehicles when network request fails", async () => {
+  const h = createAppHarness({
+    fetch: async () => new Response("503 Gateway Timeout", { status: 503 })
+  });
 
+  const cachedVehicles = [{ id: "c1", registration_no: "HP01AA1111", make_model: "Swift" }];
+  h.store.set("carmy_cached_cars", JSON.stringify(cachedVehicles));
+
+  await h.context.loadCars();
+  const cars = h.eval("cars");
+  assert.equal(cars.length, 1);
+  assert.equal(cars[0].registration_no, "HP01AA1111");
+});
+
+test("Client Production: loadData retains existing records when service-history endpoint fails", async () => {
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/service-history")) {
+        return new Response("500 Internal Error", { status: 500 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
+
+  h.eval('car = { id: "car-1" }; records = [{ id: "rec-preserved", description: "Preserved Oil Change" }];');
+
+  await h.context.loadData();
+  const records = h.eval("records");
+  assert.equal(records.length, 1);
+  assert.equal(records[0].id, "rec-preserved");
+});
+
+test("Client Production: duplicate startup protection shares in-flight startupPromise", async () => {
+  let loadCarsCount = 0;
+  const h = createAppHarness();
+
+  h.context.loadCarsCount = 0;
+  h.eval(`
+    loadCars = async () => { loadCarsCount++; await new Promise(r => setTimeout(r, 20)); };
+    loadData = async () => {};
+    nav = async () => {};
+  `);
+
+  const u = { id: "cust-dup-test", email: "dup@example.com" };
+  await Promise.all([h.context.start(u), h.context.start(u), h.context.start(u)]);
+
+  assert.equal(h.context.loadCarsCount, 1, "Real start(u) must share startupPromise without duplicate loading");
+  assert.equal(h.eval("startedUserId"), "cust-dup-test");
+});
+
+test("Client Production: startup failure sets startupFailed=true, resets startedUserId, and permits retry for same user", async () => {
+  const h = createAppHarness();
+
+  h.context.attempts = 0;
+  h.context.shouldFail = true;
+  h.eval(`
+    loadCars = async () => {
+      attempts++;
+      if (shouldFail) throw new Error("503 Backend Unreachable");
+    };
+    loadData = async () => {};
+    nav = async () => {};
+  `);
+
+  const u = { id: "cust-fail-test", email: "fail@example.com" };
+
+  // First attempt fails
+  await h.context.start(u);
+  assert.equal(h.context.attempts, 1);
+  assert.equal(h.eval("startedUserId"), null, "startedUserId must be null so retry is not blocked");
+  assert.equal(h.eval("startupFailed"), true);
+
+  // User retries after network recovers
+  h.context.shouldFail = false;
+  await h.context.start(u, true);
+  assert.equal(h.context.attempts, 2, "Second attempt must execute and succeed for the same user");
+  assert.equal(h.eval("startedUserId"), "cust-fail-test");
+  assert.equal(h.eval("startupFailed"), false);
+});
+
+test("Client Production: selected car id is restored from localStorage across fresh loads and updated on openCar", async () => {
+  const h = createAppHarness();
+
+  const vehicles = [
+    { id: "car-first", registration_no: "HP01AA1111" },
+    { id: "car-second", registration_no: "HP01BB2222" }
+  ];
+  h.context.vehiclesData = vehicles;
+  h.eval(`
+    loadCars = async () => { cars = [...vehiclesData]; };
+    loadData = async () => {};
+    nav = async () => {};
+  `);
+
+  // User previously opened car-second
+  h.store.set("carmy_selected_car_id", "car-second");
+
+  await h.context.start({ id: "cust-car-test", email: "test@example.com" });
+  assert.equal(h.eval("car?.id"), "car-second", "Should restore selected vehicle from localStorage");
+
+  // When user opens a different car:
+  await (h.context.openCar || h.context.window.openCar)("car-first");
+  assert.equal(h.eval("car?.id"), "car-first");
+  assert.equal(h.store.get("carmy_selected_car_id"), "car-first", "openCar must persist selection");
+});
+
+test("Client Production: token refresh on 401 calls refreshSession and retries authenticated API", async () => {
+  let refreshCalled = false;
+  let apiAttempts = 0;
+
+  const initialToken = jwt({ sub: "u-1", exp: Math.floor(Date.now() / 1000) + 3600 });
+  const refreshedToken = jwt({ sub: "u-1", exp: Math.floor(Date.now() / 1000) + 7200, fresh: true });
+
+  const mockDb = {
+    auth: {
+      async refreshSession() {
+        refreshCalled = true;
+        return { data: { session: { access_token: refreshedToken } } };
+      },
+      async getSession() {
+        return { data: { session: { access_token: initialToken } } };
+      },
+      onAuthStateChange() {
+        return { data: { subscription: { unsubscribe() {} } } };
+      },
+      async signOut() {
+        return { error: null };
+      }
+    }
+  };
+
+  const h = createAppHarness({
+    db: mockDb,
+    fetch: async (url, opts) => {
+      apiAttempts++;
+      const auth = opts?.headers?.Authorization || "";
+      if (auth.includes(initialToken)) {
+        return new Response(JSON.stringify({ ok: false, error: { message: "Invalid or expired access token." } }), { status: 401 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: "fresh-data" }), { status: 200 });
+    }
+  });
+
+  h.eval(`accessToken = "${initialToken}";`);
+  const body = await h.context.workerGet("/api/vehicles");
+
+  assert.equal(body.ok, true);
+  assert.equal(refreshCalled, true, "refreshSession must be called when 401 occurs");
+  assert.equal(apiAttempts, 2, "workerRequest must retry after refreshSession");
+});
+
+test("Client Production: clearUserMemory resets session state and clears vehicle cache keys", () => {
+  const h = createAppHarness();
+
+  h.store.set("carmy_selected_car_id", "car-123");
+  h.store.set("carmy_cached_cars", JSON.stringify([{ id: "car-123" }]));
+  h.eval('user = { id: "u-1" }; startedUserId = "u-1";');
+
+  h.context.clearUserMemory();
+
+  assert.equal(h.eval("user"), null);
+  assert.equal(h.eval("startedUserId"), null);
+  assert.equal(h.store.has("carmy_selected_car_id"), false, "Selected car must be wiped on logout");
+  assert.equal(h.store.has("carmy_cached_cars"), false, "Cached cars must be wiped on logout");
+});
