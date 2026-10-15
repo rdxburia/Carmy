@@ -60,6 +60,13 @@ async function touchServerSessionActivity(force=false){
   lastServerActivityTouch=now;
   serverActivityTouchPromise=(async()=>{
     try{
+      const res=await workerPost('/api/session/heartbeat');
+      if(res?.ok)return true;
+    }catch(err){
+      if(/429|HEARTBEAT_RATE_LIMITED/i.test(err?.message||''))return true;
+      console.warn('Worker idle-session heartbeat failed; attempting direct database touch:',err);
+    }
+    try{
       const result=await db.rpc('carmy_touch_session');
       if(result?.error)throw result.error;
       return true;
@@ -648,6 +655,13 @@ function showAppLoading(){
      setAppLoadingStatus('Taking longer than usual...','Your secure garage is still loading. Please keep this window open.');
    }
  },10000);
+ state.failsafeTimer=setTimeout(()=>{
+   if(!state.stopped && document.body.contains(o)){
+     console.warn('Dashboard loading reached safety limit; revealing dashboard shell.');
+     hideAppLoading();
+     $('app')?.classList.remove('hidden');
+   }
+ },12000);
  requestAnimationFrame(o._loadingFrame);
  return o;
 }
@@ -671,6 +685,7 @@ function hideAppLoading(){
      state.stopped=true;
      if(state.raf)cancelAnimationFrame(state.raf);
      if(state.slowTimer)clearTimeout(state.slowTimer);
+     if(state.failsafeTimer)clearTimeout(state.failsafeTimer);
      if(state.visibilityHandler)document.removeEventListener('visibilitychange',state.visibilityHandler);
    }
    o.classList.add('loading-out');
@@ -949,14 +964,27 @@ async function start(u){
    let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
    try{await nav('dashboard')}catch(renderErr){console.error('Dashboard fallback render failed:',renderErr)}
    toast('You are signed in, but some data could not load. Check your connection and refresh to retry.','error');
-   startedUserId=null;
  }
 }
 
 async function loadCars(){
- const body=await workerGet('/api/vehicles');
- cars=Array.isArray(body?.data)?body.data:[];
- cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
+ try{
+   const body=await workerGet('/api/vehicles');
+   if(Array.isArray(body?.data)){
+     cars=body.data;
+     cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
+     try{localStorage.setItem('carmy_cached_cars',JSON.stringify(cars))}catch(_){}
+   }
+ }catch(err){
+   console.warn('Vehicle list fetch failed, checking cached fallback:',err);
+   if(!cars.length){
+     try{
+       const cached=JSON.parse(localStorage.getItem('carmy_cached_cars')||'[]');
+       if(Array.isArray(cached)&&cached.length)cars=cached;
+     }catch(_){}
+   }
+   if(!cars.length)throw err;
+ }
 }
 async function loadStep5Data(){
  ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
@@ -981,7 +1009,7 @@ async function loadStep5Data(){
    saleHistory=Array.isArray(results[4]?.data)?results[4].data:[];
  }
 }
-async function loadData(){
+async function loadData(forceRefresh=false){
  if(!car){
    records=[];docs=[];
    await loadStep5Data();
@@ -989,8 +1017,9 @@ async function loadData(){
  }
  const carId=encodeURIComponent(car.id);
  const qs='?car_id='+carId;
+ const historyUrl='/api/service-history?car_id='+carId+(forceRefresh?'&bypass_cache=1':'');
  const requests=[
-   workerGet('/api/service-history?car_id='+carId),
+   workerGet(historyUrl),
    workerGet('/api/documents?car_id='+carId),
    workerGet('/api/profile'),
    workerGet('/api/insurance'+qs),
@@ -999,10 +1028,13 @@ async function loadData(){
    workerGet('/api/sale-history'+qs)
  ];
  const results=await Promise.allSettled(requests);
- // Service history is critical: fail visibly rather than pretending saved history is empty.
- if(results[0].status==='rejected')throw results[0].reason;
- const history=results[0].value;
- records=Array.isArray(history?.data)?history.data:[];
+ if(results[0].status==='fulfilled'){
+   const history=results[0].value;
+   records=Array.isArray(history?.data)?history.data:[];
+ }else{
+   console.warn('Service history endpoint failed; retaining current records:',results[0].reason);
+   if(!records.length)toast('Could not refresh service history. Please check your connection.','error');
+ }
  // Other panels are optional. A temporary failure must not wipe their previously loaded data
  // or force the entire customer dashboard back to login.
  const applyArray=(index,setter)=>{
@@ -1394,7 +1426,7 @@ $('save').onclick=async()=>{
    if(km>Number(car.current_km||0))car.current_km=km;
    resetRecordForm();
    toast($('type').value+' Record saved successfully!');
-   await loadData();nav('history');
+   await loadData(true);nav('history');
  }catch(err){
    toast('Failed to save service record: '+(err?.message||'Please run the Step 4 SQL migration first.'),'error');
  }finally{
@@ -1434,7 +1466,7 @@ async function editServiceRecord(id){
    const items=[...document.querySelectorAll('#esrItems .esr-check:checked')].map(ch=>{const row=ch.closest('.service-item-row'),v=s=>row.querySelector(s)?.value??'';return {item_name:ch.dataset.name,quantity:Number(v('.esr-qty')||1),brand:v('.esr-brand').trim()||null,part_number:v('.esr-part').trim()||null,cost:Number(v('.esr-cost')||0),labour:Number(v('.esr-labour')||0),warranty:v('.esr-warranty').trim()||null,notes:v('.esr-notes').trim()||null}});
    try{
      const {data,error}=await db.rpc('update_service_record',{p_record_id:id,p_car_id:car.id,p_service_date:dateInputValue('esrDate'),p_odometer_km:Number($('esrKm').value||0),p_record_type:$('esrType').value,p_description:$('esrDescription').value.trim()||null,p_parts_cost:Number($('esrParts').value||0),p_labour_cost:Number($('esrLabour').value||0),p_other_cost:Number($('esrOther').value||0),p_workshop:$('esrWorkshop').value.trim()||null,p_invoice_no:$('esrInvoice').value.trim()||null,p_notes:$('esrNotes').value.trim()||null,p_items:items});
-     if(error)throw error;m.remove();toast('Service record updated successfully!');await loadData();renderHistory();
+     if(error)throw error;m.remove();toast('Service record updated successfully!');await loadData(true);renderHistory();
    }catch(err){toast('Failed to update service record: '+(err?.message||'Run Step 4 SQL migration first.'),'error')}finally{btn.disabled=false;btn.textContent='SAVE CHANGES'}
  };
 }
@@ -1444,7 +1476,7 @@ async function deleteServiceRecord(id){
  const btns=[...document.querySelectorAll('.table button')];btns.forEach(b=>b.disabled=true);
  try{
    const {error}=await db.rpc('delete_service_record',{p_record_id:id,p_car_id:car.id});
-   if(error)throw error;toast('Service record deleted permanently!');await loadData();renderHistory();
+   if(error)throw error;toast('Service record deleted permanently!');await loadData(true);renderHistory();
  }catch(err){toast('Failed to delete service record: '+(err?.message||'Run Step 4 SQL migration first.'),'error')}finally{btns.forEach(b=>b.disabled=false)}
 }
 function fyLabel(date){let d=new Date(date);let y=d.getFullYear();let start=y-(d.getMonth()<3?1:0);return start+'-'+String(start+1).slice(-2)}

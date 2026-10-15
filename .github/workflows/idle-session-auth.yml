@@ -10,17 +10,21 @@ on:
       - "supabase/tests/**"
       - "js/app.js"
       - "js/session-guard.js"
+      - "worker/src/records.js"
       - "tests/idle-session-auth.test.mjs"
       - "tests/session-guard.test.mjs"
       - "tests/workshop-m0-contract.test.mjs"
+      - "tests/customer-portal-regression.test.mjs"
       - ".github/workflows/idle-session-auth.yml"
   push:
     branches: [main]
     paths:
       - "worker/src/auth.js"
       - "worker/src/index.js"
+      - "worker/src/records.js"
       - "worker/migrations/**"
       - "tests/idle-session-auth.test.mjs"
+      - "tests/customer-portal-regression.test.mjs"
       - ".github/workflows/idle-session-auth.yml"
 
 jobs:
@@ -31,4 +35,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test tests/idle-session-auth.test.mjs tests/session-guard.test.mjs tests/workshop-m0-contract.test.mjs
+      - run: node --test tests/idle-session-auth.test.mjs tests/session-guard.test.mjs tests/workshop-m0-contract.test.mjs tests/customer-portal-regression.test.mjs

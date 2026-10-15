@@ -1,11 +1,13 @@
 import { getCache, putCache } from "./cache.js";
 import { supabaseRest } from "./supabase.js";
 
-export async function listServiceHistory(env, user, userToken, carId = null) {
+export async function listServiceHistory(env, user, userToken, carId = null, bypassCache = false) {
   const suffix = carId ? `:${carId}` : "";
   const key = `service-history:${user.id}${suffix}`;
-  const cached = await getCache(env, key);
-  if (cached) return cached;
+  if (!bypassCache) {
+    const cached = await getCache(env, key);
+    if (cached) return cached;
+  }
 
   const filters = [
     `user_id=eq.${encodeURIComponent(user.id)}`,
