@@ -23,6 +23,9 @@ function clearUserMemory(){
   user=null;cars=[];car=null;records=[];docs=[];ownerProfile=null;
   insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
   accessToken='';authRefreshPromise=null;startedUserId=null;
+  startupPromise=null;startupFailed=false;
+  try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
+  try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
   document.querySelectorAll('.modal-overlay,.modal-backdrop,[role="dialog"][aria-modal="true"]').forEach(el=>el.remove());
   closeSideMenu();
@@ -63,7 +66,7 @@ async function touchServerSessionActivity(force=false){
       const res=await workerPost('/api/session/heartbeat');
       if(res?.ok)return true;
     }catch(err){
-      if(/429|HEARTBEAT_RATE_LIMITED/i.test(err?.message||''))return true;
+      if(err?.status===429||err?.code==='HEARTBEAT_RATE_LIMITED'||/429|rate limit|HEARTBEAT_RATE_LIMITED/i.test(err?.message||''))return true;
       console.warn('Worker idle-session heartbeat failed; attempting direct database touch:',err);
     }
     try{
@@ -164,8 +167,19 @@ async function getAccessToken(forceRefresh=false){
   if(!forceRefresh&&accessToken&&!tokenExpiresSoon(accessToken))return accessToken;
   if(authRefreshPromise)return authRefreshPromise;
   authRefreshPromise=(async()=>{
-    const session=await db.auth.getSession();
-    const nextToken=session?.data?.session?.access_token||'';
+    let nextToken='';
+    if(forceRefresh||(accessToken&&tokenExpiresSoon(accessToken))){
+      try{
+        const refreshed=await db.auth.refreshSession();
+        nextToken=refreshed?.data?.session?.access_token||'';
+      }catch(e){
+        console.warn('Explicit session refresh failed, checking active session:',e);
+      }
+    }
+    if(!nextToken){
+      const session=await db.auth.getSession();
+      nextToken=session?.data?.session?.access_token||'';
+    }
     accessToken=nextToken;
     if(!nextToken)throw new Error('Secure login session expired. Please login again.');
     return nextToken;
@@ -197,7 +211,13 @@ async function workerRequest(path,options={},retry=true){
   }
   let body=null;
   try{body=await res.json()}catch(e){}
-  if(!res.ok||body?.ok===false)throw new Error(body?.error?.message||'Secure API request failed ('+res.status+').');
+  if(!res.ok||body?.ok===false){
+    const msg=body?.error?.message||('Secure API request failed ('+res.status+').');
+    const err=new Error(msg);
+    err.status=res.status;
+    err.code=body?.error?.code;
+    throw err;
+  }
   return body;
 }
 async function workerGet(path){
@@ -213,6 +233,29 @@ function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>Torq Desk</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
 let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
+let startupPromise=null,startupFailed=false;
+function renderDashboardRecoveryUI(err){
+ const dashEl=$('dash');
+ if(!dashEl)return;
+ const errorMsg=esc(err?.message||'We could not reach the server to load your vehicles and records.');
+ dashEl.innerHTML=
+   '<div class="card minimal-empty" style="text-align:center;padding:36px 20px;max-width:520px;margin:32px auto;">'+
+     '<div style="font-size:32px;margin-bottom:12px;">⚠️</div>'+
+     '<h3 style="margin-bottom:8px;">Unable to load your garage</h3>'+
+     '<p class="muted" style="margin-bottom:16px;">'+errorMsg+'</p>'+
+     '<button class="primary" id="dashboardRetryBtn" onclick="retryDashboardStartup()" style="padding:10px 24px;font-weight:700;">RETRY CONNECTION</button>'+
+   '</div>';
+}
+window.retryDashboardStartup=async function(){
+ if(!user)return;
+ const btn=$('dashboardRetryBtn');
+ if(btn){btn.disabled=true;btn.textContent='Retrying…';}
+ try{
+   await start(user,true);
+ }catch(e){
+   console.error('Retry failed:',e);
+ }
+};
 let pendingVerificationEmail='',verificationTimer=null,verificationSeconds=0;
 let ownerProfile=null,insuranceHistory=[],pucHistory=[],renewalHistory=[],saleHistory=[];
 const serviceItems={
@@ -660,6 +703,9 @@ function showAppLoading(){
      console.warn('Dashboard loading reached safety limit; revealing dashboard shell.');
      hideAppLoading();
      $('app')?.classList.remove('hidden');
+     if(!car || startupFailed || !startedUserId){
+       renderDashboardRecoveryUI(new Error('Connection timed out while loading your garage.'));
+     }
    }
  },12000);
  requestAnimationFrame(o._loadingFrame);
@@ -851,10 +897,14 @@ async function boot(){
        }
        user=nextSession.user;
        void touchServerSessionActivity(true);
-       start(nextSession.user);
+       if(event==='SIGNED_IN'||(!startedUserId&&!startupFailed)){
+         start(nextSession.user);
+       }
      }else{
        accessToken='';
        startedUserId=null;
+       startupPromise=null;
+       startupFailed=false;
        if(!window.__carmySigningOut)clearUserMemory();
        if(event==='INITIAL_SESSION')showPublicLanding();else showLogin();
      }
@@ -900,9 +950,12 @@ function showLogin(){
  const joke=localStorage.getItem('carcare_logout_joke');if(joke){localStorage.removeItem('carcare_logout_joke');setTimeout(()=>toast(joke),150)}
 }
 function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car';updateDrawerContext()}
-async function start(u){
- if(startedUserId===u.id)return;
- startedUserId=u.id;user=u;
+async function start(u,force=false){
+ if(!u)return;
+ if(startupPromise&&!force&&user?.id===u.id)return startupPromise;
+ if(startedUserId===u.id&&!startupFailed&&!force)return;
+ user=u;
+ startupFailed=false;
  closeSideMenu();
  stopVerificationCountdown();
  pendingVerificationEmail='';
@@ -913,58 +966,74 @@ async function start(u){
  $('app').classList.add('hidden');
  $('userEmail').textContent=u.email;
  showAppLoading();
- try{
-   setAppLoadingStatus('Fetching your vehicle garage...','Loading vehicle profiles from your secure cloud');
-   setAppLoadingProgress(10);
-   await loadCars();
-   if(!car||!cars.some(x=>x.id===car.id))car=cars[0];
-   updateCarTab();
-   setAppLoadingProgress(35);
-   setAppLoadingStatus('Securing your vehicle files...','Loading service history and private documents');
-   await loadData();
-   setAppLoadingProgress(70);
-   updateIdentityUI();
-   setAppLoadingStatus('Preparing your garage...','Rendering your vehicle dashboard');
-   setAppLoadingProgress(90);
-   let lastView='dashboard';
-   try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
-   const validViews=['dashboard','cars','add','history','docs','report','owner'];
-   if(!validViews.includes(lastView))lastView='dashboard';
-   $('app').classList.remove('hidden');
-   window.scrollTo({top:0,left:0,behavior:'auto'});
-   if(lastView!=='dashboard'){
-     let restored=false;
-     try{
-       await nav(lastView);
-       restored=document.querySelector('#'+lastView+'.view.active')!==null;
-     }catch(err){
-       console.error('Last-view restore failed:',err);
+ startupPromise=(async()=>{
+   try{
+     setAppLoadingStatus('Fetching your vehicle garage...','Loading vehicle profiles from your secure cloud');
+     setAppLoadingProgress(10);
+     await loadCars();
+     let savedCarId=null;
+     try{savedCarId=localStorage.getItem('carmy_selected_car_id')}catch(_){}
+     if(savedCarId&&cars.some(x=>x.id===savedCarId)){
+       car=cars.find(x=>x.id===savedCarId);
+     }else if(!car||!cars.some(x=>x.id===car.id)){
+       car=cars[0]||null;
      }
-     if(!restored){
-       try{localStorage.removeItem('carcare_last_view')}catch(e){}
+     if(car?.id){
+       try{localStorage.setItem('carmy_selected_car_id',car.id)}catch(_){}
+     }
+     updateCarTab();
+     setAppLoadingProgress(35);
+     setAppLoadingStatus('Securing your vehicle files...','Loading service history and private documents');
+     await loadData();
+     setAppLoadingProgress(70);
+     updateIdentityUI();
+     setAppLoadingStatus('Preparing your garage...','Rendering your vehicle dashboard');
+     setAppLoadingProgress(90);
+     let lastView='dashboard';
+     try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
+     const validViews=['dashboard','cars','add','history','docs','report','owner'];
+     if(!validViews.includes(lastView))lastView='dashboard';
+     $('app').classList.remove('hidden');
+     window.scrollTo({top:0,left:0,behavior:'auto'});
+     if(lastView!=='dashboard'){
+       let restored=false;
+       try{
+         await nav(lastView);
+         restored=document.querySelector('#'+lastView+'.view.active')!==null;
+       }catch(err){
+         console.error('Last-view restore failed:',err);
+       }
+       if(!restored){
+         try{localStorage.removeItem('carcare_last_view')}catch(e){}
+         await nav('dashboard');
+       }
+     }else{
        await nav('dashboard');
      }
-   }else{
-     await nav('dashboard');
+     window.scrollTo({top:0,left:0,behavior:'auto'});
+     let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
+     setAppLoadingProgress(100);
+     hideAppLoading();
+     ensureSecurityPassword();
+     startedUserId=u.id;
+     startupFailed=false;
+   }catch(e){
+     console.error('Dashboard data load failed; keeping the authenticated session:',e);
+     hideAppLoading();
+     startupFailed=true;
+     startedUserId=null;
+     $('app').classList.remove('hidden');
+     $('auth').classList.add('hidden');
+     $('torqLanding')?.classList.add('hidden');
+     document.body.classList.remove('td-auth-open');
+     let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
+     renderDashboardRecoveryUI(e);
+     toast('You are signed in, but some data could not load. Check your connection and retry.','error');
+   }finally{
+     startupPromise=null;
    }
-   window.scrollTo({top:0,left:0,behavior:'auto'});
-   let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
-   setAppLoadingProgress(100);
-   hideAppLoading();
-   ensureSecurityPassword();
- }catch(e){
-   console.error('Dashboard data load failed; keeping the authenticated session:',e);
-   hideAppLoading();
-   // A temporary API/data endpoint failure must not turn a valid login into a logout loop.
-   // Keep the user signed in and expose the dashboard shell so they can retry or navigate.
-   $('app').classList.remove('hidden');
-   $('auth').classList.add('hidden');
-   $('torqLanding')?.classList.add('hidden');
-   document.body.classList.remove('td-auth-open');
-   let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
-   try{await nav('dashboard')}catch(renderErr){console.error('Dashboard fallback render failed:',renderErr)}
-   toast('You are signed in, but some data could not load. Check your connection and refresh to retry.','error');
- }
+ })();
+ return startupPromise;
 }
 
 async function loadCars(){
@@ -1118,7 +1187,7 @@ async function saveCarForm(){
  let r=await db.from('cars').insert({user_id:user.id,registration_no:reg,make_model:model,model_year:+year,fuel,current_km:+($('cfKm').value||0),vin:$('cfVin').value.trim()||null,engine_no:$('cfEngine').value.trim()||null,insurance_company:ins,insurance_number:insNo,insurance_type:insTypes,insurance_addons:insAddons,insurance_expiry:insExp,puc_certificate_no:pucNo,puc_state:pucState,puc_validity_months:+pucValidity,puc_expiry:pucExp}).select().single();
  if(r.error)return toast('Failed to save Vehicle: '+r.error.message,'error');cars.push(r.data);car=r.data;updateCarTab();hideCarForm();toast('Vehicle '+reg+' added successfully!');await loadData();nav('dashboard');
 }
-window.openCar=async id=>{car=cars.find(x=>x.id===id);updateCarTab();await loadData();nav('dashboard')};
+window.openCar=async id=>{car=cars.find(x=>x.id===id);if(car?.id){try{localStorage.setItem('carmy_selected_car_id',car.id)}catch(_){}}updateCarTab();await loadData();nav('dashboard')};
 function vehicleBodyType(model=''){
  let m=model.toLowerCase();
  if(/suv|bolero|scorpio|thar|creta|venue|nexon|xuv|fortuner|harrier|seltos|brezza|sonet|ecosport|duster|jimny/.test(m))return 'SUV';
@@ -1181,7 +1250,10 @@ function dashTimeline(){
 }
 function toggleTimelineEvent(id){const e=document.getElementById('timeline-'+id);if(e)e.classList.toggle('open')}
 function dash(){
- if(!car){$('dash').innerHTML='<div class="card minimal-empty"><h3>No vehicle selected</h3><p class="muted">Add your first car to start managing its records.</p></div>';return}
+ if(!car){
+  if(startupFailed){renderDashboardRecoveryUI(new Error('Unable to load vehicle records. Please retry.'));return}
+  $('dash').innerHTML='<div class="card minimal-empty"><h3>No vehicle selected</h3><p class="muted">Add your first car to start managing its records.</p></div>';return
+ }
  const health=dashboardHealth(),service=serviceDueStatus(),cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry);
  $('dashTitle').textContent=car.registration_no;
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');

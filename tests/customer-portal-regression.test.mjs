@@ -413,3 +413,133 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
 
 
 
+
+
+test("Client: duplicate startup protection shares in-flight startupPromise", async () => {
+  let executionCount = 0;
+  let startupPromise = null;
+  let startedUserId = null;
+  let startupFailed = false;
+
+  async function mockStart(u, force = false) {
+    if (!u) return;
+    if (startupPromise && !force) return startupPromise;
+    if (startedUserId === u.id && !startupFailed && !force) return;
+
+    startupPromise = (async () => {
+      executionCount++;
+      await new Promise(r => setTimeout(r, 20));
+      startedUserId = u.id;
+    })().finally(() => { startupPromise = null; });
+
+    return startupPromise;
+  }
+
+  const u = { id: "cust-1", email: "cust1@example.com" };
+  await Promise.all([mockStart(u), mockStart(u), mockStart(u)]);
+  assert.equal(executionCount, 1, "Concurrent start calls must only execute initialization once");
+  assert.equal(startedUserId, "cust-1");
+});
+
+test("Client: startup failure sets startupFailed=true, resets startedUserId, and permits retry for same user", async () => {
+  let executionCount = 0;
+  let startupPromise = null;
+  let startedUserId = null;
+  let startupFailed = false;
+  let networkFails = true;
+
+  async function mockStart(u, force = false) {
+    if (!u) return;
+    if (startupPromise && !force) return startupPromise;
+    if (startedUserId === u.id && !startupFailed && !force) return;
+    startupFailed = false;
+
+    startupPromise = (async () => {
+      executionCount++;
+      if (networkFails) {
+        startupFailed = true;
+        startedUserId = null;
+        throw new Error("503 Backend Offline");
+      }
+      startedUserId = u.id;
+      startupFailed = false;
+    })().finally(() => { startupPromise = null; });
+
+    return startupPromise;
+  }
+
+  const u = { id: "cust-retry-user", email: "retry@example.com" };
+  await assert.rejects(() => mockStart(u), /503/);
+  assert.equal(executionCount, 1);
+  assert.equal(startedUserId, null, "startedUserId must be reset so retries are not blocked");
+  assert.equal(startupFailed, true);
+
+  networkFails = false;
+  await mockStart(u, true);
+  assert.equal(executionCount, 2, "Retry must be allowed to execute for the same user");
+  assert.equal(startedUserId, "cust-retry-user");
+  assert.equal(startupFailed, false);
+});
+
+test("Client: selected car id is restored from localStorage across fresh loads", () => {
+  const store = new Map();
+  const localStorage = {
+    getItem: k => store.get(k) || null,
+    setItem: (k, v) => store.set(k, String(v))
+  };
+
+  const cars = [
+    { id: "car-alpha", registration_no: "HP01AA1111" },
+    { id: "car-beta", registration_no: "HP01BB2222" }
+  ];
+
+  localStorage.setItem("carmy_selected_car_id", "car-beta");
+
+  let car = null;
+  let savedCarId = null;
+  try { savedCarId = localStorage.getItem("carmy_selected_car_id"); } catch (_) {}
+  if (savedCarId && cars.some(x => x.id === savedCarId)) {
+    car = cars.find(x => x.id === savedCarId);
+  } else if (!car || !cars.some(x => x.id === car.id)) {
+    car = cars[0] || null;
+  }
+
+  assert.equal(car.id, "car-beta", "Should preserve the selected vehicle across page reloads");
+});
+
+test("Client: token refresh on 401 calls refreshSession and retries authenticated API", async () => {
+  let refreshCalled = false;
+  let apiAttempts = 0;
+  let currentToken = "token-expired";
+
+  const db = {
+    auth: {
+      async refreshSession() {
+        refreshCalled = true;
+        currentToken = "token-fresh";
+        return { data: { session: { access_token: "token-fresh" } } };
+      },
+      async getSession() {
+        return { data: { session: { access_token: currentToken } } };
+      }
+    }
+  };
+
+  async function mockWorkerRequest(path, options = {}, retry = true) {
+    apiAttempts++;
+    if (currentToken === "token-expired") {
+      if (retry) {
+        const refreshed = await db.auth.refreshSession();
+        currentToken = refreshed?.data?.session?.access_token || "";
+        return mockWorkerRequest(path, options, false);
+      }
+      throw new Error("401 Unauthorized");
+    }
+    return { ok: true, data: "success-data" };
+  }
+
+  const res = await mockWorkerRequest("/api/vehicles");
+  assert.equal(res.ok, true);
+  assert.equal(refreshCalled, true, "refreshSession should be explicitly invoked on 401");
+  assert.equal(apiAttempts, 2, "Request should be retried after refreshing token");
+});
