@@ -925,6 +925,14 @@ function showPublicLanding(){
  if(auth)auth.classList.add('hidden');
  if(app)app.classList.add('hidden');
  const loading=document.getElementById('appLoadingOverlay');if(loading)loading.remove();
+ try{
+   const loc=typeof window!=='undefined'&&window.location?window.location:(typeof location!=='undefined'?location:null);
+   const hist=typeof window!=='undefined'&&window.history?window.history:(typeof history!=='undefined'?history:null);
+   const h=(loc?.hash||'').toLowerCase();
+   if(hist&&loc&&(h==='#auth-login'||h==='#auth-signup'||h==='#auth'||h==='#login'||h==='#signup')){
+     hist.replaceState(null,'',loc.pathname+loc.search);
+   }
+ }catch(_){}
 }
 function showTorqDeskAuth(mode='login'){
  const landing=$('torqLanding'),auth=$('auth');
@@ -932,11 +940,67 @@ function showTorqDeskAuth(mode='login'){
  if(landing)landing.classList.remove('hidden');
  if(auth)auth.classList.remove('hidden','auth-session-pending','auth-success','auth-mobile-open');
  signup=mode==='signup';
+ hideVerificationView(false);
  updateAuthModeUI();bindMobileAuthTabs();prepareLoginExperience();
  window.scrollTo({top:0,behavior:'smooth'});
 }
 window.showTorqDeskAuth=showTorqDeskAuth;
-document.addEventListener('click',event=>{if(event.target.closest('[data-td-auth-close]')){event.preventDefault();showPublicLanding();return;}const trigger=event.target.closest('[data-torq-auth]');if(trigger){event.preventDefault();showTorqDeskAuth(trigger.dataset.torqAuth||'login');}});
+document.addEventListener('click',event=>{
+ if(event.target.closest('[data-td-auth-close]')){
+   event.preventDefault();
+   showPublicLanding();
+   return;
+ }
+ const trigger=event.target.closest('[data-torq-auth]');
+ if(trigger){
+   event.preventDefault();
+   const dropdown=trigger.closest('details.td-auth-dropdown');
+   if(dropdown)dropdown.removeAttribute('open');
+   showTorqDeskAuth(trigger.dataset.torqAuth||'login');
+   return;
+ }
+ const authLink=event.target.closest('a[href*="#auth-login"], a[href*="#auth-signup"], a[href*="#auth"], a[href*="#login"], a[href*="#signup"]');
+ if(authLink&&!authLink.closest('#auth')&&!authLink.closest('#app')){
+   const href=(authLink.getAttribute('href')||'').toLowerCase();
+   if(href.includes('#auth-signup')||href.includes('#signup')){
+     event.preventDefault();
+     const dropdown=authLink.closest('details.td-auth-dropdown');
+     if(dropdown)dropdown.removeAttribute('open');
+     showTorqDeskAuth('signup');
+     return;
+   }
+   if(href.includes('#auth-login')||href.includes('#auth')||href.includes('#login')){
+     event.preventDefault();
+     const dropdown=authLink.closest('details.td-auth-dropdown');
+     if(dropdown)dropdown.removeAttribute('open');
+     showTorqDeskAuth('login');
+     return;
+   }
+ }
+ const authEl=$('auth');
+ if(authEl&&!authEl.classList.contains('hidden')&&event.target===authEl){
+   showPublicLanding();
+ }
+});
+document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'){
+   const authEl=$('auth');
+   if(authEl&&!authEl.classList.contains('hidden')&&document.body.classList.contains('td-auth-open')){
+     showPublicLanding();
+   }
+ }
+});
+const syncAuthFromHash=()=>{
+ const loc=typeof window!=='undefined'&&window.location?window.location:(typeof location!=='undefined'?location:null);
+ const h=(loc?.hash||'').toLowerCase();
+ if(h==='#auth-login'||h==='#auth'||h==='#login'){
+   showTorqDeskAuth('login');
+ }else if(h==='#auth-signup'||h==='#signup'){
+   showTorqDeskAuth('signup');
+ }
+};
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('hashchange',syncAuthFromHash);
+syncAuthFromHash();
 function showLogin(){
  document.body.classList.add('td-auth-open');
  $('torqLanding')?.classList.remove('hidden');
@@ -1260,25 +1324,76 @@ function toggleTimelineEvent(id){const e=document.getElementById('timeline-'+id)
 function dash(){
  if(!car){
   if(startupFailed){renderDashboardRecoveryUI(new Error('Unable to load vehicle records. Please retry.'));return}
-  $('dash').innerHTML='<div class="card minimal-empty"><h3>No vehicle selected</h3><p class="muted">Add your first car to start managing its records.</p></div>';return
+  $('dashTitle').textContent='Overview';
+  $('dashSub').textContent='Private Vehicle Garage';
+  $('dash').innerHTML=
+    '<div class="card empty-garage-card">'+
+    '<div class="empty-garage-icon"><svg aria-hidden="true" style="width:48px;height:48px;stroke:var(--c-accent)"><use href="#td-icon-car"/></svg></div>'+
+    '<h2>Welcome to your Torq Desk Garage</h2>'+
+    '<p class="empty-garage-lead muted">You haven\'t added any vehicles yet. Register your car to track service history, store insurance &amp; PUC certificates, and monitor maintenance spend in your private cloud.</p>'+
+    '<div class="empty-garage-actions">'+
+    '<button type="button" class="primary btn-large" onclick="openNewCarModal()">＋ Add Your First Car</button>'+
+    '<button type="button" class="ghost btn-large" onclick="openHistoricalImport()">↥ Import Old Service Records</button>'+
+    '</div>'+
+    '<div class="empty-garage-features">'+
+    '<div class="feat-box"><div class="feat-icon"><svg aria-hidden="true" style="width:24px;height:24px"><use href="#td-icon-wrench"/></svg></div><b>Service &amp; Maintenance</b><p class="muted">Log regular service, parts replacement, and workshop invoices in one timeline.</p></div>'+
+    '<div class="feat-box"><div class="feat-icon"><svg aria-hidden="true" style="width:24px;height:24px"><use href="#td-icon-shield"/></svg></div><b>Compliance Shield</b><p class="muted">Automatic tracking and alerts for Insurance policies and PUC certificates.</p></div>'+
+    '<div class="feat-box"><div class="feat-icon"><svg aria-hidden="true" style="width:24px;height:24px"><use href="#td-icon-file"/></svg></div><b>Encrypted Glovebox</b><p class="muted">Encrypted cloud vault for RC, receipts, and print-ready A4 vehicle dossiers.</p></div>'+
+    '</div>'+
+    '</div>';
+  renderFab();
+  return;
  }
  const health=dashboardHealth(),service=serviceDueStatus(),cost=records.reduce((s,r)=>s+Number(r.total_cost||0),0),last=records[0],ins=st(car.insurance_expiry),puc=st(car.puc_expiry);
  $('dashTitle').textContent=car.registration_no;
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
+ const activeDocs=docs.filter(d=>!d.archived_at);
  $('dash').innerHTML=
- '<section class="minimal-dashboard">'+
- '<div class="minimal-hero"><div><span class="panel-kicker">VEHICLE OVERVIEW</span><h2>'+esc(car.registration_no)+(car.vehicle_status==='sold'?' <span class="sold-badge">SOLD</span>':'')+'</h2><p>'+esc(car.make_model||'Vehicle')+' • '+esc(car.model_year||'—')+' • '+esc(car.fuel||'—')+'</p></div><div class="minimal-km"><span>CURRENT KM</span><b>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+'</b></div></div>'+
- '<div class="minimal-grid">'+
- '<div class="minimal-card"><span>INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry?formatDateNice(car.insurance_expiry):'Not available')+'</small></div>'+
- '<div class="minimal-card"><span>PUC</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry?formatDateNice(car.puc_expiry):'Not available')+'</small></div>'+
- '<div class="minimal-card"><span>SERVICE</span><b class="'+service.cls+'">'+esc(service.state)+'</b><small>'+esc(service.text)+'</small></div>'+
- '<div class="minimal-card"><span>LIFETIME COST</span><b>'+money(cost)+'</b><small>Recorded maintenance</small></div>'+
- '</div>'+
- '<div class="minimal-status"><span class="health-badge '+(car.vehicle_status==='sold'?'neutral':health[1])+'"><i></i>'+esc(car.vehicle_status==='sold'?'VEHICLE SOLD':health[0])+'</span><span>'+esc(car.vehicle_status==='sold'?'Ownership lifecycle closed.':health[2])+'</span></div>'+
- '<div class="minimal-last"><div><span class="panel-kicker">LAST SERVICE</span><h3>'+esc(last?.service_date?formatDateNice(last.service_date):'No service record')+'</h3><p>'+esc(last?.description||'No service record yet')+'</p></div><button class="ghost" onclick="nav(\'history\')">VIEW HISTORY</button></div>'+
- '</section>';
+  '<section class="minimal-dashboard">'+
+  '<div class="minimal-hero">'+
+    '<div class="minimal-hero-left">'+
+      '<div class="hsrp-plate"><div class="hsrp-ind"><span class="hsrp-chakra">☸</span><span>IND</span></div><span class="hsrp-number">'+esc(car.registration_no)+'</span></div>'+
+      '<div class="minimal-hero-meta">'+
+        '<h2>'+esc(car.make_model||'Vehicle')+(car.vehicle_status==='sold'?' <span class="sold-badge">SOLD</span>':' <span class="status ok">ACTIVE</span>')+'</h2>'+
+        '<p class="muted">'+[car.model_year,car.fuel,'Current: '+Number(car.current_km||0).toLocaleString('en-IN')+' KM'].filter(Boolean).join(' • ')+'</p>'+
+      '</div>'+
+    '</div>'+
+    '<div class="minimal-hero-actions">'+
+      '<button class="primary" onclick="window.openAddRecord()">＋ Log Service</button>'+
+      '<button class="ghost" onclick="openDocUploader()">📄 Upload Doc</button>'+
+      '<button class="ghost" onclick="openOdometerPrompt()">⛽ Update KM</button>'+
+      '<button class="ghost" onclick="nav(\'report\')">🖨️ A4 Report</button>'+
+    '</div>'+
+  '</div>'+
+  '<div class="minimal-grid">'+
+    '<div class="minimal-card"><span class="kpi-kicker">ODOMETER</span><b>'+esc(Number(car.current_km||0).toLocaleString('en-IN'))+' <small>KM</small></b><small><button class="link-btn" onclick="openOdometerPrompt()">Update KM</button></small></div>'+
+    '<div class="minimal-card"><span class="kpi-kicker">NEXT SERVICE</span><b class="'+service.cls+'">'+esc(service.state)+'</b><small>'+esc(service.text)+'</small></div>'+
+    '<div class="minimal-card"><span class="kpi-kicker">INSURANCE</span><b class="'+ins[1]+'">'+ins[0]+'</b><small>'+esc(car.insurance_expiry?formatDateNice(car.insurance_expiry):'Not available')+'</small></div>'+
+    '<div class="minimal-card"><span class="kpi-kicker">PUC EMISSIONS</span><b class="'+puc[1]+'">'+puc[0]+'</b><small>'+esc(car.puc_expiry?formatDateNice(car.puc_expiry):'Not available')+'</small></div>'+
+    '<div class="minimal-card"><span class="kpi-kicker">RUNNING COST</span><b>'+money(cost)+'</b><small>'+records.length+' recorded services</small></div>'+
+  '</div>'+
+  '<div class="minimal-status"><span class="health-badge '+(car.vehicle_status==='sold'?'neutral':health[1])+'"><i></i>'+esc(car.vehicle_status==='sold'?'VEHICLE SOLD':health[0])+'</span><span>'+esc(car.vehicle_status==='sold'?'Ownership lifecycle closed.':health[2])+'</span></div>'+
+  '<div class="dashboard-two-col">'+
+    '<div class="card dashboard-col-card">'+
+      '<div class="card-head-row"><h3>Recent Maintenance Activity</h3><button class="ghost btn-sm" onclick="nav(\'history\')">All Records ('+records.length+') →</button></div>'+
+      (records.length ?
+        '<div class="recent-records-list">'+records.slice(0,4).map(r=>{
+          const items=(r.record_items||[]).map(x=>x.item_name).join(', ');
+          return '<div class="recent-record-item"><div class="rr-left"><span class="rr-date">'+esc(formatDateNice(r.service_date))+'</span><b>'+esc(r.record_type||'Service')+'</b><small class="muted">'+esc(items||r.description||r.workshop||'Maintenance')+'</small></div><div class="rr-right"><b>'+money(r.total_cost)+'</b></div></div>';
+        }).join('')+'</div>' :
+        '<div class="empty-col-state"><p class="muted">No service records logged yet for this vehicle.</p><button class="ghost btn-sm" onclick="window.openAddRecord()">＋ Log First Service</button></div>')+
+    '</div>'+
+    '<div class="card dashboard-col-card">'+
+      '<div class="card-head-row"><h3>Active Document Vault</h3><button class="ghost btn-sm" onclick="nav(\'docs\')">Open Vault ('+activeDocs.length+') →</button></div>'+
+      (activeDocs.length ?
+        '<div class="dashboard-quick-docs">'+activeDocs.slice(0,3).map(renderDocRow).join('')+'</div>' :
+        '<div class="empty-col-state"><p class="muted">No documents uploaded yet in private glovebox.</p><button class="ghost btn-sm" onclick="openDocUploader()">＋ Upload RC / Insurance / PUC</button></div>')+
+    '</div>'+
+  '</div>'+
+  '</section>';
  renderFab();
 }
+window.openNewCarModal=async()=>{await nav('cars');showCarForm();window.scrollTo({top:0,behavior:'smooth'});};
 function renderDashDocCard(d){
  const [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':'📘';
  return '<div class="flip-card" tabindex="0" onclick="this.classList.toggle(\'flipped\')"><div class="flip-inner"><div class="flip-front"><div class="doc-card-icon">'+icon+'</div><b>'+esc(title)+'</b><small>'+esc(d.document_type==='insurance'?(car.insurance_number||'Policy document'):d.document_type==='puc'?(car.puc_state||'PUC certificate'):'Registration Certificate')+'</small><span class="doc-badge '+cls+'">'+status+'</span><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'Vehicle document')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><p>'+esc(d.file_name)+'</p><div><button type="button" class="ghost" onclick="event.stopPropagation();openDocumentPreview(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Preview</button><button type="button" class="ghost" onclick="event.stopPropagation();downloadDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button></div></div></div></div>';
@@ -1382,15 +1497,25 @@ function ownerProfileView(){
  const p=ownerProfile||{},meta=user?.user_metadata||{};
  const hasProfile=Boolean(p.full_name);
  el.innerHTML='<div class="owner-profile-shell">'+
-   '<div class="owner-profile-head"><div class="toolbar"><div><span class="muted">OWNER &amp; IDENTITY</span><h2>Owner Profile</h2><p class="muted">This saved profile is reused for vehicle reports and ownership documents.</p></div>'+
+   '<div class="owner-profile-head"><div class="toolbar"><div><span class="muted">SECURITY &amp; IDENTITY</span><h2>Account &amp; Security</h2><p class="muted">Manage your authentication state, 120s idle protection, and saved owner transfer profile.</p></div>'+
    (hasProfile?'<span class="status ok">PROFILE SAVED</span>':'<span class="status warn">NOT SAVED</span>')+
    '</div></div>'+
+   '<div class="card security-status-card">'+
+     '<div class="security-card-head"><div class="security-card-icon"><svg aria-hidden="true" style="width:24px;height:24px;stroke:var(--c-accent)"><use href="#td-icon-shield"/></svg></div><div><h3>Active Security &amp; Session Status</h3><p class="muted">Cloudflare Worker &amp; Supabase session telemetry</p></div></div>'+
+     '<div class="security-badges-grid">'+
+       '<div class="sec-item"><span class="sec-tag ok">ACTIVE</span><b>120s Inactivity Protection</b><p class="muted">Automatic idle logout guards vehicle records on unattended or shared devices.</p></div>'+
+       '<div class="sec-item"><span class="sec-tag ok">SYNCED</span><b>Cloudflare D1 Heartbeat</b><p class="muted">Client activity synchronized via /api/session/heartbeat to preserve legitimate active sessions.</p></div>'+
+       '<div class="sec-item"><span class="sec-tag ok">AUTHENTICATED</span><b>Supabase Auth (JWT)</b><p class="muted">User ID: '+esc(user?.id||'Unknown')+'<br>Email: '+esc(user?.email||'Unknown')+'</p></div>'+
+     '</div>'+
+     '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
+   '</div>'+
    '<div class="card owner-profile-card">'+
+   '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Form 29 &amp; 30 paperwork.</p></div></div>'+
    (hasProfile?'':'<div class="minimal-empty dangerbox"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>')+
-   '<div class="owner-profile-note" style="margin-bottom:18px;padding:12px 14px;border:1px solid var(--c-line);border-radius:10px;background:var(--c-soft);color:var(--c-mute);font-size:12px">Form 29 &amp; 30 use the saved owner profile as the transferor name and address.</div>'+
    ownerProfileFields(p,meta)+
-   '</div></div>'+
-   '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>';
+   '</div>'+
+   '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>'+
+   '</div>';
  const btn=$('opSave');
  btn.onclick=async()=>{
    if(btn.disabled)return;
@@ -1476,8 +1601,41 @@ async function openVehicleHistory(id=car?.id){
  }catch(err){toast('Compliance history could not be loaded: '+(err?.message||err),'error');}
 }
 function carsView(){
- $('carsList').innerHTML='<div class="step5-toolbar"><div><b>Owner & Vehicle Records</b><span class="muted">Profile, compliance history and sold lifecycle are stored in the cloud.</span></div><button class="ghost" onclick="openOwnerProfile()">👤 Owner Profile</button></div>'+
- (cars.length?cars.map(c=>'<div class="card '+(c.vehicle_status==='sold'?'vehicle-sold-card':'')+'"><div class="toolbar"><div><h3>'+esc(c.registration_no)+' '+(c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':'')+'</h3><div class="muted">'+esc(c.make_model||'')+' • '+esc(c.model_year||'')+' • '+esc(c.fuel||'')+'</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" onclick="openCar(\''+c.id+'\')">Open Car</button><button class="ghost" onclick="openVehicleHistory(\''+c.id+'\')">History</button>'+(c.vehicle_status==='sold'?'':'<button class="primary" onclick="editSpecificCar(\''+c.id+'\')">Edit</button>')+'</div></div></div>').join(''):'<div class="card">No cars yet.</div>');
+ $('carsList').innerHTML='<div class="step5-toolbar"><div><b>Vehicle Fleet &amp; Registrations</b><span class="muted">Each vehicle keeps its own independent service history, documents, and compliance records.</span></div><button class="ghost" onclick="nav(\'owner\')">🛡️ Account &amp; Security</button></div>'+
+ (cars.length?cars.map(c=>{
+   const isActive=car?.id===c.id;
+   const ins=st(c.insurance_expiry);
+   const puc=st(c.puc_expiry);
+   return '<div class="card vehicle-card '+(c.vehicle_status==='sold'?'vehicle-sold-card ':'')+(isActive?'vehicle-card-active':'')+'">'+
+     '<div class="vehicle-card-inner">'+
+       '<div class="vehicle-card-left">'+
+         '<div class="hsrp-plate"><div class="hsrp-ind"><span class="hsrp-chakra">☸</span><span>IND</span></div><span class="hsrp-number">'+esc(c.registration_no)+'</span></div>'+
+         '<div class="vehicle-meta">'+
+           '<h3>'+esc(c.make_model||'Vehicle')+'</h3>'+
+           '<p class="muted">'+[c.model_year,c.fuel,(Number(c.current_km||0).toLocaleString('en-IN')+' KM')].filter(Boolean).join(' • ')+'</p>'+
+         '</div>'+
+       '</div>'+
+       '<div class="vehicle-card-center">'+
+         '<div class="vehicle-pills">'+
+           '<span class="doc-badge '+ins[1]+'">INS: '+ins[0]+'</span>'+
+           '<span class="doc-badge '+puc[1]+'">PUC: '+puc[0]+'</span>'+
+           (c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':(isActive?'<span class="status ok">ACTIVE VEHICLE</span>':''))+
+         '</div>'+
+       '</div>'+
+       '<div class="vehicle-card-actions">'+
+         (!isActive?'<button class="primary" onclick="openCar(\''+c.id+'\')">Select Vehicle</button>':'<button class="ghost" onclick="nav(\'dashboard\')">Open Overview</button>')+
+         '<button class="ghost" onclick="openVehicleHistory(\''+c.id+'\')">Compliance</button>'+
+         (c.vehicle_status==='sold'?'':'<button class="ghost" onclick="editSpecificCar(\''+c.id+'\')">Edit</button>')+
+       '</div>'+
+     '</div>'+
+   '</div>';
+ }).join(''):
+ '<div class="card empty-garage-card" style="margin-top:20px;text-align:center;padding:48px 24px">'+
+   '<div class="empty-garage-icon"><svg aria-hidden="true" style="width:48px;height:48px;stroke:var(--c-accent)"><use href="#td-icon-car"/></svg></div>'+
+   '<h3>No vehicles in your garage</h3>'+
+   '<p class="muted" style="max-width:440px;margin:8px auto 20px">Add your car registration number to start recording services, uploading insurance policies, and generating reports.</p>'+
+   '<button type="button" class="primary" style="padding:12px 24px" onclick="showCarForm()">＋ Add Your First Car</button>'+
+ '</div>');
 }
 window.editSpecificCar=async id=>{let previous=car;car=cars.find(x=>x.id===id)||previous;if(car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Open History to view its complete lifecycle.','error');car=previous;return}updateCarTab();await window.editCar();await loadCars();let fresh=cars.find(x=>x.id===car?.id);if(fresh)car=fresh;updateCarTab();await loadData();carsView()};
 function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(car.vehicle_status==='sold'){$('guard').innerHTML='<div class="dangerbox"><b>VEHICLE SOLD</b> — Service entries are locked. Historical records and documents remain available.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
@@ -1514,19 +1672,59 @@ $('save').onclick=async()=>{
  }
 };
 function renderHistory(){
- if(!car)return;
- let current=$('year').value||'all',ys=[...new Set(records.map(r=>new Date(r.service_date).getFullYear()))].sort((a,b)=>b-a);
- $('year').innerHTML='<option value="all">All</option>'+ys.map(y=>'<option value="'+y+'">'+y+'</option>').join('');
- if(!['all',...ys.map(String)].includes(current))current='all';$('year').value=current;
- let rs=current==='all'?records:records.filter(r=>new Date(r.service_date).getFullYear()===+current);
+ if(!car){
+  const tb=$('historyTable');if(tb)tb.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle to view its maintenance records.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
+  const sumEl=$('historySpendSummary');if(sumEl)sumEl.innerHTML='';
+  return;
+ }
+ let currentYear=$('year')?.value||'all';
+ let currentType=$('historyType')?.value||'all';
+ let ys=[...new Set(records.map(r=>new Date(r.service_date).getFullYear()))].sort((a,b)=>b-a);
+ if($('year')){
+   $('year').innerHTML='<option value="all">All Years</option>'+ys.map(y=>'<option value="'+y+'">'+y+'</option>').join('');
+   if(!['all',...ys.map(String)].includes(currentYear))currentYear='all';
+   $('year').value=currentYear;
+ }
+ let rs=records;
+ if(currentYear!=='all')rs=rs.filter(r=>new Date(r.service_date).getFullYear()===+currentYear);
+ if(currentType!=='all')rs=rs.filter(r=>(r.record_type||'Other')===currentType);
+
+ const totalParts=rs.reduce((s,r)=>s+Number(r.parts_cost||0),0);
+ const totalLabour=rs.reduce((s,r)=>s+Number(r.labour_cost||0),0);
+ const totalOther=rs.reduce((s,r)=>s+Number(r.other_cost||0),0);
+ const totalCost=rs.reduce((s,r)=>s+Number(r.total_cost||0),0);
+
+ const sumEl=$('historySpendSummary');
+ if(sumEl){
+   sumEl.innerHTML=
+     '<div class="spend-metric-card"><span>TOTAL PARTS</span><b>'+money(totalParts)+'</b></div>'+
+     '<div class="spend-metric-card"><span>TOTAL LABOUR</span><b>'+money(totalLabour)+'</b></div>'+
+     '<div class="spend-metric-card"><span>OTHER / MISC</span><b>'+money(totalOther)+'</b></div>'+
+     '<div class="spend-metric-card spend-metric-total"><span>FILTERED SPEND</span><b>'+money(totalCost)+'</b><small>'+rs.length+' service records</small></div>';
+ }
+
+ if(!rs.length){
+   $('historyTable').innerHTML='<div style="text-align:center;padding:36px 16px"><p class="muted" style="margin-bottom:14px">No service records match the selected filters for '+esc(car.registration_no)+'.</p><button class="primary" onclick="window.openAddRecord()">＋ Add Service Record</button></div>';
+   return;
+ }
+
  const rows=rs.map(r=>{
    const items=(r.record_items||[]).map(x=>x.item_name).join(', ');
-   return '<tr><td>'+esc(formatDateNice(r.service_date))+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+'<br><small class="muted">'+esc(items)+'</small></td><td>'+money(r.total_cost)+'</td><td><button class="ghost" onclick="editServiceRecord(\''+r.id+'\')">Edit</button> <button class="danger" onclick="deleteServiceRecord(\''+r.id+'\')">Delete</button></td></tr>';
+   const type=r.record_type||'Other';
+   const typeBadge='<span class="status '+(type==='Regular Service'?'ok':type==='Accident / Repair'?'bad':'warn')+'">'+esc(type)+'</span>';
+   return '<tr>'+
+     '<td><b>'+esc(formatDateNice(r.service_date))+'</b></td>'+
+     '<td>'+esc(Number(r.odometer_km||0).toLocaleString('en-IN'))+' KM</td>'+
+     '<td>'+typeBadge+'</td>'+
+     '<td><b>'+esc(r.workshop||'Workshop')+'</b><br>'+esc(r.description||'')+(items?'<br><small class="muted">'+esc(items)+'</small>':'')+(r.invoice_no?'<br><small class="muted">Inv: '+esc(r.invoice_no)+'</small>':'')+'</td>'+
+     '<td><b>'+money(r.total_cost)+'</b><br><small class="muted">P: '+money(r.parts_cost)+' | L: '+money(r.labour_cost)+'</small></td>'+
+     '<td><div style="display:flex;gap:6px"><button class="ghost" onclick="editServiceRecord(\''+r.id+'\')">Edit</button><button class="danger" onclick="deleteServiceRecord(\''+r.id+'\')">Delete</button></div></td>'+
+   '</tr>';
  }).join('');
- $('historyTable').innerHTML='<div class="table-scroll"><table class="table"><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th><th>Actions</th></tr>'+rows+'</table></div><p><b>Year Total: '+money(rs.reduce((s,r)=>s+Number(r.total_cost||0),0))+'</b></p>';
+ $('historyTable').innerHTML='<div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th>KM</th><th>Type</th><th>Workshop &amp; Work</th><th>Cost</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-
-$('year').onchange=renderHistory;
+$('year')?.addEventListener('change',renderHistory);
+$('historyType')?.addEventListener('change',renderHistory);
 async function editServiceRecord(id){
  const r=records.find(x=>x.id===id);if(!r||!car)return;
  let old=document.getElementById('editServiceRecordModal');if(old)old.remove();
@@ -1591,7 +1789,29 @@ function renderDocRow(d){
  let [status,cls]=docStatus(d),title=docTypeLabel(d);
  return '<div class="doc-row '+cls+'"><div class="doc-icon">'+(d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄')+'</div><div class="doc-main"><b>'+esc(title)+'</b><span>'+esc(d.file_name)+'</span><small>Uploaded: '+formatDateNice(d.created_at?.slice(0,10))+'</small>'+(d.document_expiry?'<span class="doc-expiry">'+(status==='Expired'?'Expired on':'Expiry')+' '+esc(formatDateNice(d.document_expiry))+'</span>':'')+'<span class="doc-badge '+cls+'">'+status+'</span>'+(d.archived_at?'<em>Archive: '+esc(d.archive_name||'Year Wise')+'</em>':'')+'</div><div class="doc-actions"><button type="button" class="ghost" onclick="openDocumentPreview(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\',\''+d.file_name.replace(/'/g,"\\'")+'\')">Preview</button><button type="button" class="ghost" onclick="downloadDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button><button type="button" class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+d.storage_path.replace(/'/g,"\\'")+'\','+(d.archived_at?'true':'false')+')">Delete</button></div></div>';
 }
-async function docsView(){if(!car)return;let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};active.forEach(d=>(groups[d.document_type]||groups.other).push(d));let html='<div class="doc-grid">';[['rc','Registration Certificate','📘'],['puc','PUC','🌿'],['insurance','Insurance','🛡️'],['other','Other Documents','📄']].forEach(([key,label,icon])=>{html+='<div class="doc-col"><div class="doc-col-head"><div><span class="doc-col-icon">'+icon+'</span><b>'+label+'</b></div><span>'+groups[key].length+'</span></div>'+(groups[key].length?'<div class="doc-flip-grid">'+groups[key].map(renderDocFlipCard).join('')+'</div>':'<div class="doc-empty">No '+label+' document</div>')+'</div>'});html+='</div>';if(!deletePasswordChanged())html+='<div class="doc-security-notice">🔒 Please change default password to unlock delete actions.</div>';if(arch.length){let by={};arch.forEach(d=>{let k=d.archive_name||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});html+='<div class="doc-archive"><div class="doc-archive-head">📁 Archived Documents</div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>'}$('docList').innerHTML=html;if(active.some(d=>docExpired(d))&&window.__expiryPopupFor!==car.id){window.__expiryPopupFor=car.id;showDocumentExpiryPopup()}}
+async function docsView(){
+ if(!car){
+  const dl=$('docList');if(dl)dl.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle first to view its private document vault.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
+  return;
+ }
+ let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};
+ active.forEach(d=>(groups[d.document_type]||groups.other).push(d));
+ let html='<div class="doc-grid">';
+ [['rc','Registration Certificate','📘'],['puc','PUC','🌿'],['insurance','Insurance','🛡️'],['other','Other Documents','📄']].forEach(([key,label,icon])=>{
+  html+='<div class="doc-col"><div class="doc-col-head"><div><span class="doc-col-icon">'+icon+'</span><b>'+label+'</b></div><span>'+groups[key].length+'</span></div>'+(groups[key].length?'<div class="doc-flip-grid">'+groups[key].map(renderDocFlipCard).join('')+'</div>':'<div class="doc-empty">No '+label+' document</div>')+'</div>';
+ });
+ html+='</div>';
+ if(!deletePasswordChanged())html+='<div class="doc-security-notice">🔒 Please change default password to unlock delete actions.</div>';
+ if(arch.length){
+  let by={};
+  arch.forEach(d=>{let k=d.archive_name||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});
+  html+='<div class="doc-archive"><div class="doc-archive-head">📁 Archived Documents</div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>';
+ }
+ $('docList').innerHTML=html;
+ if(active.some(d=>docExpired(d))&&window.__expiryPopupFor!==car.id){
+  window.__expiryPopupFor=car.id;showDocumentExpiryPopup();
+ }
+}
 function showDocumentExpiryPopup(){
  if(document.getElementById('docExpiryPopup'))return;
  let expired=docs.filter(d=>docExpired(d)&&!d.archived_at);

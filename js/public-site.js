@@ -1,6 +1,19 @@
 (() => {
  'use strict';
- const authTarget=location.hash==='#auth-signup'?'signup':(location.hash==='#auth-login'||location.hash==='#auth'?'login':null);if(authTarget){const trigger=document.querySelector('[data-torq-auth="'+authTarget+'"]');if(trigger)trigger.click();}
+ const syncPublicAuthHash=()=>{
+  const h=(location.hash||'').toLowerCase();
+  const target=h==='#auth-signup'||h==='#signup'?'signup':(h==='#auth-login'||h==='#auth'||h==='#login'?'login':null);
+  if(target){
+   if(typeof window.showTorqDeskAuth==='function'){
+    window.showTorqDeskAuth(target);
+   }else{
+    const trigger=document.querySelector('[data-torq-auth="'+target+'"]');
+    if(trigger)trigger.click();
+   }
+  }
+ };
+ syncPublicAuthHash();
+ window.addEventListener('hashchange',syncPublicAuthHash);
 
  const home=document.querySelector('.td-home-v2');
  if(home){
