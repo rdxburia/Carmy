@@ -246,7 +246,14 @@ function renderDashboardRecoveryUI(err){
      '<button class="primary" id="dashboardRetryBtn" onclick="retryDashboardStartup()" style="padding:10px 24px;font-weight:700;">RETRY CONNECTION</button>'+
    '</div>';
 }
+window.renderDashboardRecoveryUI=renderDashboardRecoveryUI;
 window.retryDashboardStartup=async function(){
+ if(!user){
+   try{
+     const sess=await db?.auth?.getSession();
+     if(sess?.data?.session?.user)user=sess.data.session.user;
+   }catch(_){}
+ }
  if(!user)return;
  const btn=$('dashboardRetryBtn');
  if(btn){btn.disabled=true;btn.textContent='Retrying…';}
@@ -951,6 +958,7 @@ function showLogin(){
 }
 function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.registration_no||'No Car';updateDrawerContext()}
 async function start(u,force=false){
+ window.start=start;
  if(!u)return;
  if(startupPromise&&!force&&user?.id===u.id)return startupPromise;
  if(startedUserId===u.id&&!startupFailed&&!force)return;
