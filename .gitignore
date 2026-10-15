@@ -2,3 +2,8 @@
 tests/fixtures/local/
 node_modules/
 package-lock.json
+.env*
+.secrets*
+_site/
+scratch/
+screenshots/
