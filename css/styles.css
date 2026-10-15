@@ -1480,9 +1480,13 @@ input[type="password"]::-ms-clear {
     background: var(--c-accent) !important;
     color: #fff !important;
   }
+  body.menu-open .mobile-nav,
+  body.menu-open #dashboardFab,
   body.td-auth-open .mobile-nav,
   #app.hidden ~ .mobile-nav,
   .mobile-nav.auth-hidden {
     display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 }
