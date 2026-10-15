@@ -823,23 +823,27 @@ async function boot(){
  accessToken=s.data.session?.access_token||'';
  if(s.data.session){writeIdleActivity(true);user=s.data.session.user;if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return;}start(s.data.session.user)}
  else showPublicLanding();
- db.auth.onAuthStateChange(async(event,nextSession)=>{
-   accessToken=nextSession?.access_token||'';
-   if(nextSession){
-     if(event==='SIGNED_IN')writeIdleActivity(true);
-     if(event!=='INITIAL_SESSION'&&idleExpired()){
-       await forceSignOut('idle');
-       return;
+ db.auth.onAuthStateChange((event,nextSession)=>{
+   // Supabase warns against awaiting other Supabase calls inside this callback:
+   // defer all session work until the auth lock has been released.
+   setTimeout(async()=>{
+     accessToken=nextSession?.access_token||'';
+     if(nextSession){
+       if(event==='SIGNED_IN')writeIdleActivity(true);
+       if(event!=='INITIAL_SESSION'&&idleExpired()){
+         await forceSignOut('idle');
+         return;
+       }
+       user=nextSession.user;
+       if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return}
+       start(nextSession.user);
+     }else{
+       accessToken='';
+       startedUserId=null;
+       if(!window.__carmySigningOut)clearUserMemory();
+       if(event==='INITIAL_SESSION')showPublicLanding();else showLogin();
      }
-     user=nextSession.user;
-     if(!await touchServerSessionActivity(true)){await forceSignOut('expired');return}
-     start(nextSession.user);
-   }else{
-     accessToken='';
-     startedUserId=null;
-     if(!window.__carmySigningOut)clearUserMemory();
-     if(event==='INITIAL_SESSION')showPublicLanding();else showLogin();
-   }
+   },0);
  });
 }
 function showPublicLanding(){
@@ -979,7 +983,7 @@ async function loadData(){
  }
  const carId=encodeURIComponent(car.id);
  const qs='?car_id='+carId;
- const [history,documents,profile,insurance,puc,renewals,sales]=await Promise.all([
+ const requests=[
    workerGet('/api/service-history?car_id='+carId),
    workerGet('/api/documents?car_id='+carId),
    workerGet('/api/profile'),
@@ -987,15 +991,32 @@ async function loadData(){
    workerGet('/api/puc'+qs),
    workerGet('/api/renewals'+qs),
    workerGet('/api/sale-history'+qs)
- ]);
+ ];
+ const results=await Promise.allSettled(requests);
+ // Service history is critical: fail visibly rather than pretending saved history is empty.
+ if(results[0].status==='rejected')throw results[0].reason;
+ const history=results[0].value;
  records=Array.isArray(history?.data)?history.data:[];
- docs=Array.isArray(documents?.data)?documents.data:[];
- ownerProfile=profile?.data||null;
- insuranceHistory=Array.isArray(insurance?.data)?insurance.data:[];
- pucHistory=Array.isArray(puc?.data)?puc.data:[];
- renewalHistory=Array.isArray(renewals?.data)?renewals.data:[];
- saleHistory=Array.isArray(sales?.data)?sales.data:[];
- if(document.getElementById('docs')?.classList.contains('active'))await docsView();
+ // Other panels are optional. A temporary failure must not wipe their previously loaded data
+ // or force the entire customer dashboard back to login.
+ const applyArray=(index,setter)=>{
+   const result=results[index];
+   if(result?.status!=='fulfilled')return;
+   const data=result.value?.data;
+   if(Array.isArray(data))setter(data);
+ };
+ applyArray(1,value=>{docs=value});
+ if(results[2]?.status==='fulfilled'&&results[2].value)ownerProfile=results[2].value.data||ownerProfile;
+ applyArray(3,value=>{insuranceHistory=value});
+ applyArray(4,value=>{pucHistory=value});
+ applyArray(5,value=>{renewalHistory=value});
+ applyArray(6,value=>{saleHistory=value});
+ for(let i=1;i<results.length;i++){
+   if(results[i].status==='rejected')console.warn('Optional dashboard endpoint failed; keeping previous data:',i,results[i].reason);
+ }
+ if(document.getElementById('docs')?.classList.contains('active')){
+   try{await docsView()}catch(err){console.warn('Could not refresh documents view:',err)}
+ }
 }
 const insuranceTypes=['Third Party','Comprehensive','Zero Depreciation','Own Damage','Standalone Own Damage'];
 const insuranceAddons=['Roadside Assistance','Engine Protection','Consumables Cover','Key Replacement','Tyre Protect','Return to Invoice','NCB Protect'];
