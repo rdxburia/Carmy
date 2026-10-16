@@ -10,6 +10,8 @@ export async function listDocuments(env, user, userToken, carId = null) {
   if (carId) filters.push(`car_id=eq.${encodeURIComponent(carId)}`);
 
   const data = await supabaseRest(env, `documents?select=*&${filters.join("&")}`, { method: "GET" }, userToken);
-  await putCache(env, key, user.id, "documents", data);
+  if (Array.isArray(data) && data.length > 0) {
+    await putCache(env, key, user.id, "documents", data);
+  }
   return data;
 }

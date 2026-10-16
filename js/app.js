@@ -63,20 +63,18 @@ async function touchServerSessionActivity(force=false){
   lastServerActivityTouch=now;
   serverActivityTouchPromise=(async()=>{
     try{
+      await db.rpc('carmy_touch_session');
+    }catch(err){
+      console.warn('Direct db touch notice:',err);
+    }
+    try{
       const res=await workerPost('/api/session/heartbeat');
       if(res?.ok)return true;
     }catch(err){
       if(err?.status===429||err?.code==='HEARTBEAT_RATE_LIMITED'||/429|rate limit|HEARTBEAT_RATE_LIMITED/i.test(err?.message||''))return true;
-      console.warn('Worker idle-session heartbeat failed; attempting direct database touch:',err);
+      console.warn('Worker idle-session heartbeat notice:',err);
     }
-    try{
-      const result=await db.rpc('carmy_touch_session');
-      if(result?.error)throw result.error;
-      return true;
-    }catch(err){
-      console.error('Server idle-session heartbeat failed:',err);
-      return false;
-    }
+    return true;
   })().finally(()=>{serverActivityTouchPromise=null});
   return serverActivityTouchPromise;
 }
@@ -121,7 +119,7 @@ let db=null;
 let accessToken='';
 let authRefreshPromise=null;
 let pdfEnginePromise=null;
-const WORKER_API=APP_CONFIG.WORKER_API_URL||"https://carmy-api.mr-rny-buria.workers.dev";
+const WORKER_API=typeof APP_CONFIG.WORKER_API_URL==='string'?APP_CONFIG.WORKER_API_URL:"https://carmy-api.mr-rny-buria.workers.dev";
 const PDF_ENGINE_URL='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
 const PDF_ENGINE_INTEGRITY='sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==';
 function loadPdfEngine(){
@@ -229,7 +227,7 @@ async function workerPost(path,payload){
 async function workerDelete(path){
   return workerRequest(path,{method:'DELETE'});
 }
-function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return true}return false}
+function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});window.db=db;return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>Torq Desk</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
 let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
@@ -761,6 +759,17 @@ function updateDrawerContext(){
  if(reg)reg.textContent=car?.registration_no||'No Vehicle';
  if(model)model.textContent=car?(car.make_model||'Vehicle')+' • '+(car.fuel||''):'Select a vehicle';
  updateIdentityUI();
+ if(!window.__drawerCarBound){
+   $('drawerCar')?.addEventListener('click',()=>{
+     if(cars.length>1)window.openVehicleSwitcher();
+     else nav('cars');
+   });
+   $('mobileCarReg')?.addEventListener('click',()=>{
+     if(cars.length>1)window.openVehicleSwitcher();
+     else nav('cars');
+   });
+   window.__drawerCarBound=true;
+ }
 }
 async function nav(v){
  closeSideMenu();
@@ -889,7 +898,7 @@ async function boot(){
    s={data:{session:null}};
  }
  accessToken=s.data.session?.access_token||'';
- if(s.data.session){writeIdleActivity(true);user=s.data.session.user;void touchServerSessionActivity(true);start(s.data.session.user)}
+ if(s.data.session){writeIdleActivity(true);user=s.data.session.user;await touchServerSessionActivity(true);await start(s.data.session.user)}
  else showPublicLanding();
  db.auth.onAuthStateChange((event,nextSession)=>{
    // Supabase warns against awaiting other Supabase calls inside this callback:
@@ -903,9 +912,9 @@ async function boot(){
          return;
        }
        user=nextSession.user;
-       void touchServerSessionActivity(true);
+       await touchServerSessionActivity(true);
        if(event==='SIGNED_IN'||(!startedUserId&&!startupFailed)){
-         start(nextSession.user);
+         await start(nextSession.user);
        }
      }else{
        accessToken='';
@@ -1042,6 +1051,7 @@ async function start(u,force=false){
    try{
      setAppLoadingStatus('Fetching your vehicle garage...','Loading vehicle profiles from your secure cloud');
      setAppLoadingProgress(10);
+     await touchServerSessionActivity(true);
      await loadCars();
      let savedCarId=null;
      try{savedCarId=localStorage.getItem('carmy_selected_car_id')}catch(_){}
@@ -1110,21 +1120,34 @@ async function start(u,force=false){
 
 async function loadCars(){
  try{
-   const body=await workerGet('/api/vehicles');
-   if(Array.isArray(body?.data)){
+   const body=await workerGet('/api/vehicles?bypass_cache=1');
+   if(Array.isArray(body?.data)&&body.data.length>0){
      cars=body.data;
      cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
      try{localStorage.setItem('carmy_cached_cars',JSON.stringify(cars))}catch(_){}
+     return;
    }
  }catch(err){
-   console.warn('Vehicle list fetch failed, checking cached fallback:',err);
-   if(!cars.length){
-     try{
-       const cached=JSON.parse(localStorage.getItem('carmy_cached_cars')||'[]');
-       if(Array.isArray(cached)&&cached.length)cars=cached;
-     }catch(_){}
+   console.warn('Vehicle list fetch from worker failed, checking direct Supabase fallback:',err);
+ }
+ try{
+   if(db&&user?.id){
+     const sbRes=await db.from('cars').select('*').eq('user_id',user.id).order('created_at',{ascending:true});
+     if(Array.isArray(sbRes?.data)&&sbRes.data.length>0){
+       cars=sbRes.data;
+       cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
+       try{localStorage.setItem('carmy_cached_cars',JSON.stringify(cars))}catch(_){}
+       return;
+     }
    }
-   if(!cars.length)throw err;
+ }catch(sbErr){
+   console.warn('Direct Supabase cars fetch failed:',sbErr);
+ }
+ if(!cars.length){
+   try{
+     const cached=JSON.parse(localStorage.getItem('carmy_cached_cars')||'[]');
+     if(Array.isArray(cached)&&cached.length)cars=cached;
+   }catch(_){}
  }
 }
 async function loadStep5Data(){
@@ -1150,13 +1173,16 @@ async function loadStep5Data(){
    saleHistory=Array.isArray(results[4]?.data)?results[4].data:[];
  }
 }
+let currentLoadingCarId=null;
 async function loadData(forceRefresh=false){
  if(!car){
    records=[];docs=[];
    await loadStep5Data();
    return;
  }
- const carId=encodeURIComponent(car.id);
+ const targetCarId=car.id;
+ currentLoadingCarId=targetCarId;
+ const carId=encodeURIComponent(targetCarId);
  const qs='?car_id='+carId;
  const historyUrl='/api/service-history?car_id='+carId+(forceRefresh?'&bypass_cache=1':'');
  const requests=[
@@ -1169,12 +1195,25 @@ async function loadData(forceRefresh=false){
    workerGet('/api/sale-history'+qs)
  ];
  const results=await Promise.allSettled(requests);
+ if(currentLoadingCarId!==targetCarId){
+   // Vehicle selection changed while network requests were in flight; discard stale data
+   return;
+ }
  if(results[0].status==='fulfilled'){
    const history=results[0].value;
-   records=Array.isArray(history?.data)?history.data:[];
+   const raw=Array.isArray(history?.data)?history.data:[];
+   records=raw.filter(r=>!r.car_id||r.car_id===targetCarId);
  }else{
    console.warn('Service history endpoint failed; retaining current records:',results[0].reason);
    if(!records.length)toast('Could not refresh service history. Please check your connection.','error');
+ }
+ if(!records.length&&db&&user?.id&&car?.id){
+   try{
+     const sbRec=await db.from('records').select('*,record_items(*)').eq('user_id',user.id).eq('car_id',targetCarId).order('service_date',{ascending:false});
+     if(Array.isArray(sbRec?.data)&&sbRec.data.length>0&&currentLoadingCarId===targetCarId){
+       records=sbRec.data.filter(r=>!r.car_id||r.car_id===targetCarId);
+     }
+   }catch(_){}
  }
  // Other panels are optional. A temporary failure must not wipe their previously loaded data
  // or force the entire customer dashboard back to login.
@@ -1182,9 +1221,17 @@ async function loadData(forceRefresh=false){
    const result=results[index];
    if(result?.status!=='fulfilled')return;
    const data=result.value?.data;
-   if(Array.isArray(data))setter(data);
+   if(Array.isArray(data))setter(data.filter(x=>!x.car_id||x.car_id===targetCarId));
  };
  applyArray(1,value=>{docs=value});
+ if(!docs.length&&db&&user?.id&&car?.id){
+   try{
+     const sbDocs=await db.from('documents').select('*').eq('user_id',user.id).eq('car_id',targetCarId);
+     if(Array.isArray(sbDocs?.data)&&sbDocs.data.length>0&&currentLoadingCarId===targetCarId){
+       docs=sbDocs.data.filter(d=>!d.car_id||d.car_id===targetCarId);
+     }
+   }catch(_){}
+ }
  if(results[2]?.status==='fulfilled'&&results[2].value)ownerProfile=results[2].value.data||ownerProfile;
  applyArray(3,value=>{insuranceHistory=value});
  applyArray(4,value=>{pucHistory=value});
@@ -1259,7 +1306,23 @@ async function saveCarForm(){
  let r=await db.from('cars').insert({user_id:user.id,registration_no:reg,make_model:model,model_year:+year,fuel,current_km:+($('cfKm').value||0),vin:$('cfVin').value.trim()||null,engine_no:$('cfEngine').value.trim()||null,insurance_company:ins,insurance_number:insNo,insurance_type:insTypes,insurance_addons:insAddons,insurance_expiry:insExp,puc_certificate_no:pucNo,puc_state:pucState,puc_validity_months:+pucValidity,puc_expiry:pucExp}).select().single();
  if(r.error)return toast('Failed to save Vehicle: '+r.error.message,'error');cars.push(r.data);car=r.data;updateCarTab();hideCarForm();toast('Vehicle '+reg+' added successfully!');await loadData();nav('dashboard');
 }
-window.openCar=async id=>{car=cars.find(x=>x.id===id);if(car?.id){try{localStorage.setItem('carmy_selected_car_id',car.id)}catch(_){}}updateCarTab();await loadData();nav('dashboard')};
+window.openCar=async id=>{
+  const target=cars.find(x=>x.id===id);
+  if(!target)return;
+  car=target;
+  if(car?.id){try{localStorage.setItem('carmy_selected_car_id',car.id)}catch(_){}}
+  records=[];
+  docs=[];
+  insuranceHistory=[];
+  pucHistory=[];
+  renewalHistory=[];
+  saleHistory=[];
+  updateCarTab();
+  if(document.getElementById('history')?.classList.contains('active'))renderHistory();
+  if(document.getElementById('docs')?.classList.contains('active')){try{await docsView()}catch(_){}}
+  await loadData();
+  nav('dashboard');
+};
 function vehicleBodyType(model=''){
  let m=model.toLowerCase();
  if(/suv|bolero|scorpio|thar|creta|venue|nexon|xuv|fortuner|harrier|seltos|brezza|sonet|ecosport|duster|jimny/.test(m))return 'SUV';
@@ -1600,43 +1663,191 @@ async function openVehicleHistory(id=car?.id){
  document.body.appendChild(m);$('vhClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove()};
  }catch(err){toast('Compliance history could not be loaded: '+(err?.message||err),'error');}
 }
+let fleetSearchTerm='';
+let fleetFilter='all';
+let fleetPage=1;
+let fleetPageSize=10;
+
 function carsView(){
- $('carsList').innerHTML='<div class="step5-toolbar"><div><b>Vehicle Fleet &amp; Registrations</b><span class="muted">Each vehicle keeps its own independent service history, documents, and compliance records.</span></div><button class="ghost" onclick="nav(\'owner\')">🛡️ Account &amp; Security</button></div>'+
- (cars.length?cars.map(c=>{
-   const isActive=car?.id===c.id;
-   const ins=st(c.insurance_expiry);
-   const puc=st(c.puc_expiry);
-   return '<div class="card vehicle-card '+(c.vehicle_status==='sold'?'vehicle-sold-card ':'')+(isActive?'vehicle-card-active':'')+'">'+
-     '<div class="vehicle-card-inner">'+
-       '<div class="vehicle-card-left">'+
-         '<div class="hsrp-plate"><div class="hsrp-ind"><span class="hsrp-chakra">☸</span><span>IND</span></div><span class="hsrp-number">'+esc(c.registration_no)+'</span></div>'+
-         '<div class="vehicle-meta">'+
-           '<h3>'+esc(c.make_model||'Vehicle')+'</h3>'+
-           '<p class="muted">'+[c.model_year,c.fuel,(Number(c.current_km||0).toLocaleString('en-IN')+' KM')].filter(Boolean).join(' • ')+'</p>'+
-         '</div>'+
-       '</div>'+
-       '<div class="vehicle-card-center">'+
-         '<div class="vehicle-pills">'+
-           '<span class="doc-badge '+ins[1]+'">INS: '+ins[0]+'</span>'+
-           '<span class="doc-badge '+puc[1]+'">PUC: '+puc[0]+'</span>'+
-           (c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':(isActive?'<span class="status ok">ACTIVE VEHICLE</span>':''))+
-         '</div>'+
-       '</div>'+
-       '<div class="vehicle-card-actions">'+
-         (!isActive?'<button class="primary" onclick="openCar(\''+c.id+'\')">Select Vehicle</button>':'<button class="ghost" onclick="nav(\'dashboard\')">Open Overview</button>')+
-         '<button class="ghost" onclick="openVehicleHistory(\''+c.id+'\')">Compliance</button>'+
-         (c.vehicle_status==='sold'?'':'<button class="ghost" onclick="editSpecificCar(\''+c.id+'\')">Edit</button>')+
-       '</div>'+
+ const container=$('carsList');
+ if(!container)return;
+ const total=cars.length;
+ const activeCount=cars.filter(c=>c.vehicle_status!=='sold').length;
+ const soldCount=cars.filter(c=>c.vehicle_status==='sold').length;
+ const attentionCount=cars.filter(c=>{
+   const i=st(c.insurance_expiry)[1],p=st(c.puc_expiry)[1];
+   return i==='bad'||p==='bad'||i==='warn'||p==='warn';
+ }).length;
+
+ let list=cars;
+ if(fleetFilter==='active')list=list.filter(c=>c.vehicle_status!=='sold');
+ else if(fleetFilter==='sold')list=list.filter(c=>c.vehicle_status==='sold');
+ else if(fleetFilter==='attention')list=list.filter(c=>{
+   const i=st(c.insurance_expiry)[1],p=st(c.puc_expiry)[1];
+   return i==='bad'||p==='bad'||i==='warn'||p==='warn';
+ });
+
+ if(fleetSearchTerm){
+   const q=fleetSearchTerm.trim().toLowerCase();
+   list=list.filter(c=>
+     (c.registration_no&&c.registration_no.toLowerCase().includes(q))||
+     (c.make_model&&c.make_model.toLowerCase().includes(q))||
+     (c.vin&&c.vin.toLowerCase().includes(q))||
+     (c.fuel&&c.fuel.toLowerCase().includes(q))||
+     (c.owner_name&&c.owner_name.toLowerCase().includes(q))
+   );
+ }
+
+ const filteredCount=list.length;
+ const totalPages=Math.max(1,Math.ceil(filteredCount/fleetPageSize));
+ if(fleetPage>totalPages)fleetPage=totalPages;
+ if(fleetPage<1)fleetPage=1;
+
+ const startIndex=(fleetPage-1)*fleetPageSize;
+ const pageItems=fleetPageSize===0?list:list.slice(startIndex,startIndex+fleetPageSize);
+
+ let html='<div class="step5-toolbar fleet-toolbar">'+
+   '<div class="fleet-title-wrap">'+
+     '<b>Vehicle Fleet &amp; Registrations <span class="fleet-count-badge">'+total+'</span></b>'+
+     '<span class="muted">Each vehicle keeps its own independent service history, documents, and compliance records.</span>'+
+   '</div>'+
+   '<div class="fleet-top-actions">'+
+     '<button type="button" class="primary" onclick="openNewCarModal()">＋ Add Vehicle</button>'+
+     (total>1?'<button type="button" class="ghost" onclick="window.openVehicleSwitcher()">⌁ Quick Switcher</button>':'')+
+     '<button type="button" class="ghost" onclick="nav(\'owner\')">🛡️ Account &amp; Security</button>'+
+   '</div>'+
+ '</div>';
+
+ if(total>0){
+   html+='<div class="fleet-metrics-bar">'+
+     '<div class="fleet-filter-chips">'+
+       '<button type="button" class="fleet-chip '+(fleetFilter==='all'?'active':'')+'" onclick="setFleetFilter(\'all\')">All Vehicles <span class="chip-count">'+total+'</span></button>'+
+       '<button type="button" class="fleet-chip '+(fleetFilter==='active'?'active':'')+'" onclick="setFleetFilter(\'active\')">Active <span class="chip-count">'+activeCount+'</span></button>'+
+       '<button type="button" class="fleet-chip '+(fleetFilter==='sold'?'active':'')+'" onclick="setFleetFilter(\'sold\')">Sold <span class="chip-count">'+soldCount+'</span></button>'+
+       '<button type="button" class="fleet-chip chip-warn '+(fleetFilter==='attention'?'active':'')+'" onclick="setFleetFilter(\'attention\')">Needs Attention <span class="chip-count">'+attentionCount+'</span></button>'+
+     '</div>'+
+     '<div class="fleet-search-wrap">'+
+       '<input id="fleetSearchInput" type="search" class="fleet-search-input" placeholder="Search fleet by plate, model, VIN..." value="'+esc(fleetSearchTerm)+'" oninput="onFleetSearch(this.value)">'+
      '</div>'+
    '</div>';
- }).join(''):
- '<div class="card empty-garage-card" style="margin-top:20px;text-align:center;padding:48px 24px">'+
-   '<div class="empty-garage-icon"><svg aria-hidden="true" style="width:48px;height:48px;stroke:var(--c-accent)"><use href="#td-icon-car"/></svg></div>'+
-   '<h3>No vehicles in your garage</h3>'+
-   '<p class="muted" style="max-width:440px;margin:8px auto 20px">Add your car registration number to start recording services, uploading insurance policies, and generating reports.</p>'+
-   '<button type="button" class="primary" style="padding:12px 24px" onclick="showCarForm()">＋ Add Your First Car</button>'+
- '</div>');
+
+   if(!pageItems.length){
+     html+='<div class="card empty-fleet-search" style="margin-top:16px;text-align:center;padding:40px 20px">'+
+       '<p class="muted">No vehicles matched your search criteria ("'+esc(fleetSearchTerm)+'").</p>'+
+       '<button type="button" class="ghost" onclick="clearFleetFilters()">Clear Filters</button>'+
+     '</div>';
+   }else{
+     html+=pageItems.map(c=>{
+       const isActive=car?.id===c.id;
+       const ins=st(c.insurance_expiry);
+       const puc=st(c.puc_expiry);
+       return '<div class="card vehicle-card '+(c.vehicle_status==='sold'?'vehicle-sold-card ':'')+(isActive?'vehicle-card-active':'')+'">'+
+         '<div class="vehicle-card-inner">'+
+           '<div class="vehicle-card-left">'+
+             '<div class="hsrp-plate"><div class="hsrp-ind"><span class="hsrp-chakra">☸</span><span>IND</span></div><span class="hsrp-number">'+esc(c.registration_no)+'</span></div>'+
+             '<div class="vehicle-meta">'+
+               '<h3>'+esc(c.make_model||'Vehicle')+'</h3>'+
+               '<p class="muted">'+[c.model_year,c.fuel,(Number(c.current_km||0).toLocaleString('en-IN')+' KM')].filter(Boolean).join(' • ')+'</p>'+
+             '</div>'+
+           '</div>'+
+           '<div class="vehicle-card-center">'+
+             '<div class="vehicle-pills">'+
+               '<span class="doc-badge '+ins[1]+'">INS: '+ins[0]+'</span>'+
+               '<span class="doc-badge '+puc[1]+'">PUC: '+puc[0]+'</span>'+
+               (c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':(isActive?'<span class="status ok">ACTIVE VEHICLE</span>':''))+
+             '</div>'+
+           '</div>'+
+           '<div class="vehicle-card-actions">'+
+             (!isActive?'<button class="primary" onclick="openCar(\''+c.id+'\')">Select Vehicle</button>':'<button class="ghost" onclick="nav(\'dashboard\')">Open Overview</button>')+
+             '<button class="ghost" onclick="openVehicleHistory(\''+c.id+'\')">Compliance</button>'+
+             (c.vehicle_status==='sold'?'':'<button class="ghost" onclick="editSpecificCar(\''+c.id+'\')">Edit</button>')+
+           '</div>'+
+         '</div>'+
+       '</div>';
+     }).join('');
+
+     if(filteredCount>fleetPageSize){
+       const startNum=startIndex+1;
+       const endNum=Math.min(startIndex+fleetPageSize,filteredCount);
+       html+='<div class="fleet-pagination-bar">'+
+         '<span class="muted pagination-info">Showing '+startNum+'–'+endNum+' of '+filteredCount+' vehicles</span>'+
+         '<div class="pagination-buttons">'+
+           '<button type="button" class="ghost btn-sm" '+(fleetPage<=1?'disabled':'')+' onclick="changeFleetPage('+(fleetPage-1)+')">← Previous</button>'+
+           '<span class="pagination-page-label">Page '+fleetPage+' of '+totalPages+'</span>'+
+           '<button type="button" class="ghost btn-sm" '+(fleetPage>=totalPages?'disabled':'')+' onclick="changeFleetPage('+(fleetPage+1)+')">Next →</button>'+
+         '</div>'+
+       '</div>';
+     }
+   }
+ }else{
+   html+='<div class="card empty-garage-card" style="margin-top:20px;text-align:center;padding:48px 24px">'+
+     '<div class="empty-garage-icon"><svg aria-hidden="true" style="width:48px;height:48px;stroke:var(--c-accent)"><use href="#td-icon-car"/></svg></div>'+
+     '<h3>No vehicles in your garage</h3>'+
+     '<p class="muted" style="max-width:440px;margin:8px auto 20px">Add your car registration number to start recording services, uploading insurance policies, and generating reports.</p>'+
+     '<button type="button" class="primary" style="padding:12px 24px" onclick="showCarForm()">＋ Add Your First Car</button>'+
+   '</div>';
+ }
+ container.innerHTML=html;
 }
+
+window.setFleetFilter=function(f){fleetFilter=f;fleetPage=1;carsView()};
+window.onFleetSearch=function(v){fleetSearchTerm=v||'';fleetPage=1;carsView();const el=$('fleetSearchInput');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}};
+window.clearFleetFilters=function(){fleetSearchTerm='';fleetFilter='all';fleetPage=1;carsView()};
+window.changeFleetPage=function(p){fleetPage=p;carsView()};
+
+window.openVehicleSwitcher=function(){
+ if(!cars.length)return;
+ let old=document.getElementById('vehicleSwitcherModal');if(old)old.remove();
+ const m=document.createElement('div');
+ m.id='vehicleSwitcherModal';
+ m.style='position:fixed;inset:0;background:rgba(15,23,42,.6);backdrop-filter:blur(8px);display:grid;place-items:center;z-index:10030;padding:16px';
+ let searchVal='';
+ const renderList=()=>{
+   const q=searchVal.trim().toLowerCase();
+   const filtered=cars.filter(c=>
+     !q||
+     (c.registration_no&&c.registration_no.toLowerCase().includes(q))||
+     (c.make_model&&c.make_model.toLowerCase().includes(q))
+   );
+   const listEl=m.querySelector('#switcherList');
+   if(!listEl)return;
+   if(!filtered.length){
+     listEl.innerHTML='<div style="text-align:center;padding:24px;color:#64748b">No matching vehicles found</div>';
+     return;
+   }
+   listEl.innerHTML=filtered.map(c=>{
+     const isSel=car?.id===c.id;
+     return '<div class="switcher-item '+(isSel?'is-selected':'')+'" onclick="window.selectAndCloseSwitcher(\''+c.id+'\')">'+
+       '<div class="hsrp-plate hsrp-mini"><span class="hsrp-number">'+esc(c.registration_no)+'</span></div>'+
+       '<div class="switcher-meta"><b>'+esc(c.make_model||'Vehicle')+'</b><small>'+esc([c.model_year,c.fuel].filter(Boolean).join(' • '))+'</small></div>'+
+       (isSel?'<span class="status ok">ACTIVE</span>':(c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':''))+
+     '</div>';
+   }).join('');
+ };
+ m.innerHTML='<div class="switcher-dialog">'+
+   '<div class="switcher-header">'+
+     '<div><b>Switch Active Vehicle</b><span class="muted" style="display:block;font-size:12px">Search across all '+cars.length+' vehicles in your garage</span></div>'+
+     '<button type="button" class="ghost btn-sm" id="switcherClose">✕</button>'+
+   '</div>'+
+   '<div class="switcher-search-box">'+
+     '<input id="switcherSearch" type="search" placeholder="Type vehicle registration or model..." autocomplete="off">'+
+   '</div>'+
+   '<div id="switcherList" class="switcher-list"></div>'+
+ '</div>';
+ document.body.appendChild(m);
+ renderList();
+ const searchInput=m.querySelector('#switcherSearch');
+ if(searchInput){
+   searchInput.focus();
+   searchInput.oninput=e=>{searchVal=e.target.value;renderList()};
+ }
+ m.querySelector('#switcherClose').onclick=()=>m.remove();
+ m.onclick=e=>{if(e.target===m)m.remove()};
+ window.selectAndCloseSwitcher=async id=>{
+   m.remove();
+   await openCar(id);
+ };
+};
 window.editSpecificCar=async id=>{let previous=car;car=cars.find(x=>x.id===id)||previous;if(car?.vehicle_status==='sold'){toast('Sold vehicle is read-only. Open History to view its complete lifecycle.','error');car=previous;return}updateCarTab();await window.editCar();await loadCars();let fresh=cars.find(x=>x.id===car?.id);if(fresh)car=fresh;updateCarTab();await loadData();carsView()};
 function guard(){if(!car){$('guard').innerHTML='<div class="dangerbox">Please add/select a car first.</div>';$('formCard').style.display='none';return}if(car.vehicle_status==='sold'){$('guard').innerHTML='<div class="dangerbox"><b>VEHICLE SOLD</b> — Service entries are locked. Historical records and documents remain available.</div>';$('formCard').style.display='none';return}if(!car.insurance_expiry||!car.puc_expiry){$('guard').innerHTML='<div class="dangerbox"><b>ENTRY BLOCKED</b> — Add Insurance and PUC expiry dates to this car first.</div>';$('formCard').style.display='none'}else{$('guard').innerHTML=(st(car.insurance_expiry)[0]==='EXPIRED'||st(car.puc_expiry)[0]==='EXPIRED')?'<div class="dangerbox"><b>WARNING</b> — Insurance/PUC is expired. Save only if you confirm.</div>':'';$('formCard').style.display='block'}}
 renderServiceItems(); $('type').onchange=renderServiceItems;
@@ -1685,7 +1896,7 @@ function renderHistory(){
    if(!['all',...ys.map(String)].includes(currentYear))currentYear='all';
    $('year').value=currentYear;
  }
- let rs=records;
+ let rs=records.filter(r=>!r.car_id||r.car_id===car.id);
  if(currentYear!=='all')rs=rs.filter(r=>new Date(r.service_date).getFullYear()===+currentYear);
  if(currentType!=='all')rs=rs.filter(r=>(r.record_type||'Other')===currentType);
 
@@ -2043,7 +2254,8 @@ async function saveRequiredCarDetails(p){let r=await db.from('cars').update(p).e
 window.openAddRecord=async()=>{if(!(await ensureRequiredCarDetails()))return;await nav('add')};
 function report(){
  if(!car)return;
- const total=records.reduce((sum,r)=>sum+Number(r.total_cost||0),0),rows=Array.isArray(insuranceHistory)?insuranceHistory.filter(x=>x.car_id===car.id):[],current=rows.find(x=>x.policy_status==='current')||null,old=rows.filter(x=>x.policy_status==='archive').sort((a,b)=>String(a.issue_date||'').localeCompare(String(b.issue_date||''))),pucs=Array.isArray(pucHistory)?pucHistory.filter(x=>x.car_id===car.id):[],pucCurrent=pucs.find(x=>x.puc_status==='current')||null,pucOld=pucs.filter(x=>x.puc_status==='archive').sort((a,b)=>String(a.expiry_date||'').localeCompare(String(b.expiry_date||'')));
+ const carRecords=(records||[]).filter(r=>!r.car_id||r.car_id===car.id);
+ const total=carRecords.reduce((sum,r)=>sum+Number(r.total_cost||0),0),rows=Array.isArray(insuranceHistory)?insuranceHistory.filter(x=>x.car_id===car.id):[],current=rows.find(x=>x.policy_status==='current')||null,old=rows.filter(x=>x.policy_status==='archive').sort((a,b)=>String(a.issue_date||'').localeCompare(String(b.issue_date||''))),pucs=Array.isArray(pucHistory)?pucHistory.filter(x=>x.car_id===car.id):[],pucCurrent=pucs.find(x=>x.puc_status==='current')||null,pucOld=pucs.filter(x=>x.puc_status==='archive').sort((a,b)=>String(a.expiry_date||'').localeCompare(String(b.expiry_date||'')));
  const claimLabel=x=>x?.claim_taken===true?'Yes':x?.claim_taken===false?'No':'Not confirmed';
  const period=x=>(x?.issue_date?formatDateNice(x.issue_date):'—')+' to '+(x?.expiry_date?formatDateNice(x.expiry_date):'—');
  const provenanceNote=x=>{const meta=x?.extraction_meta||{},estimated=Array.isArray(meta.estimated_fields)&&meta.estimated_fields.some(k=>['issue_date','expiry_date','period_from','period_to'].includes(k))||meta.estimated_dates===true;if(estimated)return '<small class="report-date-provenance report-estimated">Estimated</small>';if(x?.source==='historical_import'&&!x?.source_document_id)return '<small class="report-date-provenance">Imported · source document not linked</small>';return ''};
@@ -2058,7 +2270,7 @@ function report(){
  '<div class="report-section"><div class="report-section-title">CURRENT INSURANCE</div>'+currentHtml+'</div>'+
  '<div class="report-section"><div class="report-section-title">INSURANCE HISTORY — ARCHIVE</div><table class="report-table insurance-archive-table"><colgroup><col style="width:6%"><col style="width:22%"><col style="width:24%"><col style="width:20%"><col style="width:9%"><col style="width:19%"></colgroup><thead><tr><th>Sr</th><th>Provider</th><th>Policy No.</th><th>Period</th><th>Claim</th><th>Claim Invoice No.</th></tr></thead><tbody>'+oldHtml+'</tbody></table></div>'+
  '<div class="report-section"><div class="report-section-title">CURRENT PUC</div>'+pucCurrentHtml+'</div><div class="report-section"><div class="report-section-title">PUC HISTORY — ARCHIVE</div><table class="report-table puc-archive-table"><colgroup><col style="width:6%"><col style="width:18%"><col style="width:18%"><col style="width:38%"><col style="width:20%"></colgroup><thead><tr><th>Sr</th><th>Test Date</th><th>Valid Until</th><th>Certificate No.</th><th>Cost</th></tr></thead><tbody>'+pucOldHtml+'</tbody></table></div>'+
- '<div class="report-section"><div class="report-section-title">SERVICE & REPAIR HISTORY</div><table class="report-table"><thead><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th></tr></thead><tbody>'+records.map(r=>'<tr><td>'+esc(formatDateNice(r.service_date))+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+(r.record_items?.length?'<small>'+esc(r.record_items.map(x=>x.item_name).join(', '))+'</small>':'')+'</td><td>'+money(r.total_cost)+'</td></tr>').join('')+'</tbody></table><div class="report-total"><span>Total Service Cost</span><b>'+money(total)+'</b></div></div>'+
+ '<div class="report-section"><div class="report-section-title">SERVICE & REPAIR HISTORY</div><table class="report-table"><thead><tr><th>Date</th><th>KM</th><th>Type</th><th>Work</th><th>Cost</th></tr></thead><tbody>'+carRecords.map(r=>'<tr><td>'+esc(formatDateNice(r.service_date))+'</td><td>'+esc(r.odometer_km)+'</td><td>'+esc(r.record_type)+'</td><td>'+esc(r.description||'')+(r.record_items?.length?'<small>'+esc(r.record_items.map(x=>x.item_name).join(', '))+'</small>':'')+'</td><td>'+money(r.total_cost)+'</td></tr>').join('')+'</tbody></table><div class="report-total"><span>Total Service Cost</span><b>'+money(total)+'</b></div></div>'+
  '<div class="report-section"><div class="report-section-title">DOCUMENTS</div><div class="report-document-grid">'+[
  {type:'rc',label:'Registration Certificate',number:car.registration_no,validity:car.rc_validity,doc:(docs||[]).find(d=>d.document_type==='rc'&&d.active&&!d.archived_at)},
  {type:'insurance',label:'Current Insurance',number:current?.policy_number,validity:current?.expiry_date,doc:(docs||[]).find(d=>d.id===current?.source_document_id)||((docs||[]).find(d=>d.document_type==='insurance'&&d.active&&!d.archived_at))},
