@@ -46,7 +46,7 @@ try{
  await page.locator('#table-invoices [data-row-action="paid"]').last().click();
  await page.locator('.gd-sidebar button[data-gd-view="customers"]').click();
  await add('customer',{customer:'QA Customer Two',phone:'9800000002',vehicle:'Test Car',reg:'QA-02'},'customers');
- await check(await page.locator('#table-customers').getByText('QA Customer Two').count()>0,'Customer create failed');
+ await check(await page.locator('#table-customers').getByText('QA Customer Two',{exact:true}).count()===1,'Customer create produced a missing or duplicate customer row');
  let deletePromptSeen=false;
  page.once('dialog',async d=>{deletePromptSeen=d.message().includes('Remove this record');await d.accept();});
  await page.locator('#table-customers [data-row-action="delete"]').last().click();
