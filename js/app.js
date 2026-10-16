@@ -1627,11 +1627,11 @@ function ownerProfileView(){
    (hasProfile?'<span class="status ok">PROFILE SAVED</span>':'<span class="status warn">NOT SAVED</span>')+
    '</div></div>'+
    '<div class="card security-status-card">'+
-     '<div class="security-card-head"><div class="security-card-icon"><svg aria-hidden="true" style="width:24px;height:24px;stroke:var(--c-accent)"><use href="#td-icon-shield"/></svg></div><div><h3>Active Security &amp; Session Status</h3><p class="muted">Cloudflare Worker &amp; Supabase session telemetry</p></div></div>'+
+     '<div class="security-card-head"><div class="security-card-icon"><svg aria-hidden="true" style="width:24px;height:24px;stroke:var(--c-accent)"><use href="#td-icon-shield"/></svg></div><div><h3>Account Security &amp; Session Guard</h3><p class="muted">Session protection, identity safeguards and account controls</p></div></div>'+
      '<div class="security-badges-grid">'+
-       '<div class="sec-item"><span class="sec-tag ok">ACTIVE</span><b>120s Inactivity Protection</b><p class="muted">Automatic idle logout guards vehicle records on unattended or shared devices.</p></div>'+
-       '<div class="sec-item"><span class="sec-tag ok">SYNCED</span><b>Cloudflare D1 Heartbeat</b><p class="muted">Client activity synchronized via /api/session/heartbeat to preserve legitimate active sessions.</p></div>'+
-       '<div class="sec-item"><span class="sec-tag ok">AUTHENTICATED</span><b>Supabase Auth (JWT)</b><p class="muted">User ID: '+esc(user?.id||'Unknown')+'<br>Email: '+esc(user?.email||'Unknown')+'</p></div>'+
+       '<div class="sec-item"><span class="sec-tag ok">ACTIVE</span><b>Inactivity Lock (120s)</b><p class="muted">Automatic session protection guards your vehicle records on unattended or shared devices.</p></div>'+
+       '<div class="sec-item"><span class="sec-tag ok">SYNCED</span><b>Active Session Heartbeat</b><p class="muted">Secure background synchronization keeps your session active while you work.</p></div>'+
+       '<div class="sec-item"><span class="sec-tag ok">VERIFIED</span><b>Authenticated Account</b><p class="muted">Signed in as '+esc(user?.email||'Unknown')+'</p></div>'+
      '</div>'+
      '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
    '</div>'+
@@ -1739,14 +1739,54 @@ function ownerProfileView(){
 }
 
 let currentHelpTab='faqs';
+let userSupportTickets=[];
+let ticketsLoaded=false;
+let ticketSubmitting=false;
+
+async function loadUserSupportTickets(){
+  if(typeof workerGet==='function'){
+    try{
+      const res=await workerGet('/api/support-tickets');
+      if(Array.isArray(res?.data)){
+        userSupportTickets=res.data.map(t=>({
+          ...t,
+          created_at: typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
+          car_reg: cars.find(c=>c.id===t.car_id)?.registration_no||null
+        }));
+        try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
+        ticketsLoaded=true;
+        return userSupportTickets;
+      }
+    }catch(err){
+      console.warn('Could not fetch support tickets from server:', err);
+    }
+  }
+  try{
+    const cached=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]');
+    if(Array.isArray(cached)&&cached.length>0) userSupportTickets=cached;
+  }catch(_){}
+  return userSupportTickets;
+}
+
 function helpView(){
   const container=$('helpTabContent');
   if(!container)return;
   document.querySelectorAll('.help-tab-btn').forEach(b=>{
     b.classList.toggle('active',b.dataset.helpTab===currentHelpTab);
-    b.onclick=()=>{
+    b.onclick=(e)=>{
+      e?.preventDefault();
+      e?.stopPropagation();
       currentHelpTab=b.dataset.helpTab;
       helpView();
+    };
+  });
+  document.querySelectorAll('.help-footer-link').forEach(btn=>{
+    btn.onclick=(e)=>{
+      e?.preventDefault();
+      e?.stopPropagation();
+      currentHelpTab=btn.dataset.helpTarget;
+      helpView();
+      window.scrollTo({top:0,behavior:'smooth'});
     };
   });
   if(currentHelpTab==='faqs'){
@@ -1754,6 +1794,14 @@ function helpView(){
   }else if(currentHelpTab==='ticket'){
     container.innerHTML=renderTicketContent();
     wireTicketForm();
+    if(!ticketsLoaded&&typeof workerGet==='function'){
+      loadUserSupportTickets().then(()=>{
+        if(currentHelpTab==='ticket'){
+          container.innerHTML=renderTicketContent();
+          wireTicketForm();
+        }
+      });
+    }
   }else if(currentHelpTab==='about'){
     container.innerHTML=renderAboutContent();
   }else if(currentHelpTab==='terms'){
@@ -1778,8 +1826,10 @@ function renderFaqsContent(){
 }
 
 function renderTicketContent(){
-  let existing=[];
-  try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
+  let existing=userSupportTickets;
+  if(!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
+  }
   const userTickets=existing.filter(t=>!user||t.user_id===user.id||t.email===user.email);
   const carOptions=['<option value="">General (No specific vehicle)</option>'].concat(
     cars.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
@@ -1787,6 +1837,7 @@ function renderTicketContent(){
 
   return '<div class="card">'+
     '<div class="card-head-row"><div><h3>Submit a Support Ticket</h3><p class="muted">Have an inquiry or experiencing an issue? Submit a ticket directly to the engineering team.</p></div></div>'+
+    '<div id="ticketFormStatus"></div>'+
     '<form class="form" id="supportTicketForm" onsubmit="return false;" style="margin-top:14px">'+
       '<div class="field"><label for="ticketCategory">Category *</label><select id="ticketCategory"><option value="Account & Security">Account &amp; Security</option><option value="Vehicle Garage & Records">Vehicle Garage &amp; Records</option><option value="Document Vault & Uploads">Document Vault &amp; Uploads</option><option value="Ownership Transfer (Form 29/30)">Ownership Transfer (Form 29/30)</option><option value="Feature Request">Feature Request</option><option value="Other Inquiry">Other Inquiry</option></select></div>'+
       '<div class="field"><label for="ticketPriority">Priority</label><select id="ticketPriority"><option value="Normal">Normal</option><option value="Urgent">Urgent</option></select></div>'+
@@ -1808,6 +1859,7 @@ function wireTicketForm(){
   const btn=$('ticketSubmitBtn');
   if(!btn)return;
   btn.onclick=async()=>{
+    if(ticketSubmitting)return;
     const cat=$('ticketCategory')?.value;
     const sub=$('ticketSubject')?.value?.trim();
     const msg=$('ticketMessage')?.value?.trim();
@@ -1816,53 +1868,74 @@ function wireTicketForm(){
     if(!sub){ toast('Please enter a ticket subject.','error'); $('ticketSubject')?.focus(); return; }
     if(!msg){ toast('Please describe your inquiry or issue.','error'); $('ticketMessage')?.focus(); return; }
 
+    ticketSubmitting=true;
     btn.disabled=true;
     btn.textContent='SUBMITTING...';
-    const ticketId='TD-'+Math.random().toString(36).substring(2,8).toUpperCase();
-    const ticketRecord={
-      id: ticketId,
-      user_id: user?.id,
-      email: user?.email,
-      car_id: carId,
-      car_reg: cars.find(c=>c.id===carId)?.registration_no||null,
-      category: cat,
-      subject: sub,
-      message: msg,
-      priority: pri,
-      status: 'Open',
-      created_at: new Date().toISOString()
-    };
-    try{
-      let existing=[];
-      try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
-      existing.unshift(ticketRecord);
-      localStorage.setItem('carmy_support_tickets',JSON.stringify(existing));
+    const statusEl=$('ticketFormStatus');
+    if(statusEl) statusEl.innerHTML='';
 
-      try{
-        if(db&&user?.id){
-          await db.from('support_tickets').insert({
-            id: ticketRecord.id,
-            user_id: user.id,
-            email: user.email,
-            car_id: carId,
+    let ticketId=null;
+    try{
+      let res=null;
+      if(typeof workerPost==='function'){
+        try{
+          res=await workerPost('/api/support-tickets',{
             category: cat,
             subject: sub,
             message: msg,
             priority: pri,
-            status: 'open',
-            created_at: ticketRecord.created_at
+            car_id: carId
           });
+        }catch(postErr){
+          console.warn('Worker ticket endpoint error:', postErr);
+          // If the worker returns an error with message, preserve it
+          if(postErr?.status===400||postErr?.status===403||postErr?.status===429||postErr?.status===503){
+            throw postErr;
+          }
         }
-      }catch(_){}
+      }
+      ticketId=res?.data?.id || (res?.ok ? ('TD-'+Math.random().toString(36).substring(2,8).toUpperCase()) : null);
+      if(!ticketId){
+        // If worker was unavailable or non-responsive, generate a local reference
+        ticketId='TD-'+Math.random().toString(36).substring(2,8).toUpperCase();
+      }
+
+      const createdRecord={
+        id: ticketId,
+        user_id: user?.id,
+        email: user?.email,
+        car_id: carId,
+        car_reg: cars.find(c=>c.id===carId)?.registration_no||null,
+        category: cat,
+        subject: sub,
+        message: msg,
+        priority: pri,
+        status: res?.data?.status||'Open',
+        created_at: new Date().toISOString()
+      };
+
+      userSupportTickets.unshift(createdRecord);
+      try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
 
       toast('Support ticket '+ticketId+' created successfully!');
       currentHelpTab='ticket';
       helpView();
     }catch(err){
       console.error('Ticket submission error:',err);
-      toast('Failed to record support ticket. Please try again.','error');
+      const errMsg=err?.message||'Failed to submit support ticket. Please try again.';
+      if(statusEl){
+        statusEl.innerHTML='<div class="ticket-status-banner error" style="margin-top:10px"><b>Submission Failed:</b> '+esc(errMsg)+' <br><small>Your entered details are preserved above. Please check your connection and retry.</small></div>';
+      }
+      toast(errMsg,'error');
+      if(document.body.contains(btn)){
+        btn.disabled=false;
+        btn.textContent='RETRY SUBMISSION';
+      }
     }finally{
-      if(document.body.contains(btn)){ btn.disabled=false; btn.textContent='SUBMIT TICKET'; }
+      ticketSubmitting=false;
+      if(document.body.contains(btn)&&!ticketId){
+        btn.disabled=false;
+      }
     }
   };
 }

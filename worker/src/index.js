@@ -11,6 +11,7 @@ import { listRenewals } from "./renewals.js";
 import { listSaleHistory } from "./sales.js";
 import { handleCacheWebhook } from "./cache-webhook.js";
 import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
+import { createSupportTicket, listUserSupportTickets, adminListSupportTickets } from "./support-tickets.js";
 
 const RATE_LIMIT_RETRY_AFTER = "60";
 
@@ -109,6 +110,10 @@ export default {
 
     if (url.pathname === "/api/workshop-onboarding" && request.method === "POST") {
       return createWorkshopOnboarding(request, env, origin);
+    }
+
+    if (url.pathname === "/api/admin/support-tickets" && request.method === "GET") {
+      return adminListSupportTickets(request, env, origin);
     }
 
     let user;
@@ -246,6 +251,14 @@ export default {
       if (request.method === "GET" && parts[0] === "sale-history") {
         const carId = url.searchParams.get("car_id");
         return json({ ok: true, data: await listSaleHistory(env, user, userToken, carId) }, 200, origin);
+      }
+
+      if (request.method === "POST" && parts[0] === "support-tickets" && parts.length === 1) {
+        return createSupportTicket(request, env, origin, user, userToken);
+      }
+
+      if (request.method === "GET" && parts[0] === "support-tickets" && parts.length === 1) {
+        return listUserSupportTickets(request, env, origin, user);
       }
 
       return error("Route not found.", 404, origin, "NOT_FOUND");
