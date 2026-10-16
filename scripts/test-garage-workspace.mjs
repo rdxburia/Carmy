@@ -51,7 +51,7 @@ try{
  page.once('dialog',async d=>{deletePromptSeen=d.message().includes('Remove this record');await d.accept();});
  await page.locator('#table-customers [data-row-action="delete"]').last().click();
  await check(deletePromptSeen,'Customer delete confirmation was not shown');
- await page.waitForFunction(()=>![...document.querySelectorAll('#table-customers tr')].some(row=>row.innerText.includes('QA Customer Two')),{timeout:3000}).catch(async()=>{
+ await page.waitForFunction(()=>![...document.querySelectorAll('#table-customers tr')].some(row=>row.innerText.includes('QA Customer Two')),undefined,{timeout:3000}).catch(async()=>{
   const details=await page.locator('#table-customers').innerText();
   throw new Error('Delete customer failed; table after confirmation: '+details);
  });
