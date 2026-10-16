@@ -877,15 +877,53 @@ async function handleAuthSubmit(ev){
  if(!p)return toast('Enter your password.','error');
  if(btn){btn.disabled=true;btn.dataset.loadingText=btn.textContent;btn.textContent=signup?'Creating account…':'Signing in…'}
  try{
-   const r=signup
-     ? await db.auth.signUp({email:e,password:p,options:{emailRedirectTo:getAuthRedirectUrl(),data:{full_name:$('fullName').value.trim(),phone:normalizeMobile($('mobile').value)}}})
-     : await db.auth.signInWithPassword({email:e,password:p});
-   if(r.error){toast(r.error.message||'Login failed. Please check your email and password.','error');return}
+   let r;
+   if(signup){
+     const normalizedEmail=e.trim().toLowerCase();
+     const normalizedPhone=normalizeMobile($('mobile').value);
+     if(!normalizedPhone){
+       toast('Enter a valid 10-digit Indian mobile number.','error');
+       return;
+     }
+     // Server-side RPC checks existing profile contacts without exposing profile rows.
+     const duplicateCheck=await db.rpc('check_registration_duplicate',{
+       p_email:normalizedEmail,
+       p_phone:normalizedPhone
+     });
+     if(duplicateCheck.error){
+       console.error('Registration duplicate check failed:',duplicateCheck.error);
+       toast('We could not verify your details right now. Please try again.','error');
+       return;
+     }
+     if(duplicateCheck.data===true){
+       toast('An account with this email or mobile number already exists. Please sign in instead.','error');
+       return;
+     }
+     r=await db.auth.signUp({
+       email:normalizedEmail,
+       password:p,
+       options:{
+         emailRedirectTo:getAuthRedirectUrl(),
+         data:{full_name:$('fullName').value.trim(),phone:normalizedPhone}
+       }
+     });
+   }else{
+     r=await db.auth.signInWithPassword({email:e,password:p});
+   }
+   if(r.error){
+     const msg=String(r.error.message||'');
+     if(signup&&(/already registered|already exists|duplicate key|unique constraint/i.test(msg)||r.error.code==='23505')){
+       toast('An account with this email or mobile number already exists. Please sign in instead.','error');
+     }else{
+       toast(r.error.message||'Login failed. Please check your email and password.','error');
+     }
+     return;
+   }
    if(signup){
      if(r.data?.session){
        toast('Account created and signed in.');
      }else{
-       showVerificationView(e);
+       showVerificationView(e.trim().toLowerCase());
      }
    }
  }catch(err){
