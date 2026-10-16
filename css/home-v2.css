@@ -225,8 +225,13 @@
   .td-home-hero{padding:16px 0 24px}
   .td-audience-switch-wrap{margin-bottom:18px}
   .td-switch-label{font-size:9px}
-  .td-audience-switch{width:100%;display:grid;grid-template-columns:1fr 1fr}
-  .td-audience-switch button{padding:8px 6px;min-height:40px;font-size:11px}
+  .td-audience-switch{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  .td-audience-switch button{padding:7px 6px;min-height:40px;font-size:11px;gap:5px;white-space:nowrap}
+  .td-audience-switch button span{font-size:8.5px;padding:2px 5px}
+  @media(max-width:380px){
+    .td-audience-switch button{padding:6px 3px;font-size:10px;gap:3px}
+    .td-audience-switch button span{font-size:7.5px;padding:1.5px 4px}
+  }
   .td-home-hero-grid{gap:20px}
   .td-home-v2 .td-home-hero h1{font-size:clamp(30px,8.5vw,40px);margin:12px 0 10px;letter-spacing:-.045em}
   .td-home-hero p{font-size:13.5px;line-height:1.6}

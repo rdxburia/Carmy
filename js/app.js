@@ -1993,11 +1993,23 @@ function docExpired(d){return (d.document_type==='insurance'||d.document_type===
 function docExpiringSoon(d){return (d.document_type==='insurance'||d.document_type==='puc'||d.document_type==='rc')&&!!d.document_expiry&&!docExpired(d)&&((dateOnlyEnd(d.document_expiry)-new Date())/86400000)<=15}
 function docStatus(d){if(d.archived_at)return ['Archived','archived'];if(docExpired(d))return ['Expired','expired'];if(docExpiringSoon(d))return ['Expiring Soon','soon'];return ['Active','active']}
 async function archiveExpiredDocuments(){return}
+function docTypeIcon(type){
+ if(type==='insurance')return '<svg class="doc-svg-icon" aria-hidden="true"><use href="#td-icon-shield"/></svg>';
+ if(type==='puc')return '<svg class="doc-svg-icon" aria-hidden="true"><use href="#td-icon-route"/></svg>';
+ if(type==='rc')return '<svg class="doc-svg-icon" aria-hidden="true"><use href="#td-icon-book"/></svg>';
+ return '<svg class="doc-svg-icon" aria-hidden="true"><use href="#td-icon-file"/></svg>';
+}
+function docFileExt(fileName){
+ if(!fileName)return 'DOC';
+ const parts=fileName.split('.');
+ if(parts.length>1){
+  const ext=parts.pop().toUpperCase();
+  if(ext.length<=4)return ext;
+ }
+ return 'FILE';
+}
 function renderDocFlipCard(d){
- const [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄';
- const meta=d.document_type==='insurance'?(car.insurance_number||'Policy number not recorded'):d.document_type==='puc'?((car.puc_state||'State')+' • '+(car.puc_validity_months?car.puc_validity_months+' months':'Validity not recorded')):d.document_type==='rc'?'Registration Certificate':(d.document_name||'Vehicle document');
- const renew=(d.document_type==='insurance'||d.document_type==='puc')?'<button type="button" class="primary doc-action" data-action="renew" data-id="'+esc(d.id)+'" data-type="'+esc(d.document_type)+'">Renew</button>':'';
- return '<div class="flip-card doc-flip-card" tabindex="0"><div class="flip-inner"><div class="flip-front"><div class="doc-card-top"><span class="doc-card-icon">'+icon+'</span><span class="doc-badge '+cls+'">'+status+'</span></div><b>'+esc(title)+'</b><small>'+esc(meta)+'</small><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'No expiry required')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><small>'+esc(d.file_name)+'</small><div class="doc-flip-actions"><button type="button" class="ghost doc-action" data-action="preview" data-id="'+esc(d.id)+'">Preview</button><button type="button" class="ghost doc-action" data-action="download" data-id="'+esc(d.id)+'">Download</button>'+renew+(!d.archived_at?'<button type="button" class="danger doc-delete doc-action" '+(deletePasswordChanged()?'':'disabled')+' data-action="delete" data-id="'+esc(d.id)+'">Delete</button>':'')+'</div></div></div></div>';
+ return renderDocRow(d);
 }
 function handleDocumentActionClick(event){
  const button=event.target.closest('.doc-action');
@@ -2016,29 +2028,37 @@ function handleDocumentActionClick(event){
 document.addEventListener('click',handleDocumentActionClick,true);
 
 function renderDocRow(d){
- let [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':d.document_type==='rc'?'📘':'📄';
+ let [status,cls]=docStatus(d),title=docTypeLabel(d);
  const safePath=(d.storage_path||'').replace(/'/g,"\\'");
  const safeName=(d.file_name||'').replace(/'/g,"\\'");
- return '<div class="doc-row '+cls+'">'+
+ const ext=docFileExt(d.file_name);
+ const icon=docTypeIcon(d.document_type);
+ const renewBtn=(d.document_type==='insurance'||d.document_type==='puc')?
+   '<button type="button" class="primary doc-action" data-action="renew" data-id="'+esc(d.id)+'" data-type="'+esc(d.document_type)+'" onclick="openDocUploader(\''+d.document_type+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-refresh"/></svg> <span>Renew</span></button>':'';
+ return '<div class="doc-row '+cls+'" data-doc-id="'+esc(d.id)+'">'+
    '<div class="doc-row-body">'+
-     '<div class="doc-icon-wrap"><span class="doc-icon">'+icon+'</span></div>'+
+     '<div class="doc-icon-wrap" aria-hidden="true">'+icon+'</div>'+
      '<div class="doc-details">'+
        '<div class="doc-title-row">'+
          '<h4 class="doc-title">'+esc(title)+'</h4>'+
          '<span class="doc-badge '+cls+'">'+status+'</span>'+
        '</div>'+
-       '<div class="doc-filename" title="'+esc(d.file_name||'')+'">'+esc(d.file_name||'Untitled document')+'</div>'+
+       '<div class="doc-filename-badge" title="'+esc(d.file_name||'Untitled document')+'">'+
+         '<span class="doc-ext-tag">'+esc(ext)+'</span>'+
+         '<span class="doc-filename-text">'+esc(d.file_name||'Untitled document')+'</span>'+
+       '</div>'+
        '<div class="doc-meta-row">'+
-         '<span class="doc-meta-item">Uploaded: '+formatDateNice(d.created_at?.slice(0,10))+'</span>'+
-         (d.document_expiry?'<span class="doc-meta-item doc-expiry '+(status==='Expired'?'expired':'')+'">'+(status==='Expired'?'Expired: ':'Expiry: ')+esc(formatDateNice(d.document_expiry))+'</span>':'')+
-         (d.archived_at?'<span class="doc-meta-archive">Archive: '+esc(d.archive_name||'Year Wise')+'</span>':'')+
+         '<span class="doc-meta-item"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-calendar"/></svg> '+formatDateNice(d.created_at?.slice(0,10))+'</span>'+
+         (d.document_expiry?'<span class="doc-meta-item doc-expiry '+(status==='Expired'?'expired':'')+'"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-clock"/></svg> '+(status==='Expired'?'Expired: ':'Expiry: ')+esc(formatDateNice(d.document_expiry))+'</span>':'')+
+         (d.archived_at?'<span class="doc-meta-archive"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-folder"/></svg> '+esc(d.archive_name||'Archive')+'</span>':'')+
        '</div>'+
      '</div>'+
    '</div>'+
    '<div class="doc-actions">'+
-     '<button type="button" class="ghost" onclick="openDocumentPreview(\''+d.id+'\',\''+safePath+'\',\''+safeName+'\')">Preview</button>'+
-     '<button type="button" class="ghost" onclick="downloadDoc(\''+d.id+'\',\''+safePath+'\')">Download</button>'+
-     '<button type="button" class="danger doc-delete" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+safePath+'\','+(d.archived_at?'true':'false')+')">Delete</button>'+
+     '<button type="button" class="ghost doc-action" data-action="preview" data-id="'+esc(d.id)+'" onclick="openDocumentPreview(\''+d.id+'\',\''+safePath+'\',\''+safeName+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-eye"/></svg> <span>Preview</span></button>'+
+     '<button type="button" class="ghost doc-action" data-action="download" data-id="'+esc(d.id)+'" onclick="downloadDoc(\''+d.id+'\',\''+safePath+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-download"/></svg> <span>Download</span></button>'+
+     renewBtn+
+     (!d.archived_at?'<button type="button" class="danger doc-delete doc-action" data-action="delete" data-id="'+esc(d.id)+'" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+safePath+'\','+(d.archived_at?'true':'false')+')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-trash"/></svg> <span>Delete</span></button>':'')+
    '</div>'+
  '</div>';
 }
@@ -2051,15 +2071,30 @@ async function docsView(){
  let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};
  active.forEach(d=>(groups[d.document_type]||groups.other).push(d));
  let html='<div class="doc-grid">';
- [['rc','Registration Certificate','📘'],['puc','PUC','🌿'],['insurance','Insurance','🛡️'],['other','Other Documents','📄']].forEach(([key,label,icon])=>{
-  html+='<div class="doc-col"><div class="doc-col-head"><div><span class="doc-col-icon">'+icon+'</span><b>'+label+'</b></div><span>'+groups[key].length+'</span></div>'+(groups[key].length?'<div class="doc-flip-grid">'+groups[key].map(renderDocFlipCard).join('')+'</div>':'<div class="doc-empty">No '+label+' document</div>')+'</div>';
+ const catConfigs=[
+  ['rc','Registration Certificate','td-icon-book'],
+  ['puc','PUC Certificate','td-icon-route'],
+  ['insurance','Insurance Policy','td-icon-shield'],
+  ['other','Other Documents','td-icon-file']
+ ];
+ catConfigs.forEach(([key,label,iconId])=>{
+  const list=groups[key]||[];
+  html+='<div class="doc-col">'+
+    '<div class="doc-col-head">'+
+      '<div><span class="doc-col-icon"><svg class="inline-svg-icon" aria-hidden="true"><use href="#'+iconId+'"/></svg></span><b>'+label+'</b></div>'+
+      '<span class="doc-col-count">'+list.length+'</span>'+
+    '</div>'+
+    (list.length?
+      '<div class="doc-col-list">'+list.map(renderDocRow).join('')+'</div>':
+      '<div class="doc-empty"><p>No '+label+' uploaded</p><button type="button" class="ghost btn-sm doc-empty-add-btn" onclick="openDocUploader(\''+key+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-plus"/></svg> <span>Add '+label+'</span></button></div>')+
+  '</div>';
  });
  html+='</div>';
- if(!deletePasswordChanged())html+='<div class="doc-security-notice">🔒 Please change default password to unlock delete actions.</div>';
+ if(!deletePasswordChanged())html+='<div class="doc-security-notice"><svg class="inline-svg-icon" aria-hidden="true"><use href="#td-icon-lock"/></svg> <span>Default security PIN (1234) in use. Change your security PIN above to enable permanent document deletion.</span></div>';
  if(arch.length){
   let by={};
   arch.forEach(d=>{let k=d.archive_name||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});
-  html+='<div class="doc-archive"><div class="doc-archive-head">📁 Archived Documents</div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>';
+  html+='<div class="doc-archive"><div class="doc-archive-head"><svg class="inline-svg-icon" aria-hidden="true"><use href="#td-icon-folder"/></svg> <span>Archived Documents</span></div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>';
  }
  $('docList').innerHTML=html;
  if(active.some(d=>docExpired(d))&&window.__expiryPopupFor!==car.id){
@@ -2072,7 +2107,7 @@ function showDocumentExpiryPopup(){
  let firstType=expired[0]?.document_type||'';
  let names=expired.map(d=>docTypeLabel(d)+' for Vehicle '+(car?.registration_no||'')).join(' and ');
  let w=document.createElement('div');w.id='docExpiryPopup';
- w.innerHTML='<div class="doc-popup"><div class="doc-popup-icon">⚠️</div><h3>Document Expired</h3><p>Your '+esc(names)+' expired. Please upload the new document to stay compliant.</p><button class="primary" id="docExpiryRenew">＋ Renew / Upload New Document</button><button class="ghost" id="docExpiryLater">Later</button></div>';
+ w.innerHTML='<div class="doc-popup"><div class="doc-popup-icon"><svg class="inline-svg-icon" style="width:36px;height:36px" aria-hidden="true"><use href="#td-icon-shield"/></svg></div><h3>Document Expired</h3><p>Your '+esc(names)+' expired. Please upload the new document to stay compliant.</p><button class="primary" id="docExpiryRenew">＋ Renew / Upload New Document</button><button class="ghost" id="docExpiryLater">Later</button></div>';
  document.body.appendChild(w);
  $('docExpiryRenew').onclick=()=>{w.remove();openDocUploader(firstType)};
  $('docExpiryLater').onclick=()=>w.remove();
