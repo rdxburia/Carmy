@@ -156,7 +156,8 @@ export default {
       }
 
       if (request.method === "GET" && parts[0] === "vehicles" && parts.length === 1) {
-        return json({ ok: true, data: await listVehicles(env, user, userToken) }, 200, origin);
+        const bypassCache = url.searchParams.get("bypass_cache") === "1" || request.headers.get("cache-control") === "no-cache";
+        return json({ ok: true, data: await listVehicles(env, user, userToken, bypassCache) }, 200, origin);
       }
 
       if (request.method === "GET" && parts[0] === "vehicles" && parts.length === 2) {

@@ -6,7 +6,7 @@ export async function listServiceHistory(env, user, userToken, carId = null, byp
   const key = `service-history:${user.id}${suffix}`;
   if (!bypassCache) {
     const cached = await getCache(env, key);
-    if (cached) return cached;
+    if (cached && Array.isArray(cached) && cached.length > 0) return cached;
   }
 
   const filters = [
@@ -22,6 +22,8 @@ export async function listServiceHistory(env, user, userToken, carId = null, byp
     userToken
   );
 
-  await putCache(env, key, user.id, "service-history", records);
+  if (Array.isArray(records) && records.length > 0) {
+    await putCache(env, key, user.id, "service-history", records);
+  }
   return records;
 }

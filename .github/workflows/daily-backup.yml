@@ -20,7 +20,78 @@ env:
   LATEST_NAME: Carmy-LATEST.tar.gz
 
 jobs:
+  preserve_and_recover:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y unzip curl
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+          rm -rf /tmp/aws
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update
+          python3 -m pip install --disable-pip-version-check --no-cache-dir \
+            google-auth google-api-python-client psycopg2-binary
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+          R2_BACKUP_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          R2_BACKUP_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          for name in \
+            SUPABASE_BACKUP_DB_URL \
+            R2_BACKUP_ACCESS_KEY_ID \
+            R2_BACKUP_SECRET_ACCESS_KEY \
+            GOOGLE_OAUTH_REFRESH_TOKEN \
+            GOOGLE_OAUTH_CLIENT_ID \
+            GOOGLE_OAUTH_CLIENT_SECRET \
+            GOOGLE_DRIVE_FOLDER_ID
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required secret: $name"
+              exit 1
+            fi
+          done
+          echo "All required backup secrets are present."
+
+      - name: Run data preservation and recovery
+        env:
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+          R2_BACKUP_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          R2_BACKUP_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          R2_BUCKET: ${{ env.R2_BUCKET }}
+          R2_S3_ENDPOINT: ${{ env.R2_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/preserve_and_recover.py
+
+      - name: Upload recovery snapshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: carmy-recovery-snapshot
+          path: recovery-output/
+          retention-days: 30
+
   backup:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
 
     steps:
@@ -49,7 +120,7 @@ jobs:
 
           # Google Drive backup steps use the official Google API Python clients.
           python3 -m pip install --disable-pip-version-check --no-cache-dir \
-            google-auth google-api-python-client
+            google-auth google-api-python-client psycopg2-binary
       - name: Validate required secrets
         env:
           SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
@@ -61,7 +132,14 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         run: |
           set -euo pipefail
-          for name in             SUPABASE_BACKUP_DB_URL             R2_BACKUP_ACCESS_KEY_ID             R2_BACKUP_SECRET_ACCESS_KEY             GOOGLE_OAUTH_REFRESH_TOKEN             GOOGLE_OAUTH_CLIENT_ID             GOOGLE_OAUTH_CLIENT_SECRET             GOOGLE_DRIVE_FOLDER_ID
+          for name in \
+            SUPABASE_BACKUP_DB_URL \
+            R2_BACKUP_ACCESS_KEY_ID \
+            R2_BACKUP_SECRET_ACCESS_KEY \
+            GOOGLE_OAUTH_REFRESH_TOKEN \
+            GOOGLE_OAUTH_CLIENT_ID \
+            GOOGLE_OAUTH_CLIENT_SECRET \
+            GOOGLE_DRIVE_FOLDER_ID
           do
             if [[ -z "${!name}" ]]; then
               echo "Missing required secret: $name"
@@ -71,6 +149,7 @@ jobs:
           echo "All required backup secrets are present."
 
       - name: Create Supabase PostgreSQL backup
+        if: github.event_name == 'schedule'
         env:
           SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
         run: |
@@ -260,6 +339,8 @@ jobs:
 
           keep_id = latest[0]["id"]
           def is_carmy_backup_file(name):
+              if "SNAPSHOT" in name or "IMMUTABLE" in name or "PRESERVED" in name:
+                  return False
               return (
                   name == "Carmy-LATEST.tar.gz"
                   or name.startswith("Carmy-")
@@ -462,6 +543,8 @@ jobs:
                   break
 
           def is_carmy_backup_file(name):
+              if "SNAPSHOT" in name or "IMMUTABLE" in name or "PRESERVED" in name:
+                  return False
               return (
                   name == "Carmy-LATEST.tar.gz"
                   or name.startswith("Carmy-")

@@ -1,10 +1,17 @@
 import { getCache, putCache } from "./cache.js";
 import { supabaseRest } from "./supabase.js";
 
-export async function listVehicles(env,user,userToken){
-  const key="vehicles:"+user.id;const cached=await getCache(env,key);if(cached)return cached;
-  const data=await supabaseRest(env,"cars?select=*&user_id=eq."+encodeURIComponent(user.id)+"&order=created_at.asc",{method:"GET"},userToken);
-  await putCache(env,key,user.id,"vehicles",data);return data;
+export async function listVehicles(env, user, userToken, bypassCache = false) {
+  const key = "vehicles:" + user.id;
+  if (!bypassCache) {
+    const cached = await getCache(env, key);
+    if (cached && Array.isArray(cached) && cached.length > 0) return cached;
+  }
+  const data = await supabaseRest(env, "cars?select=*&user_id=eq." + encodeURIComponent(user.id) + "&order=created_at.asc", { method: "GET" }, userToken);
+  if (Array.isArray(data) && data.length > 0) {
+    await putCache(env, key, user.id, "vehicles", data);
+  }
+  return data;
 }
 export async function getVehicle(env,user,userToken,vehicleId){
   const key="vehicle:"+user.id+":"+vehicleId;const cached=await getCache(env,key);if(cached)return cached;

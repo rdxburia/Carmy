@@ -41,7 +41,7 @@ export async function listInsuranceHistory(env,user,userToken,carId=null){
   const filters=["user_id=eq."+encodeURIComponent(user.id),"order=issue_date.desc,created_at.desc"];
   if(carId)filters.push("car_id=eq."+encodeURIComponent(carId));
   const data=await supabaseRest(env,"insurance_history?select=*&"+filters.join("&"),{method:"GET"},userToken);
-  await putCache(env,key,user.id,"insurance",data);return decorateLifecycle(data);
+  if(Array.isArray(data)&&data.length>0)await putCache(env,key,user.id,"insurance",data);return decorateLifecycle(data);
 }
 
 async function recompute(env,user,token,carId){
