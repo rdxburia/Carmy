@@ -58,10 +58,10 @@ let lastServerActivityTouch=0;
 let serverActivityTouchPromise=null;
 async function touchServerSessionActivity(force=false){
   if(!db||!user||window.__carmySigningOut||idleExpired())return false;
+  if(serverActivityTouchPromise)return serverActivityTouchPromise;
   const now=Date.now();
   if(!force&&now-lastServerActivityTouch<15000)return true;
   if(force&&now-lastServerActivityTouch<3000)return true;
-  if(serverActivityTouchPromise)return serverActivityTouchPromise;
   lastServerActivityTouch=now;
   serverActivityTouchPromise=(async()=>{
     try{
@@ -1179,12 +1179,14 @@ async function start(u,force=false){
 async function loadCars(){
  garageLoadingState='loading';
  let fetchedCars=null;
+ let fetchError=null;
  try{
    const body=await workerGet('/api/vehicles?bypass_cache=1');
    if(Array.isArray(body?.data)&&body.data.length>0){
      fetchedCars=body.data;
    }
  }catch(err){
+   fetchError=err;
    console.warn('Vehicle list fetch from worker failed, checking direct Supabase fallback:',err);
  }
  if(!fetchedCars&&db&&user?.id){
@@ -1192,8 +1194,11 @@ async function loadCars(){
      const sbRes=await db.from('cars').select('*').eq('user_id',user.id).order('created_at',{ascending:true});
      if(Array.isArray(sbRes?.data)&&sbRes.data.length>0){
        fetchedCars=sbRes.data;
+     }else if(sbRes?.error){
+       fetchError=sbRes.error;
      }
    }catch(sbErr){
+     fetchError=sbErr;
      console.warn('Direct Supabase cars fetch failed:',sbErr);
    }
  }
@@ -1203,6 +1208,18 @@ async function loadCars(){
      const retryRes=await db.from('cars').select('*').eq('user_id',user.id).order('created_at',{ascending:true});
      if(Array.isArray(retryRes?.data)&&retryRes.data.length>0){
        fetchedCars=retryRes.data;
+     }else if(retryRes?.error){
+       fetchError=retryRes.error;
+     }
+   }catch(retryErr){
+     fetchError=retryErr;
+   }
+ }
+ if(!fetchedCars){
+   try{
+     const retryWorker=await workerGet('/api/vehicles?bypass_cache=1');
+     if(Array.isArray(retryWorker?.data)&&retryWorker.data.length>0){
+       fetchedCars=retryWorker.data;
      }
    }catch(_){}
  }
@@ -1222,6 +1239,10 @@ async function loadCars(){
    cars=cached;
    cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
    garageLoadingState='ready';
+   return;
+ }
+ if(fetchError&&!fetchedCars){
+   garageLoadingState='error';
    return;
  }
  cars=[];
@@ -1835,8 +1856,8 @@ function helpView(){
     if(!ticketsLoaded&&typeof workerGet==='function'){
       loadUserSupportTickets().then(()=>{
         if(currentHelpTab==='ticket'){
-          container.innerHTML=renderTicketContent();
-          wireTicketForm();
+          const pastCont=$('ticketPastContainer');
+          if(pastCont) pastCont.innerHTML=renderTicketPastList();
         }
       });
     }
@@ -1847,6 +1868,18 @@ function helpView(){
   }else if(currentHelpTab==='contact'){
     container.innerHTML=renderContactContent();
   }
+}
+
+function renderTicketPastList(){
+  let existing=userSupportTickets;
+  if(!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
+  }
+  const userTickets=existing.filter(t=>!user||t.user_id===user.id||t.email===user.email);
+  if(!userTickets.length)return '';
+  return '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
+    userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id)+'</b> <span class="ticket-badge">'+esc(t.category)+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject)+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
+    '</div></div>';
 }
 
 function renderFaqsContent(){
@@ -1864,11 +1897,6 @@ function renderFaqsContent(){
 }
 
 function renderTicketContent(){
-  let existing=userSupportTickets;
-  if(!existing.length){
-    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
-  }
-  const userTickets=existing.filter(t=>!user||t.user_id===user.id||t.email===user.email);
   const carOptions=['<option value="">General (No specific vehicle)</option>'].concat(
     cars.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
   ).join('');
@@ -1885,10 +1913,7 @@ function renderTicketContent(){
       '<div class="field full"><label for="ticketMessage">Description &amp; Details *</label><textarea id="ticketMessage" rows="5" placeholder="Please describe the issue or request in detail..." required></textarea></div>'+
       '<div class="full"><button type="button" class="primary" id="ticketSubmitBtn">SUBMIT TICKET</button></div>'+
     '</form>'+
-    (userTickets.length?
-      '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
-      userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id)+'</b> <span class="ticket-badge">'+esc(t.category)+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject)+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
-      '</div></div>':'')+
+    '<div id="ticketPastContainer">'+renderTicketPastList()+'</div>'+
   '</div>';
 }
 

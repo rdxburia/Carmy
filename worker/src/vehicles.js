@@ -1,5 +1,5 @@
 import { getCache, putCache } from "./cache.js";
-import { supabaseRest } from "./supabase.js";
+import { supabaseRest, supabaseRpc } from "./supabase.js";
 
 export async function listVehicles(env, user, userToken, bypassCache = false) {
   const key = "vehicles:" + user.id;
@@ -7,7 +7,16 @@ export async function listVehicles(env, user, userToken, bypassCache = false) {
     const cached = await getCache(env, key);
     if (cached && Array.isArray(cached) && cached.length > 0) return cached;
   }
-  const data = await supabaseRest(env, "cars?select=*&user_id=eq." + encodeURIComponent(user.id) + "&order=created_at.asc", { method: "GET" }, userToken);
+  let data = await supabaseRest(env, "cars?select=*&user_id=eq." + encodeURIComponent(user.id) + "&order=created_at.asc", { method: "GET" }, userToken);
+  if ((!Array.isArray(data) || data.length === 0) && userToken) {
+    try {
+      await supabaseRpc(env, "carmy_touch_session", {}, userToken);
+      const retry = await supabaseRest(env, "cars?select=*&user_id=eq." + encodeURIComponent(user.id) + "&order=created_at.asc", { method: "GET" }, userToken);
+      if (Array.isArray(retry) && retry.length > 0) {
+        data = retry;
+      }
+    } catch (_) {}
+  }
   if (Array.isArray(data) && data.length > 0) {
     await putCache(env, key, user.id, "vehicles", data);
   }

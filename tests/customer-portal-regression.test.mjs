@@ -1074,4 +1074,66 @@ test("Client Production: Ticket form validates required subject and message", as
   assert.equal(tickets.length, 0, "Must not submit without message");
 });
 
+test("Client Production: loadCars sets garageLoadingState to error (not empty) on upstream failure without cached data", async (t) => {
+  const h = createAppHarness({
+    fetch: async () => {
+      throw new Error("Worker connection timeout");
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.mockDb.from = () => ({
+    select: () => ({
+      eq: () => ({
+        order: async () => ({ data: null, error: new Error("503 Service Unavailable") })
+      })
+    })
+  });
+
+  h.eval('user = { id: "user-err-test" };');
+  h.context.writeIdleActivity(true);
+  await h.context.loadCars();
+
+  assert.equal(h.eval("garageLoadingState"), "error", "Garage state must be error, not empty, on failure");
+  assert.equal(h.eval("cars.length"), 0, "Cars array should be empty");
+});
+
+test("Client Production: touchServerSessionActivity awaits in-flight touch promise before returning", async (t) => {
+  let rpcResolve;
+  let rpcCalled = 0;
+  const h = createAppHarness({
+    fetch: async () => new Response(JSON.stringify({ ok: true }))
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.mockDb.rpc = (name) => {
+    if (name === "carmy_touch_session") {
+      rpcCalled++;
+      return new Promise((resolve) => {
+        rpcResolve = resolve;
+      });
+    }
+    return Promise.resolve({ data: null, error: null });
+  };
+
+  h.eval('user = { id: "user-touch-test" };');
+  h.context.writeIdleActivity(true);
+
+  // Trigger first touch (starts in-flight promise)
+  const p1 = h.context.touchServerSessionActivity(true);
+  assert.equal(rpcCalled, 1, "First touch must invoke RPC");
+
+  // Trigger second touch immediately while first is in-flight
+  const p2 = h.context.touchServerSessionActivity(true);
+  assert.equal(rpcCalled, 1, "Second touch must share in-flight promise, not trigger separate touch");
+
+  // Now resolve the in-flight RPC
+  rpcResolve({ data: true, error: null });
+  const [res1, res2] = await Promise.all([p1, p2]);
+
+  assert.equal(res1, true);
+  assert.equal(res2, true);
+});
+
+
 
