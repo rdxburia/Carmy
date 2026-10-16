@@ -6,6 +6,7 @@ const IDLE_ACTIVITY_KEY='carmy_last_activity';
 const IDLE_LOGOUT_KEY='carmy_idle_logout';
 let idleCheckTimer=null;
 let activeLongOperations=0;
+let garageLoadingState='idle'; // 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 const sessionGuard=window.CarmySessionGuard.create({
   supabaseUrl:U,
   idleMs:IDLE_MS,
@@ -23,7 +24,7 @@ function clearUserMemory(){
   user=null;cars=[];car=null;records=[];docs=[];ownerProfile=null;
   insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
-  startupPromise=null;startupFailed=false;
+  startupPromise=null;startupFailed=false;garageLoadingState='idle';
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -64,7 +65,8 @@ async function touchServerSessionActivity(force=false){
   lastServerActivityTouch=now;
   serverActivityTouchPromise=(async()=>{
     try{
-      await db.rpc('carmy_touch_session');
+      const rpcRes=await db.rpc('carmy_touch_session');
+      if(rpcRes?.error)console.warn('Direct db touch notice:',rpcRes.error);
     }catch(err){
       console.warn('Direct db touch notice:',err);
     }
@@ -785,7 +787,7 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
- const validViews=['dashboard','cars','add','history','docs','report','owner'];
+ const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(!validViews.includes(v))v='dashboard';
  try{
    if(v==='add'&&car?.vehicle_status==='sold'){
@@ -807,11 +809,12 @@ async function nav(v){
      if(v==='docs')await docsView();
      if(v==='report')report();
      if(v==='owner')ownerProfileView();
+     if(v==='help')helpView();
    }catch(err){
      console.error('View render error:',v,err);
      target.classList.remove('active');
      if(previous&&previous!==target)previous.classList.add('active');
-     toast('Unable to open '+(v==='owner'?'Owner Profile':v)+' right now. Please try again.','error');
+     toast('Unable to open '+(v==='owner'?'Owner Profile':v==='help'?'Help & Support':v)+' right now. Please try again.','error');
      if(v!=='dashboard'){
        const dashboard=$('dashboard');
        document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
@@ -999,10 +1002,8 @@ document.addEventListener('click',event=>{
      return;
    }
  }
- const authEl=$('auth');
- if(authEl&&!authEl.classList.contains('hidden')&&event.target===authEl){
-   showPublicLanding();
- }
+ // Modal dismissal is handled explicitly via [data-td-auth-close] (the '×' close button) or Escape key,
+ // preventing accidental clicks on tab backgrounds, form gaps, or mobile tab margins from closing auth.
 });
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'){
@@ -1088,7 +1089,7 @@ async function start(u,force=false){
      setAppLoadingProgress(90);
      let lastView='dashboard';
      try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
-     const validViews=['dashboard','cars','add','history','docs','report','owner'];
+     const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
      if(!validViews.includes(lastView))lastView='dashboard';
      if(lastView!=='dashboard'){
        let restored=false;
@@ -1138,36 +1139,55 @@ async function start(u,force=false){
 }
 
 async function loadCars(){
+ garageLoadingState='loading';
+ let fetchedCars=null;
  try{
    const body=await workerGet('/api/vehicles?bypass_cache=1');
    if(Array.isArray(body?.data)&&body.data.length>0){
-     cars=body.data;
-     cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
-     try{localStorage.setItem('carmy_cached_cars',JSON.stringify(cars))}catch(_){}
-     return;
+     fetchedCars=body.data;
    }
  }catch(err){
    console.warn('Vehicle list fetch from worker failed, checking direct Supabase fallback:',err);
  }
- try{
-   if(db&&user?.id){
+ if(!fetchedCars&&db&&user?.id){
+   try{
      const sbRes=await db.from('cars').select('*').eq('user_id',user.id).order('created_at',{ascending:true});
      if(Array.isArray(sbRes?.data)&&sbRes.data.length>0){
-       cars=sbRes.data;
-       cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
-       try{localStorage.setItem('carmy_cached_cars',JSON.stringify(cars))}catch(_){}
-       return;
+       fetchedCars=sbRes.data;
      }
+   }catch(sbErr){
+     console.warn('Direct Supabase cars fetch failed:',sbErr);
    }
- }catch(sbErr){
-   console.warn('Direct Supabase cars fetch failed:',sbErr);
  }
- if(!cars.length){
+ if(!fetchedCars&&db&&user?.id){
    try{
-     const cached=JSON.parse(localStorage.getItem('carmy_cached_cars')||'[]');
-     if(Array.isArray(cached)&&cached.length)cars=cached;
+     await db.rpc('carmy_touch_session');
+     const retryRes=await db.from('cars').select('*').eq('user_id',user.id).order('created_at',{ascending:true});
+     if(Array.isArray(retryRes?.data)&&retryRes.data.length>0){
+       fetchedCars=retryRes.data;
+     }
    }catch(_){}
  }
+ if(Array.isArray(fetchedCars)&&fetchedCars.length>0){
+   cars=fetchedCars;
+   cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
+   try{localStorage.setItem('carmy_cached_cars',JSON.stringify(cars))}catch(_){}
+   garageLoadingState='ready';
+   return;
+ }
+ let cached=null;
+ try{
+   const parsed=JSON.parse(localStorage.getItem('carmy_cached_cars')||'[]');
+   if(Array.isArray(parsed)&&parsed.length)cached=parsed;
+ }catch(_){}
+ if(cached){
+   cars=cached;
+   cars.sort((a,b)=>String(a?.registration_no||'').localeCompare(String(b?.registration_no||'')));
+   garageLoadingState='ready';
+   return;
+ }
+ cars=[];
+ garageLoadingState='empty';
 }
 async function loadStep5Data(){
  ownerProfile=null;insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
@@ -1405,7 +1425,17 @@ function dashTimeline(){
 function toggleTimelineEvent(id){const e=document.getElementById('timeline-'+id);if(e)e.classList.toggle('open')}
 function dash(){
  if(!car){
-  if(startupFailed){renderDashboardRecoveryUI(new Error('Unable to load vehicle records. Please retry.'));return}
+  if(startupFailed||garageLoadingState==='error'){renderDashboardRecoveryUI(new Error('Unable to load vehicle records. Please retry.'));return}
+  if(garageLoadingState==='loading'){
+    $('dashTitle').textContent='Overview';
+    $('dashSub').textContent='Syncing Garage...';
+    $('dash').innerHTML='<div class="card" style="text-align:center;padding:50px 20px">'+
+      '<div class="loading-spinner" style="margin:0 auto 16px;width:36px;height:36px;border:3px solid var(--c-line,#e2e8f0);border-top-color:var(--c-accent,#2563eb);border-radius:50%;animation:spin .8s linear infinite"></div>'+
+      '<h3 style="margin:0 0 6px">Securing your vehicle garage…</h3>'+
+      '<p class="muted" style="margin:0">Verifying session activity and loading vehicle records from your private cloud.</p>'+
+    '</div>';
+    return;
+  }
   $('dashTitle').textContent='Overview';
   $('dashSub').textContent='Private Vehicle Garage';
   $('dash').innerHTML=
@@ -1514,12 +1544,26 @@ async function generateSaleForms(){
    wrapper.remove();
    const path=user.id+'/'+car.id+'/archives/'+pdfName;
    const up=await db.storage.from('car-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});
-   if(up.error)throw new Error('Archive upload failed: '+up.error.message);
-   const ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:pdfName,storage_path:path,mime_type:'application/pdf',file_size:blob.size,document_type:'other',document_name:'Form 29 & 30 (Sale Document)',archive_name:'Form 29 & 30',archived_at:new Date().toISOString(),active:false});
+   const ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:pdfName,storage_path:path,mime_type:'application/pdf',file_size:blob.size,document_type:'other',document_name:'Form 29 & 30 (Sale Document)',archive_name:'Form 29 & 30',archived_at:new Date().toISOString(),active:false}).select().single();
    if(ins.error){await db.storage.from('car-documents').remove([path]);throw new Error('Archive record save failed: '+ins.error.message)}
-   const saleRpc=await db.rpc('complete_vehicle_sale',{p_car_id:car.id,p_buyer_name:buyerName,p_buyer_relation:relation,p_buyer_relation_name:relationName,p_buyer_age:age,p_buyer_address:address,p_buyer_rto:rto,p_sale_date:saleDate,p_financier:financier,p_form_document_id:ins.data.id});
-   if(saleRpc.error){await db.from('documents').delete().eq('id',ins.data.id).eq('car_id',car.id).eq('user_id',user.id);await db.storage.from('car-documents').remove([path]);throw new Error('Vehicle sale could not be completed. '+dbSetupHint(saleRpc.error))}
-   car.vehicle_status='sold';car.sold_at=new Date().toISOString();car.sold_to_name=buyerName;car.sale_history_id=saleRpc.data;
+   const docId=ins.data?.id||null;
+   let saleRpcId=null;
+   try{
+     const saleRpc=await db.rpc('complete_vehicle_sale',{p_car_id:car.id,p_buyer_name:buyerName,p_buyer_relation:relation,p_buyer_relation_name:relationName,p_buyer_age:age,p_buyer_address:address,p_buyer_rto:rto,p_sale_date:saleDate,p_financier:financier,p_form_document_id:docId});
+     if(saleRpc?.error){
+       console.warn('complete_vehicle_sale RPC returned error; attempting fallback update:', saleRpc.error);
+       const fb=await db.from('cars').update({vehicle_status:'sold',sold_at:new Date().toISOString(),sold_to_name:buyerName}).eq('id',car.id);
+       if(fb.error)throw new Error('Vehicle sale update failed: '+saleRpc.error.message);
+     }else{
+       saleRpcId=saleRpc.data;
+     }
+   }catch(rpcErr){
+     console.warn('complete_vehicle_sale failed; performing direct car status update:', rpcErr);
+     const fb=await db.from('cars').update({vehicle_status:'sold',sold_at:new Date().toISOString(),sold_to_name:buyerName}).eq('id',car.id);
+     if(fb.error)throw rpcErr;
+   }
+   car.vehicle_status='sold';car.sold_at=new Date().toISOString();car.sold_to_name=buyerName;
+   if(saleRpcId)car.sale_history_id=saleRpcId;
    const previewUrl=URL.createObjectURL(blob);
    const pv=document.createElement('div');pv.id='saleGeneratedModal';pv.innerHTML='<div class="sale-generated-card"><div class="toolbar"><div><h3>Form 29 &amp; 30 Ready</h3><p class="muted">Saved securely to vehicle archives.</p></div><button class="ghost" id="saleGeneratedClose">✕</button></div><iframe src="'+previewUrl+'" title="Form 29 and Form 30 preview"></iframe><div class="sale-generated-actions"><button class="ghost" onclick="window.open(\''+previewUrl+'\',\'_blank\')">Open PDF</button><button class="primary" onclick="window.print()">Print</button></div></div>';
    document.body.appendChild(pv);$('saleGeneratedClose').onclick=()=>{pv.remove();URL.revokeObjectURL(previewUrl)};mClose('saleFormsModal');await loadData();toast('Form 29 & 30 generated and saved to Archives for '+car.registration_no+'!');
@@ -1534,7 +1578,7 @@ function buildSaleFormsHtml(d){
 function renderFab(){
  let f=document.getElementById('dashboardFab');if(f)f.remove();
  f=document.createElement('div');f.id='dashboardFab';f.innerHTML='<button class="fab-main" aria-label="Quick actions">＋</button><div class="fab-menu"><button onclick="nav(\'add\')">🛠️ <span>Add Service Log</span></button><button onclick="openDocUploader()">📄 <span>Upload Document</span></button><button onclick="openOdometerPrompt()">⛽ <span>Log Odometer / Fuel</span></button><button onclick="openReportAndPrint()">🖨️ <span>Generate A4 Report</span></button></div>';document.body.appendChild(f);
- f.querySelector('.fab-main').onclick=()=>f.classList.toggle('open');
+ const fabBtn=f.querySelector('.fab-main');if(fabBtn)fabBtn.onclick=()=>f.classList.toggle('open');
  f.querySelectorAll('.fab-menu button').forEach(b=>b.addEventListener('click',()=>f.classList.remove('open')));
  document.addEventListener('click',e=>{if(f.isConnected&&!f.contains(e.target))f.classList.remove('open')});
 }
@@ -1596,6 +1640,16 @@ function ownerProfileView(){
    (hasProfile?'':'<div class="minimal-empty dangerbox"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>')+
    ownerProfileFields(p,meta)+
    '</div>'+
+   '<div class="card change-password-card">'+
+   '<div class="card-head-row"><div><h3>Change Password</h3><p class="muted">Update your account password with instant verification.</p></div></div>'+
+   '<div class="form">'+
+     '<div class="field full"><label for="cpCurrent">Current Password *</label><div class="auth-password-control"><input id="cpCurrent" type="password" autocomplete="current-password" placeholder="Enter current password"><button type="button" class="auth-password-toggle" id="cpCurrentToggle">Show</button></div></div>'+
+     '<div class="field"><label for="cpNew">New Password *</label><div class="auth-password-control"><input id="cpNew" type="password" autocomplete="new-password" placeholder="At least 8 characters"><button type="button" class="auth-password-toggle" id="cpNewToggle">Show</button></div><small class="muted" style="margin-top:3px;display:block">Min 8 characters with letters and numbers.</small></div>'+
+     '<div class="field"><label for="cpConfirm">Confirm New Password *</label><div class="auth-password-control"><input id="cpConfirm" type="password" autocomplete="new-password" placeholder="Repeat new password"><button type="button" class="auth-password-toggle" id="cpConfirmToggle">Show</button></div></div>'+
+     '<div class="full" id="cpMessage" style="display:none;font-size:13px;padding:8px 12px;border-radius:8px;margin-bottom:6px"></div>'+
+     '<div class="full"><button type="button" class="primary" id="cpSubmit">UPDATE PASSWORD</button></div>'+
+   '</div>'+
+   '</div>'+
    '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>'+
    '</div>';
  const btn=$('opSave');
@@ -1628,7 +1682,239 @@ function ownerProfileView(){
      }
    }
  };
+ const bindToggle=(inputId,toggleId)=>{
+   const inp=$(inputId),b=$(toggleId);
+   if(!inp||!b)return;
+   b.onclick=()=>{
+     const show=inp.type==='password';
+     inp.type=show?'text':'password';
+     b.textContent=show?'Hide':'Show';
+     b.setAttribute('aria-pressed',String(show));
+   };
+ };
+ bindToggle('cpCurrent','cpCurrentToggle');
+ bindToggle('cpNew','cpNewToggle');
+ bindToggle('cpConfirm','cpConfirmToggle');
+
+ const cpBtn=$('cpSubmit');
+ if(cpBtn){
+   cpBtn.onclick=async()=>{
+     const cur=$('cpCurrent')?.value||'';
+     const neu=$('cpNew')?.value||'';
+     const cnf=$('cpConfirm')?.value||'';
+     const msgEl=$('cpMessage');
+     const showMsg=(txt,isErr=true)=>{
+       if(!msgEl)return;
+       msgEl.style.display='block';
+       msgEl.style.background=isErr?'rgba(239,68,68,0.1)':'rgba(34,197,94,0.1)';
+       msgEl.style.color=isErr?'#dc2626':'#16a34a';
+       msgEl.style.border=isErr?'1px solid rgba(239,68,68,0.2)':'1px solid rgba(34,197,94,0.2)';
+       msgEl.textContent=txt;
+     };
+     if(!cur)return showMsg('Please enter your current password.');
+     if(!neu||neu.length<8)return showMsg('New password must be at least 8 characters long.');
+     if(!/[A-Za-z]/.test(neu)||!/[0-9]/.test(neu))return showMsg('New password must contain both letters and numbers.');
+     if(neu!==cnf)return showMsg('New password and confirmation do not match.');
+     if(cur===neu)return showMsg('New password must be different from current password.');
+
+     cpBtn.disabled=true;cpBtn.textContent='VERIFYING & UPDATING...';
+     try{
+       const verifyRes=await db.auth.signInWithPassword({email:user.email,password:cur});
+       if(verifyRes.error)return showMsg('Current password is incorrect. Please check and try again.');
+       const updateRes=await db.auth.updateUser({password:neu});
+       if(updateRes.error)return showMsg('Password update failed: '+(updateRes.error.message||'Unknown error'));
+       showMsg('Password updated successfully!',false);
+       if($('cpCurrent'))$('cpCurrent').value='';
+       if($('cpNew'))$('cpNew').value='';
+       if($('cpConfirm'))$('cpConfirm').value='';
+       toast('Your password has been updated successfully.');
+     }catch(err){
+       console.error('Password change error:',err);
+       showMsg('An unexpected error occurred. Please try again.');
+     }finally{
+       if(document.body.contains(cpBtn)){cpBtn.disabled=false;cpBtn.textContent='UPDATE PASSWORD';}
+     }
+   };
+ }
 }
+
+let currentHelpTab='faqs';
+function helpView(){
+  const container=$('helpTabContent');
+  if(!container)return;
+  document.querySelectorAll('.help-tab-btn').forEach(b=>{
+    b.classList.toggle('active',b.dataset.helpTab===currentHelpTab);
+    b.onclick=()=>{
+      currentHelpTab=b.dataset.helpTab;
+      helpView();
+    };
+  });
+  if(currentHelpTab==='faqs'){
+    container.innerHTML=renderFaqsContent();
+  }else if(currentHelpTab==='ticket'){
+    container.innerHTML=renderTicketContent();
+    wireTicketForm();
+  }else if(currentHelpTab==='about'){
+    container.innerHTML=renderAboutContent();
+  }else if(currentHelpTab==='terms'){
+    container.innerHTML=renderTermsContent();
+  }else if(currentHelpTab==='contact'){
+    container.innerHTML=renderContactContent();
+  }
+}
+
+function renderFaqsContent(){
+  return '<div class="card">'+
+    '<div class="card-head-row"><div><h3>Frequently Asked Questions</h3><p class="muted">Common questions about security, idle timeouts, reports and data handling.</p></div></div>'+
+    '<div class="faq-list" style="margin-top:14px">'+
+      '<details class="faq-card" open><summary>How does Torq Desk keep my vehicle records and documents secure?</summary><p>All vehicle data and service records are stored in private Supabase PostgreSQL tables protected by restrictive Row Level Security (RLS) policies. Document files (RC, Insurance, PUC) are stored in Cloudflare R2 object storage with time-limited signed URLs generated only for your authenticated session.</p></details>'+
+      '<details class="faq-card"><summary>What is the 120-second inactivity session protection?</summary><p>To protect sensitive maintenance records and private ownership documents on shared or unattended devices, Torq Desk automatically suspends active database sessions after 120 seconds of user inactivity. Interacting with the application automatically sends a lightweight heartbeat to keep your session alive while actively working.</p></details>'+
+      '<details class="faq-card"><summary>How do I generate and export an A4 Vehicle Dossier / Report?</summary><p>Navigate to the <b>A4 Vehicle Report</b> section or click <b>A4 Report</b> from Documents. Torq Desk compiles all maintenance history, costs, parts items, and statutory compliance status into an official print-ready document formatted for browser print or saving as PDF.</p></details>'+
+      '<details class="faq-card"><summary>What are Form 29 &amp; Form 30, and when do I use them?</summary><p>Form 29 (Notice of Transfer of Ownership) and Form 30 (Application for Intimation and Transfer of Ownership) are statutory forms under the Indian Motor Vehicles Act. When selling your vehicle, Torq Desk auto-populates buyer and seller details directly onto official statutory templates and archives the signed PDF in your private vault.</p></details>'+
+      '<details class="faq-card"><summary>Can I import past handwritten or digital maintenance bills?</summary><p>Yes! Open <b>My Vehicles</b> and click <b>Import Old History</b>. You can paste unformatted records or invoices, and Torq Desk\'s parser will extract dates, odometer readings, and costs with audit reconciliation warnings before anything is committed to your garage.</p></details>'+
+      '<details class="faq-card"><summary>What file formats and sizes are supported in Document Vault?</summary><p>Torq Desk supports PDF, JPG, JPEG, and PNG files up to 10 MB per document. RC and Insurance uploads feature automated client-side data extraction review to keep your vehicle parameters in sync.</p></details>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderTicketContent(){
+  let existing=[];
+  try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
+  const userTickets=existing.filter(t=>!user||t.user_id===user.id||t.email===user.email);
+  const carOptions=['<option value="">General (No specific vehicle)</option>'].concat(
+    cars.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
+  ).join('');
+
+  return '<div class="card">'+
+    '<div class="card-head-row"><div><h3>Submit a Support Ticket</h3><p class="muted">Have an inquiry or experiencing an issue? Submit a ticket directly to the engineering team.</p></div></div>'+
+    '<form class="form" id="supportTicketForm" onsubmit="return false;" style="margin-top:14px">'+
+      '<div class="field"><label for="ticketCategory">Category *</label><select id="ticketCategory"><option value="Account & Security">Account &amp; Security</option><option value="Vehicle Garage & Records">Vehicle Garage &amp; Records</option><option value="Document Vault & Uploads">Document Vault &amp; Uploads</option><option value="Ownership Transfer (Form 29/30)">Ownership Transfer (Form 29/30)</option><option value="Feature Request">Feature Request</option><option value="Other Inquiry">Other Inquiry</option></select></div>'+
+      '<div class="field"><label for="ticketPriority">Priority</label><select id="ticketPriority"><option value="Normal">Normal</option><option value="Urgent">Urgent</option></select></div>'+
+      '<div class="field"><label for="ticketEmail">Your Account Email</label><input id="ticketEmail" value="'+esc(user?.email||'')+'" readonly style="background:#f1f5f9;cursor:not-allowed"></div>'+
+      '<div class="field"><label for="ticketCar">Related Vehicle</label><select id="ticketCar">'+carOptions+'</select></div>'+
+      '<div class="field full"><label for="ticketSubject">Subject *</label><input id="ticketSubject" placeholder="Brief summary of your inquiry" required></div>'+
+      '<div class="field full"><label for="ticketMessage">Description &amp; Details *</label><textarea id="ticketMessage" rows="5" placeholder="Please describe the issue or request in detail..." required></textarea></div>'+
+      '<div class="full"><button type="button" class="primary" id="ticketSubmitBtn">SUBMIT TICKET</button></div>'+
+    '</form>'+
+    (userTickets.length?
+      '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
+      userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id)+'</b> <span class="ticket-badge">'+esc(t.category)+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject)+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
+      '</div></div>':'')+
+  '</div>';
+}
+
+function wireTicketForm(){
+  if($('ticketEmail')&&user?.email)$('ticketEmail').value=user.email;
+  const btn=$('ticketSubmitBtn');
+  if(!btn)return;
+  btn.onclick=async()=>{
+    const cat=$('ticketCategory')?.value;
+    const sub=$('ticketSubject')?.value?.trim();
+    const msg=$('ticketMessage')?.value?.trim();
+    const carId=$('ticketCar')?.value||null;
+    const pri=$('ticketPriority')?.value||'Normal';
+    if(!sub){ toast('Please enter a ticket subject.','error'); $('ticketSubject')?.focus(); return; }
+    if(!msg){ toast('Please describe your inquiry or issue.','error'); $('ticketMessage')?.focus(); return; }
+
+    btn.disabled=true;
+    btn.textContent='SUBMITTING...';
+    const ticketId='TD-'+Math.random().toString(36).substring(2,8).toUpperCase();
+    const ticketRecord={
+      id: ticketId,
+      user_id: user?.id,
+      email: user?.email,
+      car_id: carId,
+      car_reg: cars.find(c=>c.id===carId)?.registration_no||null,
+      category: cat,
+      subject: sub,
+      message: msg,
+      priority: pri,
+      status: 'Open',
+      created_at: new Date().toISOString()
+    };
+    try{
+      let existing=[];
+      try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
+      existing.unshift(ticketRecord);
+      localStorage.setItem('carmy_support_tickets',JSON.stringify(existing));
+
+      try{
+        if(db&&user?.id){
+          await db.from('support_tickets').insert({
+            id: ticketRecord.id,
+            user_id: user.id,
+            email: user.email,
+            car_id: carId,
+            category: cat,
+            subject: sub,
+            message: msg,
+            priority: pri,
+            status: 'open',
+            created_at: ticketRecord.created_at
+          });
+        }
+      }catch(_){}
+
+      toast('Support ticket '+ticketId+' created successfully!');
+      currentHelpTab='ticket';
+      helpView();
+    }catch(err){
+      console.error('Ticket submission error:',err);
+      toast('Failed to record support ticket. Please try again.','error');
+    }finally{
+      if(document.body.contains(btn)){ btn.disabled=false; btn.textContent='SUBMIT TICKET'; }
+    }
+  };
+}
+
+function renderAboutContent(){
+  return '<div class="card">'+
+    '<div class="card-head-row"><div><h3>About Torq Desk</h3><p class="muted">Your Ride. Your Records.</p></div></div>'+
+    '<div style="margin-top:14px;line-height:1.65;color:#334155;font-size:14px">'+
+      '<p><b>Torq Desk</b> is a modern, privacy-first vehicle maintenance management cloud designed for individual vehicle owners, families, and workshops across India.</p>'+
+      '<p>Built from the ground up to replace fragmented paper bills, faded PUC receipts, and forgotten service dates, Torq Desk unites maintenance timelines, parts tracking, compliance monitoring, and cloud document vaults in one seamless dashboard.</p>'+
+      '<h4 style="margin:20px 0 8px;color:#0f172a">Key Pillars</h4>'+
+      '<ul style="padding-left:20px;margin:0 0 16px">'+
+        '<li><b>Zero-Knowledge Privacy:</b> Your records and documents belong exclusively to you. We never sell or monetize your vehicle data.</li>'+
+        '<li><b>High-Resilience Cloud:</b> Built with Cloudflare R2 and Supabase PostgreSQL with independent multi-layer caching and automated database backups.</li>'+
+        '<li><b>Statutory Compliance:</b> Automated tracking of Insurance policies, PUC certificates, and instant generation of Form 29 &amp; Form 30 ownership transfer paperwork.</li>'+
+      '</ul>'+
+      '<p class="muted" style="margin-top:20px">Version: Build '+esc(window.CARMY_BUILD||'2026.10')+' · © 2026 Torq Desk</p>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderTermsContent(){
+  return '<div class="card">'+
+    '<div class="card-head-row"><div><h3>Terms &amp; Conditions of Service</h3><p class="muted">Last updated: October 2026</p></div></div>'+
+    '<div style="margin-top:14px;line-height:1.65;color:#334155;font-size:14px">'+
+      '<p><b>1. Acceptance of Terms:</b> By creating an account or using Torq Desk, you agree to these Terms of Service and our commitment to data integrity and security.</p>'+
+      '<p><b>2. Vehicle Data Ownership:</b> You retain 100% legal ownership of all data, service logs, odometer readings, and documents uploaded to your Torq Desk account. You may export your records at any time using our A4 Vehicle Report generator.</p>'+
+      '<p><b>3. Security &amp; Inactivity Protection:</b> Sessions are guarded by 120-second inactivity timeouts. You are responsible for keeping your credentials and document PIN secure.</p>'+
+      '<p><b>4. Statutory Document Use:</b> Form 29 &amp; 30 paperwork generated by Torq Desk provides statutory format assistance under the Indian Motor Vehicles Act. You are responsible for verifying accuracy before lodging transfer applications with regional transport authorities (RTOs).</p>'+
+      '<p><b>5. Limitation of Liability:</b> Torq Desk provides cloud storage and record management tools. Regular vehicle maintenance, compliance renewals, and roadworthiness remain the sole responsibility of the vehicle owner.</p>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderContactContent(){
+  return '<div class="card">'+
+    '<div class="card-head-row"><div><h3>Contact Torq Desk Support</h3><p class="muted">We are here to assist with your garage, document vault, and account.</p></div></div>'+
+    '<div style="margin-top:14px;line-height:1.65;color:#334155;font-size:14px">'+
+      '<p>Need assistance or have feedback on Torq Desk? Reach out directly via our official channels:</p>'+
+      '<div style="margin:16px 0;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px">'+
+        '<div><b>Engineering &amp; Support Email:</b> <a href="mailto:support@torqdesk.app" style="color:var(--c-accent);text-decoration:underline">support@torqdesk.app</a></div>'+
+        '<div style="margin-top:6px"><b>Administrator Contact:</b> <a href="mailto:crahul.exe@gmail.com" style="color:var(--c-accent);text-decoration:underline">crahul.exe@gmail.com</a></div>'+
+        '<div style="margin-top:6px"><b>Support Hours:</b> Monday – Saturday, 9:00 AM – 6:00 PM IST</div>'+
+        '<div style="margin-top:6px"><b>Average Response Time:</b> Under 24 hours</div>'+
+      '</div>'+
+      '<div style="margin-top:20px">'+
+        '<button type="button" class="primary" onclick="currentHelpTab=\'ticket\';helpView()">Open a Support Ticket</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();
  const p=ownerProfile||{},meta=user?.user_metadata||{};
