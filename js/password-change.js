@@ -8,14 +8,14 @@
     if(currentPassword===newPassword)return 'New password must be different from current password.';
     return '';
   }
-  async function changePassword({createClient,url,anonKey,email,currentPassword,newPassword,auth}){
-    const validationError=validate(currentPassword,newPassword,newPassword.confirmation);
+  async function changePassword({createClient,url,anonKey,email,currentPassword,newPassword,confirmation,auth}){
+    const validationError=validate(currentPassword,newPassword,confirmation);
     if(validationError)return {error:{message:validationError},stage:'validation'};
     const verifier=createClient(url,anonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
     try{
       const verified=await verifier.auth.signInWithPassword({email,password:currentPassword});
       if(verified.error)return {error:verified.error,stage:'verify'};
-      const updated=await auth.updateUser({password:newPassword.value});
+      const updated=await auth.updateUser({password:newPassword});
       if(updated.error)return {error:updated.error,stage:'update'};
       const revoked=await auth.signOut({scope:'others'});
       if(revoked.error)return {error:revoked.error,stage:'revoke-others',passwordUpdated:true};
