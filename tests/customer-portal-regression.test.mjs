@@ -83,6 +83,7 @@ function createMockEnv(initialLastSeen = Math.floor(Date.now() / 1000) - 10) {
 function createAppHarness(overrides = {}) {
   const store = new Map();
   const elements = new Map();
+  const removedSet = new Set();
   function makeStyle() {
     return {
       setProperty(k, v) { this[k] = String(v); },
@@ -93,8 +94,15 @@ function createAppHarness(overrides = {}) {
 
   function makeEl(id) {
     if (!elements.has(id)) {
-      elements.set(id, {
-        id,
+      let currentId = id;
+      const el = {
+        get id() { return currentId; },
+        set id(newId) {
+          elements.delete(currentId);
+          currentId = String(newId);
+          removedSet.delete(currentId);
+          elements.set(currentId, el);
+        },
         classList: {
           _classes: new Set(),
           add(c) { this._classes.add(c); },
@@ -119,12 +127,16 @@ function createAppHarness(overrides = {}) {
         removeEventListener: () => {},
         appendChild: (child) => child,
         insertAdjacentHTML: () => {},
-        remove: () => {},
+        remove() {
+          elements.delete(currentId);
+          removedSet.add(currentId);
+        },
         closest: () => null,
         contains: () => true,
-        querySelector: (sel) => sel?.startsWith('#') ? makeEl(sel.slice(1)) : null,
+        querySelector: (sel) => sel?.startsWith('#') ? (removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1))) : null,
         querySelectorAll: () => []
-      });
+      };
+      elements.set(id, el);
     }
     return elements.get(id);
   }
@@ -187,8 +199,8 @@ function createAppHarness(overrides = {}) {
       el.tagName = String(tag).toUpperCase();
       return el;
     },
-    getElementById: makeEl,
-    querySelector: (sel) => sel?.startsWith('#') ? makeEl(sel.slice(1)) : null,
+    getElementById: (id) => removedSet.has(id) ? null : makeEl(id),
+    querySelector: (sel) => sel?.startsWith('#') ? (removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1))) : null,
     querySelectorAll: () => [],
     head: { ...makeEl('head'), appendChild: () => {} },
     body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, contains: () => true }
@@ -728,3 +740,135 @@ test("Client Production: clearUserMemory resets session state and clears vehicle
   assert.equal(h.store.has("carmy_selected_car_id"), false, "Selected car must be wiped on logout");
   assert.equal(h.store.has("carmy_cached_cars"), false, "Cached cars must be wiped on logout");
 });
+
+test("Client Production: delayed heartbeat shares promise and does not block startup sequence", async (t) => {
+  let heartbeatCalls = 0;
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/session/heartbeat")) {
+        heartbeatCalls++;
+        await new Promise(r => setTimeout(r, 40));
+        return new Response(JSON.stringify({ ok: true, server_time: Math.floor(Date.now() / 1000) }));
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval('user = { id: "cust-hb-delayed", email: "delayed@example.com" };');
+  h.context.writeIdleActivity(true);
+  const results = await Promise.all([
+    h.context.touchServerSessionActivity(true),
+    h.context.touchServerSessionActivity(true),
+    h.context.touchServerSessionActivity(true)
+  ]);
+
+  assert.ok(results.every(r => r === true), "All heartbeat callers must resolve true");
+  assert.equal(heartbeatCalls, 1, "Duplicate rapid heartbeat touches must share single in-flight promise");
+});
+
+test("Client Production: worker heartbeat failure falls back gracefully and permits successful vehicle startup", async (t) => {
+  let touchRpcCalled = false;
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/session/heartbeat")) {
+        return new Response(JSON.stringify({ ok: false, error: { code: "INTERNAL_ERROR", message: "Internal server error." } }), { status: 500 });
+      }
+      if (String(url).includes("/api/vehicles")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: [{ id: "car-hb-resilient", registration_no: "CH01BT6268", make_model: "Hyundai Grand i10" }]
+        }));
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("initSupabase()");
+  const originalRpc = h.mockDb.rpc;
+  h.mockDb.rpc = async (name) => {
+    if (name === "carmy_touch_session") {
+      touchRpcCalled = true;
+      return { data: true, error: null };
+    }
+    return originalRpc ? originalRpc(name) : { data: true, error: null };
+  };
+
+  h.eval(`
+    loadData = async () => {};
+    nav = async () => {};
+  `);
+
+  const u = { id: "user-hb-resilient", email: "resilient@example.com" };
+  await h.context.start(u);
+
+  assert.equal(touchRpcCalled, true, "Direct carmy_touch_session RPC must be called even when worker heartbeat fails");
+  assert.equal(h.eval("startedUserId"), "user-hb-resilient", "Startup must succeed despite worker heartbeat 500");
+  assert.equal(h.eval("startupFailed"), false);
+  assert.equal(h.eval("car?.registration_no"), "CH01BT6268", "Vehicle must be loaded successfully");
+});
+
+test("Client Production: successful vehicle loading populates memory, selections, and localStorage cache", async (t) => {
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/vehicles")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: [
+            { id: "car-b", registration_no: "PB01B2222", make_model: "Creta" },
+            { id: "car-a", registration_no: "CH01A1111", make_model: "Grand i10" }
+          ]
+        }));
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval('user = { id: "u-loadcars" };');
+  h.context.writeIdleActivity(true);
+  await h.context.loadCars();
+
+  const cars = h.eval("cars");
+  assert.equal(cars.length, 2);
+  assert.equal(cars[0].registration_no, "CH01A1111", "Cars must be alphabetically sorted by registration number");
+  assert.equal(cars[1].registration_no, "PB01B2222");
+
+  const cached = JSON.parse(h.store.get("carmy_cached_cars") || "[]");
+  assert.equal(cached.length, 2, "Vehicles must be saved to carmy_cached_cars in localStorage");
+  assert.equal(cached[0].id, "car-a");
+});
+
+test("Client Production: loading-state completion keeps shell hidden until target view is rendered", async (t) => {
+  const h = createAppHarness({
+    fetch: async () => new Response(JSON.stringify({
+      ok: true,
+      data: [{ id: "car-order-test", registration_no: "CH01BT6268" }]
+    }))
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  let appWasHiddenDuringLoadData = null;
+  let appWasHiddenDuringNav = null;
+
+  h.eval(`
+    loadData = async () => {
+      appWasHiddenDuringLoadData = document.getElementById('app').classList.contains('hidden');
+    };
+    nav = async () => {
+      appWasHiddenDuringNav = document.getElementById('app').classList.contains('hidden');
+    };
+  `);
+
+  await h.context.start({ id: "user-shell-timing", email: "timing@example.com" });
+
+  assert.equal(h.context.appWasHiddenDuringLoadData, true, "#app must remain hidden while loadData is executing");
+  assert.equal(h.context.appWasHiddenDuringNav, true, "#app must remain hidden while target view nav is rendering");
+  assert.equal(h.eval("document.getElementById('app').classList.contains('hidden')"), false, "#app must only be revealed after rendering completes");
+  
+  // Fast-forward animation timer for overlay removal
+  await new Promise(r => setTimeout(r, 650));
+  assert.equal(h.eval("document.getElementById('appLoadingOverlay')"), null, "Loading overlay must be removed after successful start");
+});
+

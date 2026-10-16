@@ -59,6 +59,7 @@ async function touchServerSessionActivity(force=false){
   if(!db||!user||window.__carmySigningOut||idleExpired())return false;
   const now=Date.now();
   if(!force&&now-lastServerActivityTouch<15000)return true;
+  if(force&&now-lastServerActivityTouch<3000)return true;
   if(serverActivityTouchPromise)return serverActivityTouchPromise;
   lastServerActivityTouch=now;
   serverActivityTouchPromise=(async()=>{
@@ -655,12 +656,30 @@ function showAppLoading(){
  '</div>';
  document.body.appendChild(o);
 
- const state={value:0,target:0,visibleSince:performance.now(),raf:0,smokeIndex:0,lastSmoke:0,lastFrame:performance.now(),slowTimer:0,visibilityHandler:null,stopped:false};
+ const state={value:0,target:0,visibleSince:performance.now(),raf:0,smokeIndex:0,lastSmoke:0,lastFrame:performance.now(),slowTimer:0,failsafeTimer:0,visibilityHandler:null,stopped:false};
  o._loadingState=state;
+
+ const resetWatchdog=(ms=15000)=>{
+   if(state.failsafeTimer)clearTimeout(state.failsafeTimer);
+   if(state.stopped)return;
+   state.failsafeTimer=setTimeout(()=>{
+     if(!state.stopped && document.body.contains(o)){
+       console.warn('Dashboard loading reached safety limit; aborting stall.');
+       hideAppLoading();
+       if(!car || startupFailed || !startedUserId){
+         $('app')?.classList.remove('hidden');
+         renderDashboardRecoveryUI(new Error('Connection timed out while loading your garage.'));
+       }
+     }
+   },ms);
+ };
+ state.resetWatchdog=resetWatchdog;
+
  o._loadingSetProgress=(pct)=>{
    const next=Math.max(0,Math.min(100,Number(pct)||0));
    state.target=Math.max(state.target,next);
    o.setAttribute('aria-valuenow',String(Math.round(state.target)));
+   resetWatchdog(15000);
  };
  o._loadingFrame=(now)=>{
    if(state.stopped)return;
@@ -703,22 +722,15 @@ function showAppLoading(){
      setAppLoadingStatus('Taking longer than usual...','Your secure garage is still loading. Please keep this window open.');
    }
  },10000);
- state.failsafeTimer=setTimeout(()=>{
-   if(!state.stopped && document.body.contains(o)){
-     console.warn('Dashboard loading reached safety limit; revealing dashboard shell.');
-     hideAppLoading();
-     $('app')?.classList.remove('hidden');
-     if(!car || startupFailed || !startedUserId){
-       renderDashboardRecoveryUI(new Error('Connection timed out while loading your garage.'));
-     }
-   }
- },12000);
+ resetWatchdog(15000);
  requestAnimationFrame(o._loadingFrame);
  return o;
 }
 function setAppLoadingStatus(title,sub){
  if($('appLoadingTitle'))$('appLoadingTitle').textContent=title;
  if($('appLoadingSub'))$('appLoadingSub').textContent=sub;
+ const o=document.getElementById('appLoadingOverlay');
+ if(o?._loadingState?.resetWatchdog)o._loadingState.resetWatchdog(15000);
 }
 function setAppLoadingProgress(pct){
  const o=document.getElementById('appLoadingOverlay');
@@ -1078,8 +1090,6 @@ async function start(u,force=false){
      try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
      const validViews=['dashboard','cars','add','history','docs','report','owner'];
      if(!validViews.includes(lastView))lastView='dashboard';
-     $('app').classList.remove('hidden');
-     window.scrollTo({top:0,left:0,behavior:'auto'});
      if(lastView!=='dashboard'){
        let restored=false;
        try{
@@ -1095,6 +1105,7 @@ async function start(u,force=false){
      }else{
        await nav('dashboard');
      }
+     $('app').classList.remove('hidden');
      window.scrollTo({top:0,left:0,behavior:'auto'});
      let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
      setAppLoadingProgress(100);
