@@ -125,6 +125,8 @@ function createAppHarness(overrides = {}) {
         removeAttribute: () => {},
         addEventListener: () => {},
         removeEventListener: () => {},
+        focus: () => {},
+        blur: () => {},
         appendChild: (child) => child,
         insertAdjacentHTML: () => {},
         click() {
@@ -959,6 +961,7 @@ test("Client Production: help view renders in-app tabs and supports ticket submi
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
+    writeIdleActivity(true);
     user = { id: "u-ticket-test", email: "driver@example.com" };
     cars = [{ id: "car-t1", registration_no: "CH01BT6268", make_model: "i10" }];
     nav('help');
@@ -981,7 +984,7 @@ test("Client Production: help view renders in-app tabs and supports ticket submi
     document.getElementById('ticketSubject').value = "Odometer query";
     document.getElementById('ticketMessage').value = "Need help checking service odometer sync.";
   `);
-  h.eval("document.getElementById('ticketSubmitBtn').click();");
+  await h.eval("document.getElementById('ticketSubmitBtn').click();");
 
   const tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
   assert.equal(tickets.length, 1, "Submitted ticket must be saved to localStorage");
@@ -989,4 +992,86 @@ test("Client Production: help view renders in-app tabs and supports ticket submi
   assert.equal(tickets[0].subject, "Odometer query");
   assert.equal(tickets[0].email, "driver@example.com");
 });
+
+test("HTML Structure: Authenticated dashboard has NO footer and Help section contains legal footer links", () => {
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+
+  // Dashboard must not have .md-app-footer
+  assert.ok(!html.includes("md-app-footer"), "Must not have md-app-footer in index.html");
+  assert.ok(!html.includes("footer-help-btn"), "Must not have footer-help-btn in index.html");
+
+  // Mobile bottom nav must have help view button
+  assert.ok(html.includes('<button data-view="help"'), "Mobile nav must have button data-view='help'");
+
+  // Help section must have in-app footer with copyright and legal links
+  const helpSectionMatch = html.match(/<section id="help"[\s\S]*?<\/section>/);
+  assert.ok(helpSectionMatch, "Must find section id='help'");
+  const helpHtml = helpSectionMatch[0];
+  assert.ok(helpHtml.includes("help-view-footer"), "Help section must contain help-view-footer");
+  assert.ok(helpHtml.includes("© 2026 Torq Desk · Your Ride. Your Records."), "Must have copyright in help-view-footer");
+  assert.ok(helpHtml.includes('data-help-target="about"'), "Must have data-help-target='about'");
+  assert.ok(helpHtml.includes('data-help-target="terms"'), "Must have data-help-target='terms'");
+  assert.ok(helpHtml.includes('data-help-target="contact"'), "Must have data-help-target='contact'");
+  assert.ok(helpHtml.includes('data-help-target="faqs"'), "Must have data-help-target='faqs'");
+});
+
+test("Client Production: Help view renders Terms, About, and Contact in-app without page redirect", (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-help", email: "user@example.com" };
+    currentHelpTab = 'terms';
+    helpView();
+  `);
+  let content = h.eval("document.getElementById('helpTabContent').innerHTML");
+  assert.ok(content.includes("Terms") && content.includes("Conditions"), "Terms tab must render Terms content");
+  assert.ok(content.includes("Torq Desk"), "Terms content must reference Torq Desk");
+
+  h.eval(`
+    currentHelpTab = 'about';
+    helpView();
+  `);
+  content = h.eval("document.getElementById('helpTabContent').innerHTML");
+  assert.ok(content.includes("About Torq Desk"), "About tab must render About content");
+
+  h.eval(`
+    currentHelpTab = 'contact';
+    helpView();
+  `);
+  content = h.eval("document.getElementById('helpTabContent').innerHTML");
+  assert.ok(content.includes("Contact") && content.includes("Support"), "Contact tab must render Contact content");
+});
+
+test("Client Production: Ticket form validates required subject and message", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-val", email: "user@example.com" };
+    currentHelpTab = 'ticket';
+    helpView();
+  `);
+
+  // Attempt submit without subject
+  h.eval(`
+    document.getElementById('ticketSubject').value = "";
+    document.getElementById('ticketMessage').value = "Some message";
+  `);
+  await h.eval("document.getElementById('ticketSubmitBtn').click();");
+  let tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
+  assert.equal(tickets.length, 0, "Must not submit without subject");
+
+  // Attempt submit without message
+  h.eval(`
+    document.getElementById('ticketSubject').value = "A subject";
+    document.getElementById('ticketMessage').value = "";
+  `);
+  await h.eval("document.getElementById('ticketSubmitBtn').click();");
+  tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
+  assert.equal(tickets.length, 0, "Must not submit without message");
+});
+
 
