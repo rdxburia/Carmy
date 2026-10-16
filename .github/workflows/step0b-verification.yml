@@ -57,7 +57,8 @@ jobs:
           print(f"SQL files discovered: {len(files)}")
           for path in files:
               try:
-                  parse_sql(path.read_text(encoding="utf-8"))
+                  source = "\\n".join(line for line in path.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith(chr(92)))
+              parse_sql(source)
                   print(f"PASS {path}")
               except Exception as exc:
                   errors.append((path, str(exc)))
