@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - chore/step0-project-governance
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
