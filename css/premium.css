@@ -1175,7 +1175,13 @@ body.md-info-open{overflow:hidden!important}
     white-space:nowrap !important;
   }
   body:has(#app:not(.hidden)) .md-auth-footer { display:none !important; }
-  body:has(#app:not(.hidden)) .md-app-footer { display:block !important; margin-top:24px !important; }
+  body:has(#app:not(.hidden)) .md-app-footer,
+  .md-site-footer.md-app-footer {
+    display:block !important;
+    margin-top:24px !important;
+    margin-bottom:0 !important;
+    padding-bottom:calc(84px + env(safe-area-inset-bottom,0px)) !important;
+  }
   body:has(#app:not(.hidden)) .mobile-nav { position:fixed !important; bottom:0 !important; z-index:1000 !important; }
 }
 @media (max-width: 360px) {
@@ -1370,9 +1376,9 @@ body{background:linear-gradient(180deg,#f6faff 0%,#f1f7ff 100%)}
 #app .drawer-car b,#app .drawer-utility{color:#fff!important}
 #app .drawer-car small,#app .drawer-secure{color:#aac8e8!important}
 #app .drawer-close{color:#fff!important}
-#app .md-app-footer{background:#fff;border-top:1px solid #dbe7f5}
-#app .md-app-footer .md-footer-links button{color:#456583}
-#app .md-app-footer .md-footer-made{color:#61738c}
+.md-app-footer{background:#fff!important;border-top:1px solid #dbe7f5!important}
+.md-app-footer .md-footer-links button,.md-app-footer .md-footer-links a{color:#456583!important}
+.md-app-footer .md-footer-made{color:#61738c!important}
 #appLoadingOverlay{background:#f4f9ff!important;color:#10233f!important}
 .app-loading-brand{color:#102b4e!important}
 .app-loading-brand-mark{background:linear-gradient(135deg,#38bdf8,#1677e8)!important}
@@ -1432,7 +1438,8 @@ body{background:linear-gradient(180deg,#f6faff 0%,#f1f7ff 100%)}
  #app .digital-cluster{grid-column:1/-1;padding:13px 15px}
  #app .mobile-nav{position:fixed;left:0;right:0;bottom:0;z-index:9000;padding-bottom:env(safe-area-inset-bottom)}
  #app .mobile-nav button{min-height:56px}
- #app .md-app-footer{padding-bottom:calc(74px + env(safe-area-inset-bottom))}
+ .md-app-footer,
+ body:has(#app:not(.hidden)) .md-app-footer{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
 }
 @media(max-width:420px){
  #app .main{padding:14px 10px 90px}
