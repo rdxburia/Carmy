@@ -1,65 +1,74 @@
 # Torq Desk — Step Progress
 
 ## Current step
-**Step 0 — Repository review, baseline verification, and persistent instructions.**
+**Step 0b — real CI evidence and narrowly scoped syntax/auth fixes.**
 
 ## Status
-- [x] Created `AGENTS.md` on branch `chore/step0-project-governance`.
-- [ ] Complete repository-wide JavaScript syntax checks.
-- [ ] Run existing test suite.
-- [ ] Verify Change Password end-to-end, including signing out other sessions.
-- [ ] Complete Step 0 report and wait for user approval before Step 1.
+- [x] Re-read `AGENTS.md` and this file before Step 0b.
+- [x] Added GitHub Actions workflow with `workflow_dispatch`, push, and pull-request triggers.
+- [x] Checked every repository JavaScript source/test file with `node --check`.
+- [x] Ran secret-free tests and new password-change tests.
+- [x] Fixed the missing array closure in `js/garage-workspace.js`.
+- [x] Fixed dollar quoting in `supabase/ws_001_core.sql` (`as $$ ... $$;`).
+- [x] Parsed every SQL file under `supabase/` using pglast, normalizing psql meta-directives and test variables for syntax-only parsing.
+- [x] Added isolated password verification and sign-out-other-sessions behavior with unit tests.
+- [x] Recorded private-fixture/secret-dependent items as NOT RUN.
+- [ ] Authenticated browser end-to-end Change Password test.
+- [ ] Final report and wait for explicit user approval before Step 1.
 
-## Evidence gathered so far
-- Repository: `rdxburia/Carmy`.
-- `package.json` blob SHA: `0765121a7013172980c9767b7aab3a91caf88638`.
-- `js/app.js` blob SHA at inspection: `b61b48be5110f1ca73156526fe325ac15ad9cd60`.
-- `supabase/ws_001_core.sql` blob SHA at inspection: `5220210469978189ae5f98d0cb1e5eb23386858e`.
-- `AGENTS.md` and `PROGRESS.md` were absent from the default branch when checked.
-- Package scripts define the main test suite as:
-  `node --test tests/customer-portal-regression.test.mjs tests/idle-session-auth.test.mjs tests/session-guard.test.mjs tests/r2-file-validation.test.mjs tests/workshop-m0-contract.test.mjs tests/support-tickets-worker.test.mjs`.
-- `npm run build` runs `wrangler deploy --dry-run`; this is not a production deployment.
+## Latest CI evidence
+- Workflow: [Step 0b verification](https://github.com/rdxburia/Carmy/actions/runs/38912525016)
+- Run ID: `38912525016`; commit: `212f075174b85fb4557ad7fb176bbebf61f1a6ca`.
+- Conclusion: **PASS**.
+- JavaScript syntax: `JavaScript files checked: 54`; `PASS: all JavaScript syntax checks`.
+- Tests: `# tests 64`, `# pass 64`, `# fail 0`, `# skipped 0`, duration `1012.849933 ms`.
+- SQL parser: `SQL files discovered: 22`; all 22 printed `PASS`, followed by `PASS: all Supabase SQL files parse`.
+- The SQL parser ignores psql backslash directives and replaces psql `:'variable'` placeholders with a dummy UUID strictly for parse validation. It does not execute SQL or validate live database behavior.
 
-## Change Password audit (code inspection only; NOT end-to-end verified)
-Current `ownerProfileView()` renders Current Password, New Password, Confirm New Password, and an Update Password action. Its handler:
-- requires current password;
-- requires new password length >= 8 and both letters and numbers;
-- requires confirmation match and a different password;
-- calls `db.auth.signInWithPassword({ email: user.email, password: cur })` to verify current credentials;
-- calls `db.auth.updateUser({ password: neu })` to update the password.
+## Test cases covered
+- New `tests/password-change.test.mjs`: weak password, mismatched confirmation, wrong current password (no update), and successful update followed by `signOut({ scope: 'others' })`.
+- Existing secret-free tests and fleet scalability test were included in the same Node test run.
 
-**Known gap:** inspected code does not sign out other sessions after password update. It also reauthenticates using the shared Supabase client, which may replace the active session during verification; this behavior needs a safe browser/auth test before deciding the smallest fix. Do not claim Change Password is fully compliant until verified and this gap is addressed.
+## Explicit NOT RUN
+- `tests/document-classifier-real-files.test.cjs`: private PDFs in `tests/fixtures/local` are not committed.
+- `tests/insurance-real-files.test.cjs`: private insurance PDFs in `tests/fixtures/local` are not committed.
+- `tests/smoke.js`: requires `CARMY_URL`, `CARMY_TEST_EMAIL`, `CARMY_TEST_PASSWORD` and a provisioned authenticated account.
+- `scripts/test-garage-workspace.mjs`, `scripts/capture-home-screenshots.mjs`: require a running preview server and Playwright browser.
+- `scripts/debug-document-classifier.cjs`, `scripts/debug-insurance-extraction.cjs`: require private PDF fixtures.
+- `scripts/preserve_and_recover.py`: recovery operation; not run without an approved target.
+- `scripts/bump-build.cjs`: mutates build metadata; no requested version tag.
+- Authenticated browser verification of the password change and actual revocation of other live sessions: **NOT RUN**; no test account/session credentials were supplied to this workflow.
 
-## Known issue to investigate in Step 1
-`supabase/ws_001_core.sql` contains a PL/pgSQL function with `as $` and closing `$;` instead of `as $$` / `$$;`. This is a known SQL dollar-quoting defect. Do not modify it during Step 0.
+## Commits on the Step 0b branch
+- `c9da45c` — close garage workspace field configuration array (initial attempt; syntax evidence caught remaining imbalance).
+- `9f652e9` — balance/reformat the garage workspace field configuration; confirmed by repository-wide syntax PASS.
+- `cf4715d` — correct workshop owner function dollar quoting; confirmed by pglast PASS.
+- `4eb9658`, `03d4f5f` — add isolated password-change helper and correct its argument handling.
+- `606d617` — add tests for weak password, mismatch, wrong current password, and success/session revocation.
+- `1466ba6`, `67b4a1c` — integrate helper into Account & Security and load it before app.js.
+- `df35759`, `0d85519`, `1e98fd4`, `e649dd6`, `a9d8bb2`, `212f075` — add/repair CI workflow, lockfile-less dependency install, psql normalization, and parser checks.
+- Draft review: [PR #137](https://github.com/rdxburia/Carmy/pull/137); not merged.
 
-## Verification ledger
-| Check | Status | Evidence / notes |
-|---|---|---|
-| Read package scripts | PASS | `package.json` fetched from GitHub; blob SHA above |
-| Read Change Password handler | PASS (inspection only) | `js/app.js` current default-branch content inspected |
-| `node --check` for every JS file and test | NOT RUN | GitHub file connector does not provide a Node execution environment; local container execution was unavailable in this session |
-| Existing `npm test` suite | NOT RUN | No execution environment available yet |
-| Browser end-to-end Change Password | NOT RUN | Requires authenticated browser/session and controlled test account |
-| Sign-out-other-sessions behavior | FAIL (code gap) | No sign-out-other-sessions call after successful password update found in inspected handler |
-| SQL parse validation | NOT RUN | Step 1 task; no migration/schema changes made in Step 0 |
+## Files changed in Step 0b
+- `.github/workflows/step0b-verification.yml`
+- `js/garage-workspace.js`
+- `supabase/ws_001_core.sql`
+- `js/password-change.js`
+- `js/app.js`
+- `index.html`
+- `tests/password-change.test.mjs`
+- `PROGRESS.md`
 
-## Files changed
-- `AGENTS.md` — added persistent project instructions and step plan.
-- `PROGRESS.md` — this evidence-based progress log.
-
-## Migrations
-- None created.
-- None applied.
-
-## Pending for Step 0
-1. Run repository-wide JavaScript syntax checks and all existing tests in a real Node environment.
-2. Test Change Password with a controlled test account in a browser: correct current password, incorrect current password, weak password, mismatch, successful update, continued session, and other-session revocation.
-3. Fix the Change Password gap only after confirming the intended Supabase auth behavior and smallest safe implementation; do not touch unrelated UI.
-4. Update this file with exact command output and proof.
-5. Stop and wait for the user's explicit "go" before Step 1.
+## Migrations / production
+- No new migration files created.
+- No migrations applied.
+- No production data or authentication records changed.
+- Existing dashboard UI/navigation was preserved; no redesign was performed.
 
 ## Risks / unknowns
-- Current code inspection is not equivalent to end-to-end verification.
-- The GitHub connector allowed repository reads/writes but did not execute Node tests or browser flows.
-- No database migrations have been applied; production data has not been touched.
+- CI proves syntax, unit behavior with mocks, and PostgreSQL parser acceptance only. It does not prove the password change against a real Supabase account or verify live session revocation.
+- `npm install --no-package-lock` reported 8 dependency audit vulnerabilities (7 high, 1 critical); dependency updates were outside this step and were not performed.
+- No browser visual or authenticated smoke test was run.
+
+## Next action
+Step 0b report is ready for review. **Do not start Step 1 until the user explicitly says "go".**
