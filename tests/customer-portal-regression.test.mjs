@@ -957,7 +957,21 @@ test("Client Production: dash does not render empty garage card while garageLoad
 });
 
 test("Client Production: help view renders in-app tabs and supports ticket submission", async (t) => {
-  const h = createAppHarness();
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/support-tickets")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: {
+            id: "TD-TEST9999",
+            status: "Open",
+            created_at: new Date().toISOString()
+          }
+        }));
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
@@ -988,7 +1002,7 @@ test("Client Production: help view renders in-app tabs and supports ticket submi
 
   const tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
   assert.equal(tickets.length, 1, "Submitted ticket must be saved to localStorage");
-  assert.ok(tickets[0].id.startsWith("TD-"), "Ticket ID must have TD- prefix");
+  assert.equal(tickets[0].id, "TD-TEST9999", "Ticket ID must match server response");
   assert.equal(tickets[0].subject, "Odometer query");
   assert.equal(tickets[0].email, "driver@example.com");
 });
@@ -1133,6 +1147,82 @@ test("Client Production: touchServerSessionActivity awaits in-flight touch promi
 
   assert.equal(res1, true);
   assert.equal(res2, true);
+});
+
+test("Client Production: Help navigation remains on help view (does NOT fallback to dashboard) if helpView encounters a rendering exception", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-help-err", email: "err@example.com" };
+    // Force helpView to throw a simulated render exception
+    helpView = () => {
+      throw new Error("Simulated DOM rendering exception inside helpView");
+    };
+  `);
+
+  await h.eval("nav('help');");
+
+  // Help view must remain active, dashboard must NOT be active
+  assert.equal(h.eval("document.getElementById('help').classList.contains('active')"), true, "Help view must remain active on render error");
+  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), false, "Dashboard must NOT become active when help view fails");
+  
+  // A retry UI must be rendered inside helpTabContent
+  const tabContent = h.eval("document.getElementById('helpTabContent').innerHTML");
+  assert.ok(tabContent.includes("Unable to display Help & Support"), "Must render helpful error card");
+  assert.ok(tabContent.includes("Retry Loading Help"), "Must render retry button");
+});
+
+test("Client Production: Support ticket failure preserves user entered inputs and does NOT generate a fake ticket ID", async (t) => {
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/support-tickets")) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: { message: "503 D1 table support_tickets does not exist" }
+        }), { status: 503 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-ticket-fail", email: "tester@example.com" };
+    cars = [{ id: "c1", registration_no: "CH01BT6268" }];
+    nav('help');
+    currentHelpTab = 'ticket';
+    helpView();
+    document.getElementById('ticketSubject').value = "Preserve this subject";
+    document.getElementById('ticketMessage').value = "Preserve this description message on failure";
+  `);
+
+  await h.eval("document.getElementById('ticketSubmitBtn').click();");
+
+  // Verify NO fake ticket was saved to localStorage
+  const savedTickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
+  assert.equal(savedTickets.length, 0, "No fake ticket should be saved to localStorage on server failure");
+
+  // Verify form inputs preserved
+  assert.equal(h.eval("document.getElementById('ticketSubject').value"), "Preserve this subject", "Subject input must be preserved");
+  assert.equal(h.eval("document.getElementById('ticketMessage').value"), "Preserve this description message on failure", "Message input must be preserved");
+
+  // Verify error banner is rendered in statusEl
+  const statusHtml = h.eval("document.getElementById('ticketFormStatus').innerHTML");
+  assert.ok(statusHtml.includes("Submission Failed"), "Status banner must show truthful failure message");
+  assert.ok(statusHtml.includes("503") || statusHtml.includes("support_tickets"), "Error details must be conveyed");
+
+  // Verify button re-enabled with retry prompt
+  assert.equal(h.eval("document.getElementById('ticketSubmitBtn').disabled"), false, "Submit button must be re-enabled");
+  assert.equal(h.eval("document.getElementById('ticketSubmitBtn').textContent"), "RETRY SUBMISSION", "Button must prompt RETRY SUBMISSION");
+});
+
+test("Client Production: Service Worker v9 retirement purges older torq-desk-shell caches", () => {
+  const swCode = fs.readFileSync(path.join(root, "sw.js"), "utf8");
+  assert.match(swCode, /CACHE_NAME\s*=\s*['"]torq-desk-shell-v9['"]/, "Must use torq-desk-shell-v9");
+  assert.match(swCode, /k\.startsWith\(['"]torq-desk-shell-['"]\)\s*&&\s*k!==CACHE_NAME/, "Must delete all older torq-desk-shell caches");
 });
 
 

@@ -1,7 +1,38 @@
 /* Torq Desk PWA shell. Never cache API, auth, POST or other non-GET responses. */
-const CACHE_NAME='torq-desk-shell-v8';
+const CACHE_NAME='torq-desk-shell-v9';
 const BASE='/Carmy/';
-const SHELL=[BASE,BASE+'index.html',BASE+'offline.html',BASE+'features.html',BASE+'garage-login.html',BASE+'garage-portal.html',BASE+'how-it-works.html',BASE+'pricing.html',BASE+'for-workshops.html',BASE+'faq.html',BASE+'about.html',BASE+'terms.html',BASE+'privacy.html',BASE+'contact.html',BASE+'css/styles.css',BASE+'css/premium.css',BASE+'css/public-site.css',BASE+'css/tokens.css',BASE+'js/public-site.js',BASE+'js/garage-login.js?v=2026.10.13-workspace-1',BASE+'js/garage-workspace.js?v=2026.10.13-workspace-1',BASE+'js/session-guard.js',BASE+'js/session-guard.js?v=2026.10.13-workshop-m0',BASE+'js/pricing-config.js',BASE+'js/pricing.js',BASE+'assets/torqdesk-logo.svg',BASE+'assets/torqdesk-icon.svg',BASE+'favicon.svg',BASE+'manifest.webmanifest'];
+const BUILD='2026.10.16-v9-polish';
+const SHELL=[
+  BASE,
+  BASE+'index.html',
+  BASE+'offline.html',
+  BASE+'features.html',
+  BASE+'garage-login.html',
+  BASE+'garage-portal.html',
+  BASE+'how-it-works.html',
+  BASE+'pricing.html',
+  BASE+'for-workshops.html',
+  BASE+'faq.html',
+  BASE+'about.html',
+  BASE+'terms.html',
+  BASE+'privacy.html',
+  BASE+'contact.html',
+  BASE+'garage-onboarding.html',
+  BASE+'css/styles.css?v='+BUILD,
+  BASE+'css/premium.css?v='+BUILD,
+  BASE+'css/public-site.css?v='+BUILD,
+  BASE+'css/tokens.css?v='+BUILD,
+  BASE+'js/public-site.js?v='+BUILD,
+  BASE+'js/app.js?v='+BUILD,
+  BASE+'js/session-guard.js?v='+BUILD,
+  BASE+'js/build-info.js?v='+BUILD,
+  BASE+'js/pricing-config.js',
+  BASE+'js/pricing.js',
+  BASE+'assets/torqdesk-logo.svg',
+  BASE+'assets/torqdesk-icon.svg',
+  BASE+'favicon.svg',
+  BASE+'manifest.webmanifest'
+];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('torq-desk-shell-')&&k!==CACHE_NAME).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('message',event=>{if(event.data&&event.data.type==='SKIP_WAITING')self.skipWaiting();});

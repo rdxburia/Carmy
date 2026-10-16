@@ -812,9 +812,23 @@ async function nav(v){
      if(v==='help')helpView();
    }catch(err){
      console.error('View render error:',v,err);
+     if(v==='help'){
+       target.classList.add('active');
+       const container=$('helpTabContent');
+       if(container){
+         container.innerHTML='<div class="card" style="text-align:center;padding:36px 16px;margin-top:12px">'+
+           '<div style="font-size:36px;margin-bottom:12px" aria-hidden="true">⚠️</div>'+
+           '<h3 style="margin-bottom:8px">Unable to display Help & Support</h3>'+
+           '<p class="muted" style="max-width:520px;margin:0 auto 20px auto">A temporary rendering issue occurred: '+esc(err?.message||'Unknown error')+'.</p>'+
+           '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button type="button" class="primary" onclick="helpView()">Retry Loading Help</button><button type="button" class="ghost" onclick="nav(\'dashboard\')">Go to Dashboard</button></div>'+
+         '</div>';
+       }
+       try{localStorage.setItem('carcare_last_view','help')}catch(e){}
+       return;
+     }
      target.classList.remove('active');
      if(previous&&previous!==target)previous.classList.add('active');
-     toast('Unable to open '+(v==='owner'?'Owner Profile':v==='help'?'Help & Support':v)+' right now. Please try again.','error');
+     toast('Unable to open '+(v==='owner'?'Owner Profile':v)+' right now. Please try again.','error');
      if(v!=='dashboard'){
        const dashboard=$('dashboard');
        document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
@@ -1830,6 +1844,8 @@ async function loadUserSupportTickets(){
 function helpView(){
   const container=$('helpTabContent');
   if(!container)return;
+  const validHelpTabs=['faqs','ticket','about','terms','contact'];
+  if(!validHelpTabs.includes(currentHelpTab)) currentHelpTab='faqs';
   document.querySelectorAll('.help-tab-btn').forEach(b=>{
     b.classList.toggle('active',b.dataset.helpTab===currentHelpTab);
     b.onclick=(e)=>{
@@ -1848,37 +1864,50 @@ function helpView(){
       window.scrollTo({top:0,behavior:'smooth'});
     };
   });
-  if(currentHelpTab==='faqs'){
-    container.innerHTML=renderFaqsContent();
-  }else if(currentHelpTab==='ticket'){
-    container.innerHTML=renderTicketContent();
-    wireTicketForm();
-    if(!ticketsLoaded&&typeof workerGet==='function'){
-      loadUserSupportTickets().then(()=>{
-        if(currentHelpTab==='ticket'){
-          const pastCont=$('ticketPastContainer');
-          if(pastCont) pastCont.innerHTML=renderTicketPastList();
-        }
-      });
+  try{
+    if(currentHelpTab==='faqs'){
+      container.innerHTML=renderFaqsContent();
+    }else if(currentHelpTab==='ticket'){
+      container.innerHTML=renderTicketContent();
+      wireTicketForm();
+      if(!ticketsLoaded&&typeof workerGet==='function'){
+        loadUserSupportTickets().then(()=>{
+          if(currentHelpTab==='ticket'){
+            const pastCont=$('ticketPastContainer');
+            if(pastCont) pastCont.innerHTML=renderTicketPastList();
+          }
+        });
+      }
+    }else if(currentHelpTab==='about'){
+      container.innerHTML=renderAboutContent();
+    }else if(currentHelpTab==='terms'){
+      container.innerHTML=renderTermsContent();
+    }else if(currentHelpTab==='contact'){
+      container.innerHTML=renderContactContent();
     }
-  }else if(currentHelpTab==='about'){
-    container.innerHTML=renderAboutContent();
-  }else if(currentHelpTab==='terms'){
-    container.innerHTML=renderTermsContent();
-  }else if(currentHelpTab==='contact'){
-    container.innerHTML=renderContactContent();
+  }catch(tabErr){
+    console.error('Error rendering help tab:',currentHelpTab,tabErr);
+    container.innerHTML='<div class="card" style="text-align:center;padding:32px 16px">'+
+      '<div style="font-size:32px;margin-bottom:12px" aria-hidden="true">⚠️</div>'+
+      '<h3 style="margin-bottom:8px">Unable to display '+esc(currentHelpTab)+'</h3>'+
+      '<p class="muted" style="max-width:480px;margin:0 auto 18px auto">A rendering error occurred: '+esc(tabErr?.message||'Unknown error')+'.</p>'+
+      '<button type="button" class="primary" onclick="helpView()">Retry</button>'+
+    '</div>';
   }
 }
 
 function renderTicketPastList(){
   let existing=userSupportTickets;
-  if(!existing.length){
-    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){}
+  if(!Array.isArray(existing)||!existing.length){
+    try{
+      const parsed=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]');
+      existing=Array.isArray(parsed)?parsed:[];
+    }catch(_){ existing=[]; }
   }
-  const userTickets=existing.filter(t=>!user||t.user_id===user.id||t.email===user.email);
+  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||t.user_id===user.id||t.email===user.email);
   if(!userTickets.length)return '';
   return '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
-    userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id)+'</b> <span class="ticket-badge">'+esc(t.category)+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject)+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
+    userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id||'TD-TICKET')+'</b> <span class="ticket-badge">'+esc(t.category||'General')+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject||'No Subject')+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
     '</div></div>';
 }
 
@@ -1897,8 +1926,9 @@ function renderFaqsContent(){
 }
 
 function renderTicketContent(){
+  const carList = Array.isArray(cars) ? cars : [];
   const carOptions=['<option value="">General (No specific vehicle)</option>'].concat(
-    cars.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
+    carList.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
   ).join('');
 
   return '<div class="card">'+
@@ -1939,44 +1969,36 @@ function wireTicketForm(){
 
     let ticketId=null;
     try{
-      let res=null;
-      if(typeof workerPost==='function'){
-        try{
-          res=await workerPost('/api/support-tickets',{
-            category: cat,
-            subject: sub,
-            message: msg,
-            priority: pri,
-            car_id: carId
-          });
-        }catch(postErr){
-          console.warn('Worker ticket endpoint error:', postErr);
-          // If the worker returns an error with message, preserve it
-          if(postErr?.status===400||postErr?.status===403||postErr?.status===429||postErr?.status===503){
-            throw postErr;
-          }
-        }
+      if(typeof workerPost!=='function'){
+        throw new Error('Support ticket submission service is unavailable. Please email hi@torqdesk.in directly.');
       }
-      ticketId=res?.data?.id || (res?.ok ? ('TD-'+Math.random().toString(36).substring(2,8).toUpperCase()) : null);
-      if(!ticketId){
-        // If worker was unavailable or non-responsive, generate a local reference
-        ticketId='TD-'+Math.random().toString(36).substring(2,8).toUpperCase();
+      const res=await workerPost('/api/support-tickets',{
+        category: cat,
+        subject: sub,
+        message: msg,
+        priority: pri,
+        car_id: carId
+      });
+      if(!res?.ok || !res?.data?.id){
+        throw new Error(res?.error?.message || 'Server did not save support ticket. Please retry or email hi@torqdesk.in.');
       }
+      ticketId=res.data.id;
 
       const createdRecord={
         id: ticketId,
         user_id: user?.id,
         email: user?.email,
         car_id: carId,
-        car_reg: cars.find(c=>c.id===carId)?.registration_no||null,
+        car_reg: (Array.isArray(cars)?cars:[]).find(c=>c.id===carId)?.registration_no||null,
         category: cat,
         subject: sub,
         message: msg,
         priority: pri,
         status: res?.data?.status||'Open',
-        created_at: new Date().toISOString()
+        created_at: res?.data?.created_at||new Date().toISOString()
       };
 
+      if(!Array.isArray(userSupportTickets)) userSupportTickets=[];
       userSupportTickets.unshift(createdRecord);
       try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
 
