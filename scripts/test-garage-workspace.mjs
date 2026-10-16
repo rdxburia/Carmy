@@ -47,8 +47,14 @@ try{
  await page.locator('.gd-sidebar button[data-gd-view="customers"]').click();
  await add('customer',{customer:'QA Customer Two',phone:'9800000002',vehicle:'Test Car',reg:'QA-02'},'customers');
  await check(await page.locator('#table-customers').getByText('QA Customer Two').count()>0,'Customer create failed');
- page.once('dialog',d=>d.accept()); await page.locator('#table-customers [data-row-action="delete"]').last().click();
- await check(await page.locator('#table-customers').getByText('QA Customer Two').count()===0,'Delete customer failed');
+ let deletePromptSeen=false;
+ page.once('dialog',async d=>{deletePromptSeen=d.message().includes('Remove this record');await d.accept();});
+ await page.locator('#table-customers [data-row-action="delete"]').last().click();
+ await check(deletePromptSeen,'Customer delete confirmation was not shown');
+ await page.waitForFunction(()=>![...document.querySelectorAll('#table-customers tr')].some(row=>row.innerText.includes('QA Customer Two')),{timeout:3000}).catch(async()=>{
+  const details=await page.locator('#table-customers').innerText();
+  throw new Error('Delete customer failed; table after confirmation: '+details);
+ });
  await page.locator('.gd-sidebar button[data-gd-view="inventory"]').click();
  await add('part',{part:'QA Filter',sku:'QA-1',category:'Filters',qty:8,reorder:2,cost:100,price:150},'inventory');
  await check(await page.locator('#table-inventory').getByText('QA Filter').count()>0,'Inventory create failed');
