@@ -16,7 +16,7 @@ test("forged X-Carmy-Last-Activity cannot keep an expired D1 session alive", asy
   };
   globalThis.fetch = async (url,init) => {
     if (String(url).endsWith("/auth/v1/user")) return new Response(JSON.stringify({id:"u1"}),{status:200});
-    if (String(url).includes("/auth/v1/logout")) return new Response("",{status:204});
+    if (String(url).includes("/auth/v1/logout")) return new Response(null,{status:204});
     throw new Error("unexpected fetch " + url);
   };
   const request = new Request("https://worker.example/api/vehicles", {headers:{Authorization:"Bearer "+token,"X-Carmy-Last-Activity":String(Math.floor(Date.now()/1000))}});

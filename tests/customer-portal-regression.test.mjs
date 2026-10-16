@@ -138,16 +138,45 @@ function createAppHarness(overrides = {}) {
     get length() { return store.size; }
   };
 
-  const mockDb = overrides.db || {
+  const defaultMockDb = {
     auth: {
-      getSession: async () => ({ data: { session: null } }),
-      onAuthStateChange: () => {},
+      getSession: async () => {
+        let u = null;
+        try { u = vm.runInContext('typeof user !== "undefined" ? user : null', context); } catch (_) {}
+        return {
+          data: {
+            session: u ? { access_token: "mock-session-token", user: u } : null
+          }
+        };
+      },
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
       refreshSession: async () => ({ data: { session: { access_token: "token-refreshed" } } }),
       signInWithPassword: async () => ({ data: null, error: new Error("Invalid login credentials") }),
       signOut: async () => ({ error: null })
     },
     rpc: async () => ({ data: true, error: null }),
-    from: () => ({ select: () => ({ single: async () => ({ data: {}, error: null }) }) })
+    from: () => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        insert: () => builder,
+        update: () => builder,
+        delete: () => builder,
+        single: async () => ({ data: {}, error: null }),
+        then: (resolve) => resolve({ data: [], error: null })
+      };
+      return builder;
+    }
+  };
+
+  const mockDb = {
+    ...defaultMockDb,
+    ...overrides.db,
+    auth: {
+      ...defaultMockDb.auth,
+      ...(overrides.db?.auth || {})
+    }
   };
 
   const docMock = {
@@ -165,10 +194,40 @@ function createAppHarness(overrides = {}) {
     body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, contains: () => true }
   };
 
+  const activeTimers = new Set();
+  const activeIntervals = new Set();
+
   const customSetTimeout = (cb, ms, ...args) => {
-    const t = setTimeout(cb, ms, ...args);
-    if (t && typeof t.unref === 'function') t.unref();
+    let t;
+    t = setTimeout((...cbArgs) => {
+      activeTimers.delete(t);
+      cb(...cbArgs);
+    }, ms, ...args);
+    activeTimers.add(t);
     return t;
+  };
+
+  const customClearTimeout = (id) => {
+    activeTimers.delete(id);
+    clearTimeout(id);
+  };
+
+  const customSetInterval = (cb, ms, ...args) => {
+    const id = setInterval(cb, ms, ...args);
+    activeIntervals.add(id);
+    return id;
+  };
+
+  const customClearInterval = (id) => {
+    activeIntervals.delete(id);
+    clearInterval(id);
+  };
+
+  const teardown = () => {
+    for (const t of activeTimers) clearTimeout(t);
+    activeTimers.clear();
+    for (const i of activeIntervals) clearInterval(i);
+    activeIntervals.clear();
   };
 
   const window = {
@@ -189,9 +248,11 @@ function createAppHarness(overrides = {}) {
     scrollTo: () => {},
     location: { reload: () => {} },
     setTimeout: customSetTimeout,
-    clearTimeout: (id) => clearTimeout(id),
-    requestAnimationFrame: () => 1,
-    cancelAnimationFrame: () => {},
+    clearTimeout: customClearTimeout,
+    setInterval: customSetInterval,
+    clearInterval: customClearInterval,
+    requestAnimationFrame: (cb) => customSetTimeout(cb, 16),
+    cancelAnimationFrame: (id) => customClearTimeout(id),
     document: docMock
   };
 
@@ -206,11 +267,11 @@ function createAppHarness(overrides = {}) {
     localStorage,
     sessionStorage: localStorage,
     setTimeout: customSetTimeout,
-    clearTimeout: (id) => clearTimeout(id),
-    setInterval: () => 1,
-    clearInterval: () => {},
-    requestAnimationFrame: () => 1,
-    cancelAnimationFrame: () => {},
+    clearTimeout: customClearTimeout,
+    setInterval: customSetInterval,
+    clearInterval: customClearInterval,
+    requestAnimationFrame: (cb) => customSetTimeout(cb, 16),
+    cancelAnimationFrame: (id) => customClearTimeout(id),
     performance: { now: () => Date.now() },
     atob: globalThis.atob || ((s) => Buffer.from(s, 'base64').toString('binary')),
     btoa: globalThis.btoa || ((s) => Buffer.from(s, 'binary').toString('base64')),
@@ -222,7 +283,7 @@ function createAppHarness(overrides = {}) {
   vm.createContext(context);
   const code = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
   vm.runInContext(code, context);
-  return { context, store, elements, makeEl, mockDb, eval: (expr) => vm.runInContext(expr, context) };
+  return { context, store, elements, makeEl, mockDb, teardown, eval: (expr) => vm.runInContext(expr, context) };
 }
 
 // -------------------------------------------------------------
@@ -495,10 +556,11 @@ test("Full Journey: login -> heartbeat past 120s -> save service record -> reloa
 // 2. Client Production Code Tests (Executing Real Code in js/app.js)
 // -----------------------------------------------------------------
 
-test("Client Production: loadCars falls back to cached vehicles when network request fails", async () => {
+test("Client Production: loadCars falls back to cached vehicles when network request fails", async (t) => {
   const h = createAppHarness({
     fetch: async () => new Response("503 Gateway Timeout", { status: 503 })
   });
+  if (t?.after) t.after(() => h.teardown());
 
   const cachedVehicles = [{ id: "c1", registration_no: "HP01AA1111", make_model: "Swift" }];
   h.store.set("carmy_cached_cars", JSON.stringify(cachedVehicles));
@@ -509,7 +571,7 @@ test("Client Production: loadCars falls back to cached vehicles when network req
   assert.equal(cars[0].registration_no, "HP01AA1111");
 });
 
-test("Client Production: loadData retains existing records when service-history endpoint fails", async () => {
+test("Client Production: loadData retains existing records when service-history endpoint fails", async (t) => {
   const h = createAppHarness({
     fetch: async (url) => {
       if (String(url).includes("/api/service-history")) {
@@ -518,6 +580,7 @@ test("Client Production: loadData retains existing records when service-history 
       return new Response(JSON.stringify({ ok: true, data: [] }));
     }
   });
+  if (t?.after) t.after(() => h.teardown());
 
   h.eval('car = { id: "car-1" }; records = [{ id: "rec-preserved", description: "Preserved Oil Change" }];');
 
@@ -527,9 +590,10 @@ test("Client Production: loadData retains existing records when service-history 
   assert.equal(records[0].id, "rec-preserved");
 });
 
-test("Client Production: duplicate startup protection shares in-flight startupPromise", async () => {
+test("Client Production: duplicate startup protection shares in-flight startupPromise", async (t) => {
   let loadCarsCount = 0;
   const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
 
   h.context.loadCarsCount = 0;
   h.eval(`
@@ -545,8 +609,9 @@ test("Client Production: duplicate startup protection shares in-flight startupPr
   assert.equal(h.eval("startedUserId"), "cust-dup-test");
 });
 
-test("Client Production: startup failure sets startupFailed=true, resets startedUserId, and permits retry for same user", async () => {
+test("Client Production: startup failure sets startupFailed=true, resets startedUserId, and permits retry for same user", async (t) => {
   const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
 
   h.context.attempts = 0;
   h.context.shouldFail = true;
@@ -575,8 +640,9 @@ test("Client Production: startup failure sets startupFailed=true, resets started
   assert.equal(h.eval("startupFailed"), false);
 });
 
-test("Client Production: selected car id is restored from localStorage across fresh loads and updated on openCar", async () => {
+test("Client Production: selected car id is restored from localStorage across fresh loads and updated on openCar", async (t) => {
   const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
 
   const vehicles = [
     { id: "car-first", registration_no: "HP01AA1111" },
@@ -601,7 +667,7 @@ test("Client Production: selected car id is restored from localStorage across fr
   assert.equal(h.store.get("carmy_selected_car_id"), "car-first", "openCar must persist selection");
 });
 
-test("Client Production: token refresh on 401 calls refreshSession and retries authenticated API", async () => {
+test("Client Production: token refresh on 401 calls refreshSession and retries authenticated API", async (t) => {
   let refreshCalled = false;
   let apiAttempts = 0;
 
@@ -637,6 +703,7 @@ test("Client Production: token refresh on 401 calls refreshSession and retries a
       return new Response(JSON.stringify({ ok: true, data: "fresh-data" }), { status: 200 });
     }
   });
+  if (t?.after) t.after(() => h.teardown());
 
   h.eval(`accessToken = "${initialToken}";`);
   const body = await h.context.workerGet("/api/vehicles");
@@ -646,8 +713,9 @@ test("Client Production: token refresh on 401 calls refreshSession and retries a
   assert.equal(apiAttempts, 2, "workerRequest must retry after refreshSession");
 });
 
-test("Client Production: clearUserMemory resets session state and clears vehicle cache keys", () => {
+test("Client Production: clearUserMemory resets session state and clears vehicle cache keys", (t) => {
   const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
 
   h.store.set("carmy_selected_car_id", "car-123");
   h.store.set("carmy_cached_cars", JSON.stringify([{ id: "car-123" }]));
