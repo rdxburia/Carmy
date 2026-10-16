@@ -134,7 +134,13 @@ export default {
         const sessionId = claims.session_id;
         if (!sessionId) return error("Session identity is missing.", 401, origin, "UNAUTHORIZED");
         const now = Math.floor(Date.now() / 1000);
-        const previous = await env.DB.prepare("SELECT last_heartbeat FROM session_activity WHERE session_id = ? AND user_id = ?").bind(sessionId, user.id).first();
+        let previous = null;
+        try {
+          previous = await env.DB.prepare("SELECT last_heartbeat FROM session_activity WHERE session_id = ? AND user_id = ?").bind(sessionId, user.id).first();
+        } catch (dbErr) {
+          // Schema resilience: tolerate D1 environments where 0003_session_heartbeat_rate_limit.sql is not yet applied
+          console.warn("Could not query last_heartbeat from session_activity:", dbErr?.message || dbErr);
+        }
         if (previous?.last_heartbeat && now - Number(previous.last_heartbeat) < 15) {
           const limited = error("Heartbeat rate limit: wait before sending another heartbeat.", 429, origin, "HEARTBEAT_RATE_LIMITED");
           limited.headers.set("retry-after", String(15 - (now - Number(previous.last_heartbeat))));
@@ -151,7 +157,11 @@ export default {
           console.error("Database idle-session heartbeat failed", dbTouch.status);
           return error("Session security check is temporarily unavailable. Please try again.", 503, origin, "SESSION_CHECK_UNAVAILABLE");
         }
-        await env.DB.prepare("UPDATE session_activity SET last_heartbeat = ? WHERE session_id = ? AND user_id = ?").bind(now, sessionId, user.id).run();
+        try {
+          await env.DB.prepare("UPDATE session_activity SET last_heartbeat = ? WHERE session_id = ? AND user_id = ?").bind(now, sessionId, user.id).run();
+        } catch (dbErr) {
+          console.warn("Could not update last_heartbeat in session_activity:", dbErr?.message || dbErr);
+        }
         return json({ ok: true, server_time: now }, 200, origin);
       }
 
