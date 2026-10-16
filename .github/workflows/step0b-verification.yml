@@ -52,12 +52,14 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from pglast import parse_sql
+          import re
           files = sorted(Path("supabase").rglob("*.sql"))
           errors = []
           print(f"SQL files discovered: {len(files)}")
           for path in files:
               try:
                   source = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith(chr(92)))
+                  source = re.sub(r":'[^']+'", "'00000000-0000-0000-0000-000000000000'", source)
                   parse_sql(source)
                   print(f"PASS {path}")
               except Exception as exc:
