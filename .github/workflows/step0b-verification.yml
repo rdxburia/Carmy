@@ -1,0 +1,75 @@
+name: Step 0b verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chore/step0-project-governance
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax-check every JavaScript source and test file
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find . -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -not -path './node_modules/*' -not -path './.git/*' -print0 | sort -z)
+          printf 'JavaScript files checked: %s\n' "${#files[@]}"
+          for file in "${files[@]}"; do
+            printf 'CHECK %s\n' "$file"
+            node --check "$file"
+          done
+          echo 'PASS: all JavaScript syntax checks'
+      - name: Run all repository tests without private PDF fixtures or authenticated browser secrets
+        run: |
+          node --test \
+            tests/customer-portal-regression.test.mjs \
+            tests/fleet-scalability.test.mjs \
+            tests/idle-session-auth.test.mjs \
+            tests/password-change.test.mjs \
+            tests/r2-file-validation.test.mjs \
+            tests/session-guard.test.mjs \
+            tests/support-tickets-worker.test.mjs \
+            tests/workshop-m0-contract.test.mjs
+      - name: Validate every SQL file with PostgreSQL parser
+        run: |
+          python -m pip install --disable-pip-version-check pglast
+          python - <<'PY'
+          from pathlib import Path
+          from pglast import parse_sql
+          files = sorted(Path("supabase").rglob("*.sql"))
+          errors = []
+          print(f"SQL files discovered: {len(files)}")
+          for path in files:
+              try:
+                  parse_sql(path.read_text(encoding="utf-8"))
+                  print(f"PASS {path}")
+              except Exception as exc:
+                  errors.append((path, str(exc)))
+                  print(f"FAIL {path}: {exc}")
+          if errors:
+              raise SystemExit(f"{len(errors)} SQL file(s) failed PostgreSQL parsing")
+          print("PASS: all Supabase SQL files parse")
+          PY
+      - name: Report intentionally unrun tests requiring private inputs
+        run: |
+          echo 'NOT RUN: tests/document-classifier-real-files.test.cjs — requires private PDFs in tests/fixtures/local; no private PDFs are committed.'
+          echo 'NOT RUN: tests/insurance-real-files.test.cjs — requires private insurance PDFs in tests/fixtures/local; no private PDFs are committed.'
+          echo 'NOT RUN: tests/smoke.js — requires CARMY_URL, CARMY_TEST_EMAIL, CARMY_TEST_PASSWORD and a provisioned authenticated test account.'
+          echo 'NOT RUN: scripts/test-garage-workspace.mjs and scripts/capture-home-screenshots.mjs — require a running local preview server and Playwright browser; not a secret-free unit test.'
+          echo 'NOT RUN: scripts/debug-document-classifier.cjs and scripts/debug-insurance-extraction.cjs — require private PDF fixtures.'
+          echo 'NOT RUN: scripts/preserve_and_recover.py — recovery operation, not a test; do not run without an explicitly approved target.'
+          echo 'NOT RUN: scripts/bump-build.cjs — mutates build metadata and requires a requested version tag.'
