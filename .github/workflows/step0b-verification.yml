@@ -69,12 +69,57 @@ jobs:
               raise SystemExit(f"{len(errors)} SQL file(s) failed PostgreSQL parsing")
           print("PASS: all Supabase SQL files parse")
           PY
-      - name: Report intentionally unrun tests requiring private inputs
+      - name: Install Playwright and Chromium for local browser checks
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+      - name: Start isolated static preview server
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/torq-preview.log 2>&1 &
+          echo $! > /tmp/torq-preview.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              echo 'PASS: static preview server ready'
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/torq-preview.log
+          exit 1
+      - name: Run garage workspace browser regression
+        env:
+          TORQ_PREVIEW_URL: http://127.0.0.1:4173/
+        run: node scripts/test-garage-workspace.mjs
+      - name: Capture public home desktop/tablet/mobile screenshots and check layout
+        env:
+          TORQ_PREVIEW_URL: http://127.0.0.1:4173/
+          TORQ_SCREENSHOT_DIR: artifacts/torqdesk-home
+        run: node scripts/capture-home-screenshots.mjs
+      - name: Run authenticated dashboard smoke test when dedicated staging credentials are configured
+        env:
+          CARMY_URL: ${{ secrets.CARMY_URL }}
+          CARMY_TEST_EMAIL: ${{ secrets.CARMY_TEST_EMAIL }}
+          CARMY_TEST_PASSWORD: ${{ secrets.CARMY_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "${CARMY_URL:-}" || -z "${CARMY_TEST_EMAIL:-}" || -z "${CARMY_TEST_PASSWORD:-}" ]]; then
+            echo 'NOT RUN: tests/smoke.js — configure CARMY_URL, CARMY_TEST_EMAIL, CARMY_TEST_PASSWORD as GitHub Actions secrets pointing to a dedicated staging account.'
+            exit 0
+          fi
+          node tests/smoke.js
+      - name: Report remaining tests requiring private inputs or explicit approval
         run: |
           echo 'NOT RUN: tests/document-classifier-real-files.test.cjs — requires private PDFs in tests/fixtures/local; no private PDFs are committed.'
           echo 'NOT RUN: tests/insurance-real-files.test.cjs — requires private insurance PDFs in tests/fixtures/local; no private PDFs are committed.'
-          echo 'NOT RUN: tests/smoke.js — requires CARMY_URL, CARMY_TEST_EMAIL, CARMY_TEST_PASSWORD and a provisioned authenticated test account.'
-          echo 'NOT RUN: scripts/test-garage-workspace.mjs and scripts/capture-home-screenshots.mjs — require a running local preview server and Playwright browser; not a secret-free unit test.'
           echo 'NOT RUN: scripts/debug-document-classifier.cjs and scripts/debug-insurance-extraction.cjs — require private PDF fixtures.'
-          echo 'NOT RUN: scripts/preserve_and_recover.py — recovery operation, not a test; do not run without an explicitly approved target.'
+          echo 'NOT RUN: authenticated Change Password browser test — requires a dedicated staging user and a controlled password-rotation test.'
+          echo 'NOT RUN: scripts/preserve_and_recover.py — recovery operation, not a test; do not run without explicit approval and target confirmation.'
           echo 'NOT RUN: scripts/bump-build.cjs — mutates build metadata and requires a requested version tag.'
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: step0b-browser-evidence
+          path: artifacts/torqdesk-home/
+          if-no-files-found: warn
