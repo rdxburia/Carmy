@@ -127,6 +127,9 @@ function createAppHarness(overrides = {}) {
         removeEventListener: () => {},
         appendChild: (child) => child,
         insertAdjacentHTML: () => {},
+        click() {
+          if (typeof this.onclick === 'function') return this.onclick();
+        },
         remove() {
           elements.delete(currentId);
           removedSet.add(currentId);
@@ -870,5 +873,120 @@ test("Client Production: loading-state completion keeps shell hidden until targe
   // Fast-forward animation timer for overlay removal
   await new Promise(r => setTimeout(r, 650));
   assert.equal(h.eval("document.getElementById('appLoadingOverlay')"), null, "Loading overlay must be removed after successful start");
+});
+
+test("Client Production: loadCars recovers vehicle records when session touch completes after empty RLS response", async (t) => {
+  let touchCalled = false;
+  let queryCount = 0;
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes("/api/vehicles")) {
+        // First worker fetch returns empty [] (simulating Postgres RLS before carmy_touch_session)
+        return new Response(JSON.stringify({ ok: true, data: [] }));
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }));
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("initSupabase()");
+  h.mockDb.rpc = async (name) => {
+    if (name === "carmy_touch_session") {
+      touchCalled = true;
+      return { data: true, error: null };
+    }
+    return { data: true, error: null };
+  };
+
+  h.mockDb.from = (table) => {
+    if (table === "cars") {
+      return {
+        select: () => ({
+          eq: () => ({
+            order: async () => {
+              queryCount++;
+              if (touchCalled) {
+                return {
+                  data: [{ id: "car-rls-recovered", registration_no: "CH01BT6268", make_model: "Hyundai Grand i10" }],
+                  error: null
+                };
+              }
+              return { data: [], error: null };
+            }
+          })
+        })
+      };
+    }
+    return { select: () => ({ eq: () => ({ order: async () => ({ data: [], error: null }) }) }) };
+  };
+
+  h.eval('user = { id: "user-rls-test" };');
+  h.context.writeIdleActivity(true);
+  await h.context.loadCars();
+
+  const cars = h.eval("cars");
+  assert.equal(cars.length, 1, "Must recover vehicle after session touch retry");
+  assert.equal(cars[0].registration_no, "CH01BT6268");
+  assert.equal(h.eval("garageLoadingState"), "ready", "Garage state must be ready after recovery");
+  assert.equal(touchCalled, true, "carmy_touch_session must be called on empty RLS response");
+});
+
+test("Client Production: dash does not render empty garage card while garageLoadingState is loading", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    car = null;
+    garageLoadingState = 'loading';
+    dash();
+  `);
+
+  const dashHtml = h.eval("document.getElementById('dash').innerHTML");
+  assert.ok(!dashHtml.includes("Welcome to your Torq Desk Garage"), "Must not display empty garage onboarding while loading");
+  assert.ok(!dashHtml.includes("Add Your First Car"), "Must not display Add Your First Car button while loading");
+  assert.ok(dashHtml.includes("Securing your vehicle garage"), "Must display loading indicator while loading");
+
+  h.eval(`
+    garageLoadingState = 'empty';
+    dash();
+  `);
+  const emptyHtml = h.eval("document.getElementById('dash').innerHTML");
+  assert.ok(emptyHtml.includes("Welcome to your Torq Desk Garage"), "Must display onboarding when garage state is authoritative empty");
+});
+
+test("Client Production: help view renders in-app tabs and supports ticket submission", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: "u-ticket-test", email: "driver@example.com" };
+    cars = [{ id: "car-t1", registration_no: "CH01BT6268", make_model: "i10" }];
+    nav('help');
+  `);
+
+  assert.equal(h.eval("document.getElementById('help').classList.contains('active')"), true, "Help view must be active");
+  let content = h.eval("document.getElementById('helpTabContent').innerHTML");
+  assert.ok(content.includes("Frequently Asked Questions"), "Default tab must be FAQs");
+
+  h.eval(`
+    currentHelpTab = 'ticket';
+    helpView();
+  `);
+  content = h.eval("document.getElementById('helpTabContent').innerHTML");
+  assert.ok(content.includes("Submit a Support Ticket"), "Must render ticket form");
+  assert.ok(content.includes('value="driver@example.com"'), "Email must be present in form HTML");
+  assert.equal(h.eval("document.getElementById('ticketEmail').value"), "driver@example.com", "Email must be prefilled");
+
+  h.eval(`
+    document.getElementById('ticketSubject').value = "Odometer query";
+    document.getElementById('ticketMessage').value = "Need help checking service odometer sync.";
+  `);
+  h.eval("document.getElementById('ticketSubmitBtn').click();");
+
+  const tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
+  assert.equal(tickets.length, 1, "Submitted ticket must be saved to localStorage");
+  assert.ok(tickets[0].id.startsWith("TD-"), "Ticket ID must have TD- prefix");
+  assert.equal(tickets[0].subject, "Odometer query");
+  assert.equal(tickets[0].email, "driver@example.com");
 });
 
