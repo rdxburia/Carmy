@@ -22,7 +22,7 @@ installIdleFetchGuard();
 function clearUserMemory(){
   user=null;cars=[];car=null;records=[];docs=[];ownerProfile=null;
   insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
-  accessToken='';authRefreshPromise=null;startedUserId=null;
+  accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
@@ -230,7 +230,7 @@ async function workerDelete(path){
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});window.db=db;return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>Torq Desk</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
 function waitForSupabase(n=0){if(initSupabase()){boot();return}if(n<40){setTimeout(()=>waitForSupabase(n+1),250);return}sdkError()}
-let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null;
+let user=null,cars=[],car=null,records=[],docs=[],signup=false,startedUserId=null,startingUserId=null;
 let startupPromise=null,startupFailed=false;
 function renderDashboardRecoveryUI(err){
  const dashEl=$('dash');
@@ -919,6 +919,7 @@ async function boot(){
      }else{
        accessToken='';
        startedUserId=null;
+       startingUserId=null;
        startupPromise=null;
        startupFailed=false;
        if(!window.__carmySigningOut)clearUserMemory();
@@ -1033,10 +1034,12 @@ function updateCarTab(){let el=$('mobileCarReg');if(el)el.textContent=car?.regis
 async function start(u,force=false){
  window.start=start;
  if(!u)return;
- if(startupPromise&&!force&&user?.id===u.id)return startupPromise;
+ if(startupPromise&&!force&&(startingUserId===u.id||user?.id===u.id))return startupPromise;
  if(startedUserId===u.id&&!startupFailed&&!force)return;
  user=u;
+ startingUserId=u.id;
  startupFailed=false;
+ writeIdleActivity(true);
  closeSideMenu();
  stopVerificationCountdown();
  pendingVerificationEmail='';
@@ -1097,13 +1100,17 @@ async function start(u,force=false){
      setAppLoadingProgress(100);
      hideAppLoading();
      ensureSecurityPassword();
-     startedUserId=u.id;
-     startupFailed=false;
+     if(!user||user.id===u.id){
+       startedUserId=u.id;
+       startupFailed=false;
+     }
    }catch(e){
      console.error('Dashboard data load failed; keeping the authenticated session:',e);
      hideAppLoading();
-     startupFailed=true;
-     startedUserId=null;
+     if(!user||user.id===u.id){
+       startupFailed=true;
+       startedUserId=null;
+     }
      $('app').classList.remove('hidden');
      $('auth').classList.add('hidden');
      $('torqLanding')?.classList.add('hidden');
@@ -1113,6 +1120,7 @@ async function start(u,force=false){
      toast('You are signed in, but some data could not load. Check your connection and retry.','error');
    }finally{
      startupPromise=null;
+     if(startingUserId===u.id)startingUserId=null;
    }
  })();
  return startupPromise;
@@ -1304,7 +1312,7 @@ async function saveCarForm(){
  let insTypes=selectedChoices('cfInsType'),insAddons=selectedChoices('cfInsAddons');
  if(!reg||!model||!year||!fuel||ins==='Not Available'||!insNo||!insExp||insTypes.length<2||puc!=='yes'||!pucNo||!pucState||!pucValidity||!pucExp)return toast('Complete all required fields. Insurance Type needs minimum 2 selections.');
  let r=await db.from('cars').insert({user_id:user.id,registration_no:reg,make_model:model,model_year:+year,fuel,current_km:+($('cfKm').value||0),vin:$('cfVin').value.trim()||null,engine_no:$('cfEngine').value.trim()||null,insurance_company:ins,insurance_number:insNo,insurance_type:insTypes,insurance_addons:insAddons,insurance_expiry:insExp,puc_certificate_no:pucNo,puc_state:pucState,puc_validity_months:+pucValidity,puc_expiry:pucExp}).select().single();
- if(r.error)return toast('Failed to save Vehicle: '+r.error.message,'error');cars.push(r.data);car=r.data;updateCarTab();hideCarForm();toast('Vehicle '+reg+' added successfully!');await loadData();nav('dashboard');
+ if(r.error)return toast('Failed to save Vehicle: '+r.error.message,'error');cars.push(r.data);car=r.data;updateCarTab();hideCarForm();toast('Vehicle '+reg+' added successfully!');await loadData();await nav('dashboard');
 }
 window.openCar=async id=>{
   const target=cars.find(x=>x.id===id);
@@ -1321,7 +1329,7 @@ window.openCar=async id=>{
   if(document.getElementById('history')?.classList.contains('active'))renderHistory();
   if(document.getElementById('docs')?.classList.contains('active')){try{await docsView()}catch(_){}}
   await loadData();
-  nav('dashboard');
+  await nav('dashboard');
 };
 function vehicleBodyType(model=''){
  let m=model.toLowerCase();
