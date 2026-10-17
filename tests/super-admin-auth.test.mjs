@@ -93,3 +93,46 @@ test("admin route rejects unauthenticated requests before accessing admin data",
   assert.equal(response.status, 401);
   assert.equal((await response.json()).error.code, "UNAUTHORIZED");
 });
+
+test("admin route denies an authenticated non-admin before reading tickets or writing audit", async () => {
+  const originalFetch = globalThis.fetch;
+  const now = Math.floor(Date.now() / 1000);
+  const token = `header.${Buffer.from(JSON.stringify({ session_id: "session-normal-user", iat: now })).toString("base64url")}.signature`;
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    calls.push(target);
+    if (target.endsWith("/auth/v1/user")) {
+      return Response.json({ id: user.id, email: "regular@example.com" });
+    }
+    if (target.includes("/rest/v1/super_admins")) {
+      return Response.json([]);
+    }
+    throw new Error(`Unexpected fetch in test: ${target}`);
+  };
+  const DB = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async first() { return null; },
+            async run() { return { success: true }; },
+          };
+        },
+      };
+    },
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/support-tickets", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      { ...env, DB, ALLOWED_ORIGIN: "https://example.test" }
+    );
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "FORBIDDEN");
+    assert.equal(calls.some((url) => url.includes("/rest/v1/super_admin_audit_log")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
