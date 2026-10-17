@@ -471,8 +471,11 @@ function bindAuthValidation(){
 }
 
 function getAuthRedirectUrl(){
- const path=window.location.pathname.endsWith('/')?window.location.pathname:window.location.pathname+'/';
- return window.location.origin+path;
+ const loc=window.location||{};
+ const pathname=String(loc.pathname||'/');
+ const path=pathname.endsWith('/')?pathname:pathname+'/';
+ const origin=loc.origin||'';
+ return origin+path;
 }
 function maskEmail(email){
  const v=String(email||'').trim();
@@ -911,9 +914,15 @@ async function handleAuthSubmit(ev){
        p_phone:normalizedPhone
      });
      if(duplicateCheck.error){
-       console.error('Registration duplicate check failed:',duplicateCheck.error);
-       toast('We could not verify your details right now. Please try again.','error');
-       return;
+       const errCode=duplicateCheck.error?.code||'';
+       const errMsg=String(duplicateCheck.error?.message||'');
+       if(errCode==='PGRST202'||/function.*does not exist|not found/i.test(errMsg)){
+         console.warn('check_registration_duplicate RPC not found on database; falling back to standard auth guard');
+       }else{
+         console.error('Registration duplicate check failed:',duplicateCheck.error);
+         toast('We could not verify your details right now. Please try again.','error');
+         return;
+       }
      }
      if(duplicateCheck.data===true){
        toast('An account with this email or mobile number already exists. Please sign in instead.','error');
@@ -942,6 +951,8 @@ async function handleAuthSubmit(ev){
    if(signup){
      if(r.data?.session){
        toast('Account created and signed in.');
+     }else if(r.data?.user&&Array.isArray(r.data.user.identities)&&r.data.user.identities.length===0){
+       toast('An account with this email or mobile number already exists. Please sign in instead.','error');
      }else{
        showVerificationView(e.trim().toLowerCase());
      }
@@ -1589,71 +1600,1020 @@ function renderDashDocCard(d){
  const [status,cls]=docStatus(d),title=docTypeLabel(d),icon=d.document_type==='insurance'?'🛡️':d.document_type==='puc'?'🌿':'📘';
  return '<div class="flip-card" tabindex="0" onclick="this.classList.toggle(\'flipped\')"><div class="flip-inner"><div class="flip-front"><div class="doc-card-icon">'+icon+'</div><b>'+esc(title)+'</b><small>'+esc(d.document_type==='insurance'?(car.insurance_number||'Policy document'):d.document_type==='puc'?(car.puc_state||'PUC certificate'):'Registration Certificate')+'</small><span class="doc-badge '+cls+'">'+status+'</span><em>'+esc(d.document_expiry?'Expiry '+d.document_expiry:'Vehicle document')+'</em></div><div class="flip-back"><b>'+esc(title)+'</b><p>'+esc(d.file_name)+'</p><div><button type="button" class="ghost" onclick="event.stopPropagation();openDocumentPreview(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Preview</button><button type="button" class="ghost" onclick="event.stopPropagation();downloadDoc(\''+d.storage_path.replace(/'/g,"\\'")+'\')">Download</button></div></div></div></div>';
 }
-function openSaleForms(){
- if(!car)return toast('Select a vehicle before generating Form 29 & 30.','error');
- if(car.vehicle_status==='sold')return toast('This vehicle is already marked SOLD.','error');
- if(!ownerProfile?.full_name){if(confirm('Owner Profile is not saved yet. Form 29/30 need your name and address. Fill Owner Profile now?'))openOwnerProfile();return}
- let m=document.getElementById('saleFormsModal');if(m)m.remove();
- const meta=user?.user_metadata||{},today=new Date().toISOString().slice(0,10);
- m=document.createElement('div');m.id='saleFormsModal';
- m.innerHTML='<div class="sale-modal-card"><div class="toolbar"><div><h3>Sell Vehicle / Generate Form 29 &amp; 30</h3><p class="muted">Buyer and RTO details required for the transfer documents.</p></div><button class="ghost" id="saleClose">✕</button></div><div class="form"><div class="field"><label>Buyer Full Name *</label><input id="buyerName"></div><div class="field"><label>Buyer Relation *</label><select id="buyerRelation"><option value="">Select</option><option>S/o</option><option>W/o</option><option>D/o</option></select></div><div class="field"><label>Relation Name *</label><input id="buyerRelationName" placeholder="Father / Husband / Mother name"></div><div class="field"><label>Buyer Age *</label><input id="buyerAge" type="number" min="18" max="120"></div><div class="field full"><label>Buyer Full Address *</label><textarea id="buyerAddress"></textarea></div><div class="field"><label>Buyer Jurisdiction RTO *</label><input id="buyerRto" placeholder="e.g. RTO Shimla"></div><div class="field"><label>Date of Sale / Agreement *</label>'+dateInputHtml('saleDate',today,true)+'</div><div class="field"><label>Financier Name</label><input id="saleFinancier" value="N/A" placeholder="N/A if not hypothecated"></div><div class="field full"><div class="sale-vehicle-summary"><b>'+esc(car.registration_no)+'</b> · '+esc(car.make_model||'')+' · '+esc(car.fuel||'')+'<br>Transferor: '+esc(getTransferor().name||'Not available')+'</div></div><div class="full"><button class="primary" id="generateSaleForms">GENERATE FORM 29 &amp; 30</button></div></div></div>';
- document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.remove()};$('saleClose').onclick=()=>m.remove();
- $('generateSaleForms').onclick=generateSaleForms;
+/* ===== Official Form 29 & 30 Statutory Templates (CMVR 1989) ===== */
+const OFFICIAL_FORM_TEMPLATES = {
+  form_29_v1: {
+    template_key: 'form_29_v1',
+    form_type: 'form_29',
+    version: 'v1',
+    title: 'Form 29 — Notice of Transfer of Ownership of a Motor Vehicle',
+    schema_fields: ['destination_rto','transferor_name','transferor_address','sale_day','sale_month','sale_year','registration_no','vehicle_make_model','chassis_no','engine_no','chassis_block','engine_block','transferee_name','transferee_relation','transferee_relation_name','transferee_address','hypothecation_phrase','financier_signature_block','declaration_date','source_rto'],
+    raw_template: '<div class="official-form-page" data-form-type="form_29" data-page="1">'+
+      '<div class="form-header-box">'+
+        '<div class="form-title-main">FORM 29</div>'+
+        '<div class="form-rule-ref">[See Rule 55 (1)]</div>'+
+        '<div class="form-subject">NOTICE OF TRANSFER OF OWNERSHIP OF A MOTOR VEHICLE</div>'+
+        '<div class="form-sub-instructions">(To be made in duplicate and the duplicate copy with the endorsement of the Registering Authority to be returned to the transferor or immediately on making entries of transfer of ownership in certificate of Registration and Form 24)</div>'+
+      '</div>'+
+      '<div class="form-to-block">'+
+        '<div class="to-label">To</div>'+
+        '<div class="to-authority">The Registering Authority, <b>{{destination_rto}}</b></div>'+
+        '<div class="to-jurisdiction">(in whose jurisdiction the Transferee resides)</div>'+
+      '</div>'+
+      '<div class="form-body-paragraphs">'+
+        '<p class="form-p">I/We <b>{{transferor_name}}</b> resident of <b>{{transferor_address}}</b> have on the <b>{{sale_day}}</b> day of <b>{{sale_month}}</b> <b>{{sale_year}}</b> sold and delivered my/our Vehicle No. <b>{{registration_no}}</b> make <b>{{vehicle_make_model}}</b> {{chassis_block}} {{engine_block}} to Shri/Smt. <b>{{transferee_name}}</b> (Name) {{transferee_relation}} <b>{{transferee_relation_name}}</b> residing at <b>{{transferee_address}}</b> (House No./Street Village /Town Distt. and State) {{hypothecation_phrase}}.</p>'+
+        '<p class="form-p">The Registration Certificate and Insurance Certificate have been handed over to him/her/them.</p>'+
+        '<p class="form-p">To the best of my/our knowledge and belief the vehicle is not superdari and free from all encumbrances and information furnished is true. I/we undertake to hold my/our self-responsible for any inaccuracy or suppression of information.</p>'+
+      '</div>'+
+      '<div class="form-signatures-row">'+
+        '<div class="sig-col financier-sig">{{financier_signature_block}}</div>'+
+        '<div class="sig-col transferor-sig">'+
+          '<div class="sig-line">________________________________________________</div>'+
+          '<div class="sig-caption">Signature or thumb impression of the Registered Owner (Transferor)</div>'+
+          '<div class="sig-date">Date: <b>{{declaration_date}}</b></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="transferee-ack-row">I/We <b>{{transferee_name}}</b> (Transferee)</div>'+
+      '<div class="copy-to-block">'+
+        '<p>Copy to the Registering Authority <b>{{source_rto}}</b> in whose jurisdiction the transferor resides.</p>'+
+        '<div class="copy-note">Note - To be sent to the Registering Authority by Registered Post Acknowledgment Due.</div>'+
+      '</div>'+
+      '<div class="office-endorsement-box">'+
+        '<div class="endorsement-title">OFFICE ENDORSEMENT</div>'+
+        '<div class="endorsement-ref-row"><span>Ref. No. ________________________</span><span>Office of the __________________________________</span></div>'+
+        '<p class="endorsement-p">The ownership of the vehicle has been transferred to the name of ________________________________ with the note of the abovesaid agreement with effect from ________________________ (date).</p>'+
+        '<div class="endorsement-sign-row"><div class="endorsement-date">Date: ____________________</div><div class="endorsement-seal"><div>__________________________________________________</div><div>Signature of the Registering Authority with Office seal</div></div></div>'+
+        '<div class="endorsement-to"><div>* Strike out whichever is inapplicable.</div><div>To: The Transferor __________________________________________________</div><div>(To be sent by Registered Post Acknowledgement Due)</div></div>'+
+      '</div>'+
+    '</div>'
+  },
+  form_30_v1: {
+    template_key: 'form_30_v1',
+    form_type: 'form_30',
+    version: 'v1',
+    title: 'Form 30 — Application for Intimation and Transfer of Ownership',
+    schema_fields: ['destination_rto','transferor_name','transferor_relation','transferor_relation_name','transferor_age','transferor_address','sale_day','sale_month','sale_year','registration_no','transferee_name','transferee_relation','transferee_relation_name','transferee_address','transferee_age','transferor_noc_clause','financier_part_block','declaration_date'],
+    raw_template: '<div class="official-form-page" data-form-type="form_30" data-page="1">'+
+      '<div class="form-header-box">'+
+        '<div class="form-title-main">FORM 30</div>'+
+        '<div class="form-rule-ref">[See Rule 55 (2) and (3)]</div>'+
+        '<div class="form-subject">APPLICATION FOR INTIMATION AND TRANSFER OF OWNERSHIP OF A MOTOR VEHICLE</div>'+
+        '<div class="form-sub-instructions">(To be made in duplicate if the vehicle is held under an agreement of hire-purchase/lease/hypothecation. The duplicate copy with the endorsement of the Registering Authority to be returned to the Financier simultaneously on making the entry of the transfer of Ownership in the Certificate of Registration and Registration Record in Form 24)</div>'+
+      '</div>'+
+      '<div class="form-to-block">'+
+        '<div class="to-label">To</div>'+
+        '<div class="to-authority">The Registering Authority, <b>{{destination_rto}}</b></div>'+
+      '</div>'+
+      '<div class="form-section-head">PART I — FOR THE USE OF THE TRANSFEROR</div>'+
+      '<div class="particulars-list">'+
+        '<div class="particular-row"><span class="lbl">Name of the transferor:</span> <span class="val"><b>{{transferor_name}}</b></span></div>'+
+        '<div class="particular-row"><span class="lbl">Son/wife/daughter of:</span> <span class="val"><b>{{transferor_relation}} {{transferor_relation_name}}</b></span></div>'+
+        '<div class="particular-row"><span class="lbl">Age:</span> <span class="val"><b>{{transferor_age}} years</b></span> &nbsp;&nbsp;&nbsp; <span class="lbl">Full address:</span> <span class="val"><b>{{transferor_address}}</b></span></div>'+
+      '</div>'+
+      '<p class="form-p">I/We, hereby declare that I/We have on this <b>{{sale_day}}</b> day of <b>{{sale_month}}</b> <b>{{sale_year}}</b> sold my/our motor vehicle bearing Registration mark <b>{{registration_no}}</b> to Shri/Smt. <b>{{transferee_name}}</b>, Son/wife/daughter of <b>{{transferee_relation}} {{transferee_relation_name}}</b>, residing at <b>{{transferee_address}}</b> (full address) and handed over the Certificate of Registration and the Certificate of Insurance to him/her/them.</p>'+
+      '<p class="form-p">I/We hereby declare that to the best of my/our knowledge the certificate of registration of the vehicle has not been suspended* or cancelled.</p>'+
+      '<p class="form-p">{{transferor_noc_clause}}</p>'+
+      '<div class="form-signatures-row single-right"><div class="sig-col transferor-sig"><div class="sig-line">________________________________________________</div><div class="sig-caption">Signature or thumb impression of the Transferor</div><div class="sig-date">Date: <b>{{declaration_date}}</b></div></div></div>'+
+      '<div class="footnote-notes" style="font-size:10px;color:#555;margin-bottom:3mm">* Details of suspension or cancellation. &nbsp;&nbsp;&nbsp; ** Strike out whichever is inapplicable.</div>'+
+      '<div class="form-section-head" style="margin-top:4mm">PART II — FOR THE USE OF THE TRANSFEREE</div>'+
+      '<div class="particulars-list">'+
+        '<div class="particular-row"><span class="lbl">Name of the Transferee:</span> <span class="val"><b>{{transferee_name}}</b></span></div>'+
+        '<div class="particular-row"><span class="lbl">Son/wife/daughter of:</span> <span class="val"><b>{{transferee_relation}} {{transferee_relation_name}}</b></span> &nbsp;&nbsp;&nbsp; <span class="lbl">Age:</span> <span class="val"><b>{{transferee_age}} years</b></span></div>'+
+        '<div class="particular-row"><span class="lbl">Full address:</span> <span class="val"><b>{{transferee_address}}</b></span> <small>(Proof of address to be enclosed)</small></div>'+
+      '</div>'+
+      '<p class="form-p">I/We, hereby declare that I/We have on this <b>{{sale_day}}</b> day of <b>{{sale_month}}</b> <b>{{sale_year}}</b> purchased the motor vehicle bearing registration number <b>{{registration_no}}</b> from <b>{{transferor_name}}</b>, residing at <b>{{transferor_address}}</b> (name and full address) and request that necessary entries regarding the transfer of ownership of the vehicle in my/our name may be recorded in the certificate of registration and certificate of fitness of the vehicle, which is enclosed.</p>'+
+      '<p class="form-p">The certificate of Insurance is also enclosed. To the best of my knowledge and belief I/We have not suppressed any facts and information furnished is true. The vehicle is not superdari and free from all encumbrances. I/We undertake to hold myself responsible for any inaccuracy of the information.</p>'+
+      '<div class="form-signatures-row single-right"><div class="sig-col transferee-sig"><div class="sig-line">________________________________________________</div><div class="sig-caption">Signature or thumb impression of the Transferee</div><div class="sig-date">Date: <b>{{declaration_date}}</b></div></div></div>'+
+    '</div>'+
+    '<div class="official-form-page" data-form-type="form_30" data-page="2">'+
+      '<div class="form-section-head">CONSENT OF THE FINANCIER IN THE CASE OF MOTOR VEHICLE SUBJECT TO AN AGREEMENT OF HIRE-PURCHASE/LEASE/HYPOTHECATION</div>'+
+      '{{financier_part_block}}'+
+      '<div class="office-endorsement-box">'+
+        '<div class="endorsement-title">OFFICE ENDORSEMENT</div>'+
+        '<div class="endorsement-ref-row"><span>Ref. No. ________________________</span><span>Office of the __________________________________</span></div>'+
+        '<p class="endorsement-p">The transfer of ownership of vehicle under continuation of an endorsement of hire-purchase/lease/hypothecation agreement has been recorded with effect from ________________________ in the Registration Certificate of the vehicle <b>{{registration_no}}</b> and in the Registration record of this office in Form 24.</p>'+
+        '<div class="endorsement-sign-row"><div class="endorsement-date">Date: ____________________</div><div class="endorsement-seal"><div>__________________________________________________</div><div>Signature of the Registering Authority</div></div></div>'+
+        '<div class="endorsement-to"><div>To: The Financier __________________________________________________</div><div>(To be sent by Registered Post Acknowledgement Due)</div></div>'+
+      '</div>'+
+      '<div class="specimen-signatures-box">'+
+        '<div class="specimen-instructions">Specimen signature or thumb impression of the registered owner and the Financier are to be obtained in the original application for affixing and attestation by the Registering Authority with the office seal in Forms 23 and 24, in such manner that the parts of impression of seal or stamp and attestation shall fall upon each signature.</div>'+
+        '<div class="specimen-grid">'+
+          '<div class="specimen-col"><div class="specimen-head">Specimen signature of the Financier</div><div class="specimen-item">1. ______________________________________</div><div class="specimen-item">2. ______________________________________</div></div>'+
+          '<div class="specimen-col"><div class="specimen-head">Specimen signature of the Registered Owner</div><div class="specimen-item">1. ______________________________________</div><div class="specimen-item">2. ______________________________________</div></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'
+  },
+  clearance_certificate_v1: {
+    template_key: 'clearance_certificate_v1',
+    form_type: 'clearance_certificate',
+    version: 'v1',
+    title: 'Clearance Certificate Request Letter',
+    schema_fields: ['transferor_name','transferor_address','transferor_city','declaration_date','source_rto','registration_no','vehicle_make_model','chassis_no','engine_no','transferee_name','transferee_relation','transferee_relation_name','transferee_address','destination_rto','vehicle_id_clause'],
+    raw_template: '<div class="official-form-page letter-page" data-form-type="clearance_certificate" data-page="1">'+
+      '<div class="letter-meta-row">'+
+        '<div class="letter-from"><div><b>From:</b></div><div>{{transferor_name}}</div><div>{{transferor_address}}</div></div>'+
+        '<div class="letter-date-place"><div>Place: <b>{{transferor_city}}</b></div><div>Date: <b>{{declaration_date}}</b></div></div>'+
+      '</div>'+
+      '<div class="letter-to"><div><b>To:</b></div><div>The Regional Transport Authority / Registering Authority,</div><div><b>{{source_rto}}</b></div></div>'+
+      '<div class="letter-sub"><b>Sub: Issue of Clearance Certificate for Vehicle {{registration_no}}</b></div>'+
+      '<div class="letter-body">'+
+        '<p>Sir,</p>'+
+        '<p>I have sold my vehicle <b>{{vehicle_make_model}}</b> bearing Registration No. <b>{{registration_no}}</b>{{vehicle_id_clause}} to Shri/Smt. <b>{{transferee_name}}</b>, {{transferee_relation}} <b>{{transferee_relation_name}}</b>, residing at <b>{{transferee_address}}</b>.</p>'+
+        '<p>Please issue a <b>Clearance Certificate / No Objection Certificate</b> in favor of the Registering Authority, <b>{{destination_rto}}</b> to enable re-registration, transfer of ownership, and payment of road tax.</p>'+
+        '<p>Thanking you,</p>'+
+      '</div>'+
+      '<div class="letter-sign-block"><div>Yours faithfully,</div><br><br><div>________________________________________________</div><div><b>{{transferor_name}}</b></div><div>(Registered Owner / Transferor)</div></div>'+
+    '</div>'
+  },
+  insurance_transfer_v1: {
+    template_key: 'insurance_transfer_v1',
+    form_type: 'insurance_transfer',
+    version: 'v1',
+    title: 'Transfer of Insurance Notice Letter',
+    schema_fields: ['transferor_name','transferor_address','transferor_city','declaration_date','insurance_company','registration_no','insurance_number','vehicle_make_model','transferee_name','transferee_address'],
+    raw_template: '<div class="official-form-page letter-page" data-form-type="insurance_transfer" data-page="1">'+
+      '<div class="letter-meta-row">'+
+        '<div class="letter-from"><div><b>From:</b></div><div>{{transferor_name}}</div><div>{{transferor_address}}</div></div>'+
+        '<div class="letter-date-place"><div>Place: <b>{{transferor_city}}</b></div><div>Date: <b>{{declaration_date}}</b></div></div>'+
+      '</div>'+
+      '<div class="letter-to"><div><b>To:</b></div><div>The Branch Manager,</div><div><b>{{insurance_company}}</b></div></div>'+
+      '<div class="letter-sub"><b>Sub: Transfer of Motor Insurance Policy for Vehicle {{registration_no}}</b></div>'+
+      '<div class="letter-body">'+
+        '<p>Dear Sir,</p>'+
+        '<p><b>Policy / Certificate No.:</b> <b>{{insurance_number}}</b></p>'+
+        '<p><b>Covering Vehicle:</b> <b>{{vehicle_make_model}}</b> (Reg. No.: <b>{{registration_no}}</b>)</p>'+
+        '<p>I/We wish to inform you that I/We have sold my/our vehicle bearing the above registration number to Shri/Smt. <b>{{transferee_name}}</b>, residing at <b>{{transferee_address}}</b> together with the valid insurance cover.</p>'+
+        '<p>Please have the interest of the Policy transferred in his / her / their favor.</p>'+
+        '<p>Thanking you,</p>'+
+      '</div>'+
+      '<div class="letter-sign-block"><div>Yours faithfully,</div><br><br><div>________________________________________________</div><div><b>{{transferor_name}}</b></div><div>(Insured / Transferor)</div></div>'+
+    '</div>'
+  }
+};
+
+async function fetchFormTemplate(formType, version = 'v1'){
+  const key = formType + '_' + version;
+  if(db && db.from){
+    try{
+      const res = await db.from('form_templates').select('*').eq('form_type', formType).eq('version', version).eq('is_active', true).maybeSingle();
+      if(res?.data && res.data.raw_template) return res.data;
+    }catch(err){
+      console.warn('Could not load form template from Supabase; using builtin template:', err?.message || err);
+    }
+  }
+  const fallback = OFFICIAL_FORM_TEMPLATES[key] || OFFICIAL_FORM_TEMPLATES[formType];
+  if(!fallback) throw new Error('Form template "' + formType + '" (version ' + version + ') not found in database or local registry.');
+  return fallback;
 }
-function saleEscape(x){return esc(x).replace(/\n/g,'<br>')}
-function getTransferor(){
- const meta=user?.user_metadata||{},p=ownerProfile||{};
- const addr=[p.address,p.city,p.state,p.pincode].filter(Boolean).join(', ');
- return {name:p.full_name||meta.full_name||car.owner_name||user?.email||'',address:addr||meta.address||meta.full_address||''};
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+function getOrdinalDay(day){
+  const d = parseInt(day, 10);
+  if(isNaN(d)) return String(day || '');
+  const mod100 = d % 100;
+  if(mod100 >= 11 && mod100 <= 13) return d + 'th';
+  switch(d % 10){
+    case 1: return d + 'st';
+    case 2: return d + 'nd';
+    case 3: return d + 'rd';
+    default: return d + 'th';
+  }
 }
-async function generateSaleForms(){
- const btn=$('generateSaleForms');if(!btn)return;
- const buyerName=$('buyerName').value.trim(),relation=$('buyerRelation').value,relationName=$('buyerRelationName').value.trim(),age=Number($('buyerAge').value),address=$('buyerAddress').value.trim(),rto=$('buyerRto').value.trim(),saleDate=dateInputValue('saleDate'),financier=$('saleFinancier').value.trim()||'N/A';
- if(!buyerName||!relation||!relationName||!age||age<18||!address||!rto||!saleDate)return toast('Please complete all required buyer and RTO details.','error');
- if(!confirm('This will generate Form 29 & 30 AND mark '+car.registration_no+' as SOLD. Service logging will be locked and this cannot be undone from the app. Continue?'))return;
- btn.disabled=true;btn.textContent='GENERATING...';
- const tr=getTransferor(),relationText=relation+' '+relationName;
- const data={reg:car.registration_no,makeModel:car.make_model||'',vin:car.vin||'Not available',engine:car.engine_no||'Not available',transferor:tr.name||'Not available',transferorAddress:tr.address||'Not available',buyer:buyerName,relation:relationText,age,address,rto,saleDate,financier};
- try{
-   const wrapper=document.createElement('div');wrapper.id='salePdfPreview';wrapper.setAttribute('aria-hidden','true');wrapper.innerHTML=buildSaleFormsHtml(data);document.body.appendChild(wrapper);
-   const pdfName='Form_29_30_'+buyerName.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+new Date(saleDate).getFullYear()+'.pdf';
-   const pdf=await loadPdfEngine();
-   const opt={margin:0,filename:pdfName,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
-   const blob=await pdf().set(opt).from(wrapper).outputPdf('blob');
-   wrapper.remove();
-   const path=user.id+'/'+car.id+'/archives/'+pdfName;
-   const up=await db.storage.from('car-documents').upload(path,blob,{contentType:'application/pdf',upsert:false});
-   const ins=await db.from('documents').insert({user_id:user.id,car_id:car.id,file_name:pdfName,storage_path:path,mime_type:'application/pdf',file_size:blob.size,document_type:'other',document_name:'Form 29 & 30 (Sale Document)',archive_name:'Form 29 & 30',archived_at:new Date().toISOString(),active:false}).select().single();
-   if(ins.error){await db.storage.from('car-documents').remove([path]);throw new Error('Archive record save failed: '+ins.error.message)}
-   const docId=ins.data?.id||null;
-   let saleRpcId=null;
-   try{
-     const saleRpc=await db.rpc('complete_vehicle_sale',{p_car_id:car.id,p_buyer_name:buyerName,p_buyer_relation:relation,p_buyer_relation_name:relationName,p_buyer_age:age,p_buyer_address:address,p_buyer_rto:rto,p_sale_date:saleDate,p_financier:financier,p_form_document_id:docId});
-     if(saleRpc?.error){
-       console.warn('complete_vehicle_sale RPC returned error; attempting fallback update:', saleRpc.error);
-       const fb=await db.from('cars').update({vehicle_status:'sold',sold_at:new Date().toISOString(),sold_to_name:buyerName}).eq('id',car.id);
-       if(fb.error)throw new Error('Vehicle sale update failed: '+saleRpc.error.message);
-     }else{
-       saleRpcId=saleRpc.data;
-     }
-   }catch(rpcErr){
-     console.warn('complete_vehicle_sale failed; performing direct car status update:', rpcErr);
-     const fb=await db.from('cars').update({vehicle_status:'sold',sold_at:new Date().toISOString(),sold_to_name:buyerName}).eq('id',car.id);
-     if(fb.error)throw rpcErr;
-   }
-   car.vehicle_status='sold';car.sold_at=new Date().toISOString();car.sold_to_name=buyerName;
-   if(saleRpcId)car.sale_history_id=saleRpcId;
-   const previewUrl=URL.createObjectURL(blob);
-   const pv=document.createElement('div');pv.id='saleGeneratedModal';pv.innerHTML='<div class="sale-generated-card"><div class="toolbar"><div><h3>Form 29 &amp; 30 Ready</h3><p class="muted">Saved securely to vehicle archives.</p></div><button class="ghost" id="saleGeneratedClose">✕</button></div><iframe src="'+previewUrl+'" title="Form 29 and Form 30 preview"></iframe><div class="sale-generated-actions"><button class="ghost" onclick="window.open(\''+previewUrl+'\',\'_blank\')">Open PDF</button><button class="primary" onclick="window.print()">Print</button></div></div>';
-   document.body.appendChild(pv);$('saleGeneratedClose').onclick=()=>{pv.remove();URL.revokeObjectURL(previewUrl)};mClose('saleFormsModal');await loadData();toast('Form 29 & 30 generated and saved to Archives for '+car.registration_no+'!');
- }catch(e){let w=document.getElementById('salePdfPreview');if(w)w.remove();toast('Failed to generate Form 29 & 30. '+(e?.message||e),'error')}finally{if(document.body.contains(btn)){btn.disabled=false;btn.textContent='GENERATE FORM 29 & 30'}}
+
+function parseTransferDateComponents(dateStr){
+  if(!dateStr){
+    const now = new Date();
+    return { day: now.getDate(), monthName: MONTH_NAMES[now.getMonth()], year: now.getFullYear(), monthNum: now.getMonth() + 1 };
+  }
+  const s = String(dateStr).trim();
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso){
+    const mIdx = parseInt(iso[2], 10) - 1;
+    return { day: parseInt(iso[3], 10), monthName: MONTH_NAMES[mIdx] || '', year: parseInt(iso[1], 10), monthNum: mIdx + 1 };
+  }
+  const ind = s.match(/^(\d{2})-(\d{2})-(\d{4})/);
+  if(ind){
+    const mIdx = parseInt(ind[2], 10) - 1;
+    return { day: parseInt(ind[1], 10), monthName: MONTH_NAMES[mIdx] || '', year: parseInt(ind[3], 10), monthNum: mIdx + 1 };
+  }
+  const d = new Date(dateStr);
+  const mIdx = d.getMonth();
+  return { day: d.getDate(), monthName: MONTH_NAMES[mIdx] || '', year: d.getFullYear(), monthNum: mIdx + 1 };
 }
-function mClose(id){let x=document.getElementById(id);if(x)x.remove()}
+
+function formatOrdinalDay(d){
+  if(d instanceof Date) return getOrdinalDay(d.getDate());
+  return getOrdinalDay(d);
+}
+
+function mapOwnershipTransferData(raw){
+  const saleComp = parseTransferDateComponents(raw.sale_date);
+  const declComp = raw.declaration_date ? parseTransferDateComponents(raw.declaration_date) : saleComp;
+  const isHypo = Boolean(raw.hypothecation_type && raw.hypothecation_type !== 'none');
+  const hypoType = raw.hypothecation_type === 'hire_purchase' ? 'hire-purchase' : (raw.hypothecation_type === 'lease' ? 'lease' : 'hypothecation');
+  const finName = (raw.financier_name || '').trim();
+  const finAddr = (raw.financier_address || '').trim();
+  const isOtherState = raw.transfer_type === 'other_state';
+
+  const hypothecationPhrase = isHypo
+    ? 'under an agreement of ' + hypoType + ' with ' + esc(finName) + (finAddr ? ', ' + esc(finAddr) : '')
+    : 'not held under any agreement of hire-purchase, lease or hypothecation';
+
+  const financierSigBlock = isHypo
+    ? '<div class="sig-line">________________________________________________</div><div class="sig-caption">Signature of Financier (as consent)</div><div class="sig-val" style="margin-top:2px;font-weight:600">' + esc(finName) + '</div>'
+    : '<div class="not-hypo-note">(Vehicle not held under hire-purchase / lease / hypothecation)</div>';
+
+  const financierPartBlock = isHypo
+    ? '<p class="form-p">I/We being a party to an agreement of ' + hypoType + ' in respect of motor vehicle specified above, give consent to the transfer of ownership of the said motor vehicle in the name of the Transferee named above, with whom I/We have entered into an agreement of ' + hypoType + '.</p><p style="margin:2mm 0"><b>Name and address of Financier:</b> ' + esc(finName) + (finAddr ? ', ' + esc(finAddr) : '') + '</p><div class="form-signatures-row single-right"><div class="sig-col"><div class="sig-line">________________________________________________</div><div class="sig-caption">Signature of the Financier</div><div class="sig-date">Date: ____________________</div></div></div>'
+    : '<p class="form-p not-hypo-note">(The motor vehicle above described is not held under hire-purchase agreement, lease agreement or subject to hypothecation).</p>';
+
+  let transferorNocClause = '';
+  if(isOtherState){
+    if(raw.noc_status === 'enclosed'){
+      transferorNocClause = '* I/We enclose the "No objection certificate" issued by the Registering Authority' + (raw.noc_number ? ' (NOC No: ' + esc(raw.noc_number) + ')' : '') + '.';
+    }else if(raw.noc_status === 'applied'){
+      transferorNocClause = '* The "No objection certificate" has been applied for at ' + esc(raw.source_rto || 'original RTO') + '; declaration filed under proviso to Section 50(1).';
+    }else{
+      transferorNocClause = '* No Objection Certificate declaration under section 50(1) recorded.';
+    }
+  }else{
+    transferorNocClause = '* The vehicle transfer is within state jurisdiction; intimation filed under section 50(1) of the Motor Vehicles Act.';
+  }
+
+  const fuelType = String(raw.fuel || car?.fuel || '').toLowerCase();
+  const isElectric = fuelType.includes('electric') || fuelType.includes('battery') || fuelType.includes('ev');
+  const engineLabel = isElectric ? 'Motor No.' : 'Engine No.';
+
+  const cleanChassis = String(raw.chassis_no || raw.vin || car?.vin || '').trim();
+  const cleanEngine = String(raw.engine_no || car?.engine_no || '').trim();
+
+  const chassisBlock = cleanChassis
+    ? 'Chassis No. <b>' + esc(cleanChassis) + '</b>'
+    : 'Chassis No. ________________________';
+
+  const engineBlock = cleanEngine
+    ? engineLabel + ' <b>' + esc(cleanEngine) + '</b>'
+    : engineLabel + ' ________________________';
+
+  const idParts = [];
+  if(cleanChassis) idParts.push('Chassis No: <b>' + esc(cleanChassis) + '</b>');
+  if(cleanEngine) idParts.push(engineLabel + ': <b>' + esc(cleanEngine) + '</b>');
+  const vehicleIdClause = idParts.length ? ' (' + idParts.join(', ') + ')' : '';
+
+  return {
+    transfer_type: raw.transfer_type || 'same_state',
+    registration_no: String(raw.registration_no || '').trim().toUpperCase(),
+    vehicle_make_model: String(raw.vehicle_make_model || '').trim(),
+    chassis_no: cleanChassis || '________________________',
+    engine_no: cleanEngine || '________________________',
+    chassis_block: chassisBlock,
+    engine_block: engineBlock,
+    vehicle_id_clause: vehicleIdClause,
+    source_rto: String(raw.source_rto || '').trim() || 'Registering Authority',
+    source_state: String(raw.source_state || '').trim(),
+    destination_rto: String(raw.destination_rto || '').trim(),
+    destination_state: String(raw.destination_state || '').trim(),
+    transferor_name: String(raw.transferor_name || '').trim(),
+    transferor_relation: String(raw.transferor_relation || 'S/o').trim(),
+    transferor_relation_name: String(raw.transferor_relation_name || '').trim(),
+    transferor_age: Number(raw.transferor_age) || 35,
+    transferor_address: String(raw.transferor_address || '').trim(),
+    transferor_city: String(raw.transferor_city || 'Chandigarh').trim(),
+    transferee_name: String(raw.transferee_name || '').trim(),
+    transferee_relation: String(raw.transferee_relation || 'S/o').trim(),
+    transferee_relation_name: String(raw.transferee_relation_name || '').trim(),
+    transferee_age: Number(raw.transferee_age) || 30,
+    transferee_address: String(raw.transferee_address || '').trim(),
+    sale_day: getOrdinalDay(saleComp.day),
+    sale_month: saleComp.monthName,
+    sale_year: String(saleComp.year),
+    declaration_date: String(declComp.day).padStart(2,'0') + '-' + String(declComp.monthNum).padStart(2,'0') + '-' + declComp.year,
+    hypothecation_phrase: hypothecationPhrase,
+    financier_signature_block: financierSigBlock,
+    financier_part_block: financierPartBlock,
+    transferor_noc_clause: transferorNocClause,
+    insurance_company: String(raw.insurance_company || car?.insurance_company || 'The Insurance Company').trim(),
+    insurance_number: String(raw.insurance_number || car?.insurance_number || 'Policy On File').trim()
+  };
+}
+
+function renderFormTemplate(rawTemplate, mappedValues){
+  if(!rawTemplate) throw new Error('Raw template HTML is empty.');
+  let t = rawTemplate.replace(/\{\{sale_day\}\}\s*day\s+of\s+the\s+year\s*\{\{sale_year\}\}/gi, '{{sale_day}} day of {{sale_month}} {{sale_year}}');
+  return t.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key) => {
+    return mappedValues[key] !== undefined ? mappedValues[key] : '';
+  });
+}
+
+function buildOwnershipTransferPacketHtml(mapped, templates, scope = 'full'){
+  let html = '<div class="sale-pdf-sheet">';
+
+  if(scope === 'full' || scope === 'form_29'){
+    const t29 = templates.form_29 || templates.form_29_v1;
+    if(!t29?.raw_template) throw new Error('Missing raw template for Form 29.');
+    const rendered29 = renderFormTemplate(t29.raw_template, mapped);
+    // Page 1: Original Form 29
+    html += rendered29;
+    // Page 2: Duplicate Form 29
+    html += rendered29.replace('<div class="form-title-main">FORM 29</div>', '<div class="duplicate-badge">DUPLICATE COPY</div><div class="form-title-main">FORM 29</div>');
+  }
+
+  if(scope === 'full' || scope === 'form_30'){
+    const t30 = templates.form_30 || templates.form_30_v1;
+    if(!t30?.raw_template) throw new Error('Missing raw template for Form 30.');
+    const rendered30 = renderFormTemplate(t30.raw_template, mapped);
+    html += rendered30;
+  }
+
+  if(scope === 'full' && mapped.transfer_type === 'other_state'){
+    const tClr = templates.clearance_certificate || templates.clearance_certificate_v1;
+    if(tClr?.raw_template){
+      html += renderFormTemplate(tClr.raw_template, mapped);
+    }
+    const tIns = templates.insurance_transfer || templates.insurance_transfer_v1;
+    if(tIns?.raw_template){
+      html += renderFormTemplate(tIns.raw_template, mapped);
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function validateTransferFormData(d){
+  const errors = [];
+  if(!d) return { valid: false, errors: ['No data provided.'] };
+  if(!d.registration_no?.trim()) errors.push('Vehicle registration number is required.');
+  if(!d.vehicle_make_model?.trim()) errors.push('Vehicle make and model is required.');
+  if(!d.transferor_name?.trim()) errors.push('Transferor (Seller) name is required.');
+  if(!d.transferor_address?.trim()) errors.push('Transferor address is required.');
+  if(!d.transferee_name?.trim()) errors.push('Transferee (Buyer) name is required.');
+  if(!d.transferee_relation?.trim()) errors.push('Transferee relationship is required.');
+  if(!d.transferee_relation_name?.trim()) errors.push('Transferee relative name is required.');
+  const age = Number(d.transferee_age);
+  if(!Number.isFinite(age) || age < 18 || age > 120) errors.push('Transferee age must be between 18 and 120.');
+  if(!d.transferee_address?.trim()) errors.push('Transferee residential address is required.');
+  if(!d.destination_rto?.trim()) errors.push('Destination Registering Authority (RTO) is required.');
+  if(!d.sale_date) errors.push('Date of sale is required.');
+
+  if(d.hypothecation_type && d.hypothecation_type !== 'none'){
+    if(!d.financier_name?.trim()) errors.push('Financier name is required when vehicle is hypothecated.');
+    if(!d.financier_address?.trim()) errors.push('Financier address is required when vehicle is hypothecated.');
+  }
+
+  if(d.transfer_type === 'other_state'){
+    if(!d.source_rto?.trim()) errors.push('Source Registering Authority (RTO) is required for other-state transfer.');
+    if(!d.destination_state?.trim()) errors.push('Destination state is required for other-state transfer.');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+function getTransferorDetails(){
+  const meta = user?.user_metadata || {}, p = ownerProfile || {};
+  const addr = [p.address, p.city, p.state, p.pincode].filter(Boolean).join(', ');
+  return {
+    name: p.full_name || meta.full_name || car?.owner_name || user?.email || '',
+    relation: 'S/o',
+    relation_name: '',
+    age: 35,
+    address: addr || meta.address || meta.full_address || '',
+    city: p.city || 'Chandigarh',
+    state: p.state || 'Chandigarh',
+    pincode: p.pincode || '',
+    phone: p.phone || meta.phone || ''
+  };
+}
+
+async function generateTransferDocuments(inputData, options = {}){
+  const validation = validateTransferFormData(inputData);
+  if(!validation.valid){
+    toast('Validation failed: ' + validation.errors[0], 'error');
+    throw new Error('Validation failed: ' + validation.errors.join('; '));
+  }
+
+  const scope = options.scope || 'full';
+  if(!['full', 'form_29', 'form_30'].includes(scope)){
+    throw new Error('Invalid document scope "' + scope + '". Expected full, form_29, or form_30.');
+  }
+  // Load templates with safe fallbacks
+  const t29 = await fetchFormTemplate('form_29', 'v1');
+  const t30 = await fetchFormTemplate('form_30', 'v1');
+  const tClr = await fetchFormTemplate('clearance_certificate', 'v1');
+  const tIns = await fetchFormTemplate('insurance_transfer', 'v1');
+  const templates = {
+    form_29: t29,
+    form_30: t30,
+    clearance_certificate: tClr,
+    insurance_transfer: tIns
+  };
+
+  const mapped = mapOwnershipTransferData(inputData);
+  const packetHtml = buildOwnershipTransferPacketHtml(mapped, templates, scope);
+
+  let holder = document.getElementById('salePdfRenderHolder');
+  if(holder) holder.remove();
+  holder = document.createElement('div');
+  holder.id = 'salePdfRenderHolder';
+  holder.style.cssText = 'position:fixed!important;top:0!important;left:0!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0.01!important;pointer-events:none!important;z-index:-1!important;';
+
+  const wrapper = document.createElement('div');
+  wrapper.id = 'salePdfRenderSheet';
+  wrapper.style.cssText = 'width:210mm!important;background:#ffffff!important;color:#111827!important;box-sizing:border-box!important;';
+  wrapper.innerHTML = packetHtml;
+
+  holder.appendChild(wrapper);
+  document.body.appendChild(holder);
+
+  // Content validation safeguard: confirm key field values appear in DOM
+  const renderedText = wrapper.textContent || '';
+  if(!renderedText.includes(mapped.registration_no) || !renderedText.includes(mapped.transferee_name)){
+    holder.remove();
+    throw new Error('PDF template rendering check failed: Required fields missing from rendered DOM.');
+  }
+
+  // Allow browser two animation frames for layout calculation
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await new Promise(resolve => setTimeout(resolve, 60));
+
+  const regClean = (mapped.registration_no || car?.registration_no || 'VEHICLE').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'VEHICLE';
+  const pdfName = 'Transfer_Documents_' + regClean + '.pdf';
+
+  const pdf = await loadPdfEngine();
+  const opt = {
+    margin: 0,
+    filename: pdfName,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
+
+  let blob;
+  try{
+    blob = await pdf().set(opt).from(wrapper).outputPdf('blob');
+  }finally{
+    holder.remove();
+  }
+
+  // Renderer safeguards: ensure output is non-empty and has valid PDF signature
+  if(!blob || blob.size < 5000){
+    throw new Error('Generated PDF failed safeguard check: output is blank or abnormally small (' + (blob?.size || 0) + ' bytes).');
+  }
+
+  const headerSlice = await blob.slice(0, 16).text();
+  if(!headerSlice.includes('%PDF-')){
+    throw new Error('Generated PDF failed safeguard check: invalid PDF magic header.');
+  }
+
+  // Persist to vehicle archives
+  const carId = car?.id || inputData.car_id;
+  const userId = user?.id;
+  let docId = options.editingDocId || null;
+  const isRevision = Boolean(options.isRevision || car?.vehicle_status === 'sold' || options.editingDocId);
+  const docTitle = 'Ownership Transfer (' + regClean + ')' + (isRevision ? ' (Revised Copy)' : '');
+
+  if(db && db.storage && carId && userId){
+    const path = userId + '/' + carId + '/archives/' + pdfName;
+    const up = await db.storage.from('car-documents').upload(path, blob, { contentType: 'application/pdf', upsert: true });
+    if(!up.error){
+      if(docId){
+        await db.from('documents').update({
+          file_name: pdfName,
+          storage_path: path,
+          mime_type: 'application/pdf',
+          file_size: blob.size,
+          document_name: docTitle,
+          archive_name: 'Transfer Documents',
+          archived_at: new Date().toISOString()
+        }).eq('id', docId);
+      }else{
+        const ins = await db.from('documents').insert({
+          user_id: userId,
+          car_id: carId,
+          file_name: pdfName,
+          storage_path: path,
+          mime_type: 'application/pdf',
+          file_size: blob.size,
+          document_type: 'other',
+          document_name: docTitle,
+          archive_name: 'Transfer Documents',
+          archived_at: new Date().toISOString(),
+          active: false
+        }).select().single();
+        docId = ins.data?.id || null;
+      }
+    }
+  }
+
+  // Persist to sale_history
+  let saleId = null;
+  if(db && db.from && carId && userId){
+    try{
+      const isHypo = Boolean(inputData.hypothecation_type && inputData.hypothecation_type !== 'none');
+      const saleRow = {
+        user_id: userId,
+        car_id: carId,
+        transfer_type: mapped.transfer_type,
+        seller_name: mapped.transferor_name,
+        seller_relation: mapped.transferor_relation,
+        seller_relation_name: mapped.transferor_relation_name,
+        seller_age: mapped.transferor_age,
+        seller_address: mapped.transferor_address,
+        seller_city: mapped.transferor_city,
+        buyer_name: mapped.transferee_name,
+        buyer_relation: mapped.transferee_relation,
+        buyer_relation_name: mapped.transferee_relation_name,
+        buyer_age: mapped.transferee_age,
+        buyer_address: mapped.transferee_address,
+        buyer_rto: mapped.destination_rto,
+        source_rto: mapped.source_rto,
+        destination_rto: mapped.destination_rto,
+        destination_state: mapped.destination_state,
+        sale_date: inputData.sale_date,
+        hypothecation_type: inputData.hypothecation_type || 'none',
+        financier: isHypo ? (inputData.financier_name + ', ' + (inputData.financier_address || '')) : 'N/A',
+        financier_name: inputData.financier_name || null,
+        financier_address: inputData.financier_address || null,
+        noc_status: inputData.noc_status || null,
+        noc_number: inputData.noc_number || null,
+        noc_date: inputData.noc_date || null,
+        template_version: 'v1',
+        raw_form_data: inputData,
+        form_document_id: docId,
+        status: 'completed'
+      };
+
+      if(options.editingDocId){
+        const existingSh = await db.from('sale_history').select('id').eq('form_document_id', options.editingDocId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if(existingSh.data?.id){
+          await db.from('sale_history').update(saleRow).eq('id', existingSh.data.id);
+          saleId = existingSh.data.id;
+        }else{
+          const shRes = await db.from('sale_history').insert(saleRow).select().single();
+          saleId = shRes.data?.id || null;
+        }
+      }else{
+        const shRes = await db.from('sale_history').insert(saleRow).select().single();
+        saleId = shRes.data?.id || null;
+      }
+    }catch(shErr){
+      console.warn('Could not insert or update sale_history:', shErr?.message || shErr);
+    }
+  }
+
+  // If user requested marking vehicle as SOLD (and vehicle is not already marked as sold)
+  if(inputData.mark_sold && carId && car?.vehicle_status !== 'sold'){
+    try{
+      await db.from('cars').update({
+        vehicle_status: 'sold',
+        sold_at: new Date().toISOString(),
+        sold_to_name: mapped.transferee_name,
+        sale_history_id: saleId
+      }).eq('id', carId);
+      if(car && car.id === carId){
+        car.vehicle_status = 'sold';
+        car.sold_at = new Date().toISOString();
+        car.sold_to_name = mapped.transferee_name;
+        if(saleId) car.sale_history_id = saleId;
+      }
+    }catch(statusErr){
+      console.warn('Could not update vehicle sold status:', statusErr?.message || statusErr);
+    }
+  }
+
+  return { success: true, blob, pdfName, docId, saleId, mapped, isRevision };
+}
+
+function openSaleForms(options = {}){
+  if(!car) return toast('Select a vehicle before generating Transfer Documents.', 'error');
+  let m = document.getElementById('saleFormsModal');
+  if(m) m.remove();
+
+  const tr = getTransferorDetails();
+  const today = new Date().toISOString().slice(0, 10);
+  const init = options.initialData || {};
+  const isRevision = Boolean(options.isRevision || car.vehicle_status === 'sold' || options.editingDocId);
+  let currentTransferType = init.transfer_type || 'same_state';
+
+  m = document.createElement('div');
+  m.id = 'saleFormsModal';
+
+  const renderModalContent = () => {
+    const isOtherState = currentTransferType === 'other_state';
+    const regVal = init.registration_no || car.registration_no || '';
+    const makeModelVal = init.vehicle_make_model || car.make_model || '';
+    const vinVal = init.chassis_no || car.vin || '';
+    const engineVal = init.engine_no || car.engine_no || '';
+    const srcStateVal = init.source_state || car.puc_state || tr.state || 'Chandigarh';
+    const srcRtoVal = init.source_rto || (car.puc_state ? ('RTO ' + car.puc_state) : 'R&LA Chandigarh');
+    const destStateVal = init.destination_state !== undefined ? init.destination_state : (isOtherState ? '' : (car.puc_state || tr.state || 'Chandigarh'));
+    const destRtoVal = init.destination_rto || '';
+    const saleDateVal = init.sale_date || today;
+
+    const sellerNameVal = init.transferor_name || tr.name;
+    const sellerRelVal = init.transferor_relation || 'S/o';
+    const sellerRelNameVal = init.transferor_relation_name || '';
+    const sellerAgeVal = init.transferor_age || tr.age;
+    const sellerAddrVal = init.transferor_address || tr.address;
+    const sellerCityVal = init.transferor_city || tr.city;
+    const sellerStateVal = init.transferor_state || tr.state;
+
+    const buyerNameVal = init.transferee_name || '';
+    const buyerRelVal = init.transferee_relation || 'S/o';
+    const buyerRelNameVal = init.transferee_relation_name || '';
+    const buyerAgeVal = init.transferee_age || 32;
+    const buyerAddrVal = init.transferee_address || '';
+    const buyerDistVal = init.transferee_district || '';
+    const buyerStateVal = init.transferee_state || '';
+
+    const hypoVal = init.hypothecation_type || 'none';
+    const finNameVal = init.financier_name || '';
+    const finAddrVal = init.financier_address || '';
+
+    const nocStatusVal = init.noc_status || 'enclosed';
+    const nocNumVal = init.noc_number || '';
+    const nocDateVal = init.noc_date || today;
+
+    const docScopeVal = init.scope || 'full';
+    const markSoldChecked = car.vehicle_status === 'sold' ? true : Boolean(init.mark_sold);
+
+    const revisionNotice = isRevision ?
+      '<div class="minimal-empty" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;margin-bottom:14px;padding:12px 14px;border-radius:10px">'+
+        '<b>ℹ️ Editing Transfer Documents (Revised Copy)</b>'+
+        '<div style="margin-top:4px;font-size:12px;color:#1d4ed8">Regenerating these forms will update the archived document with <b>(Revised Copy)</b>. Vehicle Sold status and ownership records will remain preserved.</div>'+
+      '</div>' : '';
+
+    return '<div class="sale-modal-card">'+
+      '<div class="toolbar">'+
+        '<div>'+
+          '<h3>Transfer Documents &amp; Statutory Forms</h3>'+
+          '<p class="muted">Official Form 29, Form 30, and Inter-State Transfer Documents (CMVR 1989).</p>'+
+        '</div>'+
+        '<button class="ghost" id="saleClose">✕</button>'+
+      '</div>'+
+      revisionNotice+
+      '<div class="transfer-type-selector">'+
+        '<button type="button" class="transfer-type-pill '+(currentTransferType==='same_state'?'active':'')+'" id="pillSameState">🏢 Same-State Ownership Transfer</button>'+
+        '<button type="button" class="transfer-type-pill '+(currentTransferType==='other_state'?'active':'')+'" id="pillOtherState">🗺️ Other-State Transfer (Re-registration Required)</button>'+
+      '</div>'+
+
+      '<div class="form">'+
+        '<!-- Section A: Vehicle Details -->'+
+        '<div class="transfer-form-section">'+
+          '<h4>🚗 Vehicle Details</h4>'+
+          '<div class="transfer-grid">'+
+            '<div class="field"><label>Registration Number *</label><input id="tfRegNo" value="'+esc(regVal)+'"></div>'+
+            '<div class="field"><label>Vehicle Make &amp; Model *</label><input id="tfMakeModel" value="'+esc(makeModelVal)+'"></div>'+
+            '<div class="field"><label>Chassis Number (VIN) *</label><input id="tfChassis" value="'+esc(vinVal)+'"></div>'+
+            '<div class="field"><label>Engine Number / Motor Number *</label><input id="tfEngine" value="'+esc(engineVal)+'"></div>'+
+            '<div class="field"><label>Current Registration State</label><input id="tfSourceState" value="'+esc(srcStateVal)+'"></div>'+
+            '<div class="field"><label>Current Registering Authority (RTO) *</label><input id="tfSourceRto" value="'+esc(srcRtoVal)+'"></div>'+
+            '<div class="field"><label>Destination State *</label><input id="tfDestState" value="'+esc(destStateVal)+'" placeholder="e.g. Himachal Pradesh / Punjab"></div>'+
+            '<div class="field"><label>Destination Registering Authority (RTO) *</label><input id="tfDestRto" value="'+esc(destRtoVal)+'" placeholder="e.g. RTO Shimla / RLA Sector 17"></div>'+
+            '<div class="field full"><label>Date of Sale / Agreement *</label>'+dateInputHtml('tfSaleDate', saleDateVal, true)+'</div>'+
+          '</div>'+
+        '</div>'+
+
+        '<!-- Section B: Transferor / Seller Details -->'+
+        '<div class="transfer-form-section">'+
+          '<h4>👤 Transferor (Seller) Details</h4>'+
+          '<div class="transfer-grid">'+
+            '<div class="field"><label>Seller Full Name *</label><input id="tfSellerName" value="'+esc(sellerNameVal)+'"></div>'+
+            '<div class="field"><label>Relationship *</label><select id="tfSellerRelation">'+
+              '<option value="S/o" '+(sellerRelVal==='S/o'?'selected':'')+'>Son of (S/o)</option>'+
+              '<option value="W/o" '+(sellerRelVal==='W/o'?'selected':'')+'>Wife of (W/o)</option>'+
+              '<option value="D/o" '+(sellerRelVal==='D/o'?'selected':'')+'>Daughter of (D/o)</option>'+
+            '</select></div>'+
+            '<div class="field"><label>Relative Name</label><input id="tfSellerRelName" value="'+esc(sellerRelNameVal)+'" placeholder="Father / Husband / Mother name"></div>'+
+            '<div class="field"><label>Seller Age</label><input id="tfSellerAge" type="number" min="18" max="120" value="'+sellerAgeVal+'"></div>'+
+            '<div class="field full"><label>Complete Address *</label><textarea id="tfSellerAddress">'+esc(sellerAddrVal)+'</textarea></div>'+
+            '<div class="field"><label>City / Town</label><input id="tfSellerCity" value="'+esc(sellerCityVal)+'"></div>'+
+            '<div class="field"><label>State</label><input id="tfSellerState" value="'+esc(sellerStateVal)+'"></div>'+
+          '</div>'+
+        '</div>'+
+
+        '<!-- Section C: Transferee / Buyer Details -->'+
+        '<div class="transfer-form-section">'+
+          '<h4>👥 Transferee (Buyer) Details</h4>'+
+          '<div class="transfer-grid">'+
+            '<div class="field"><label>Buyer Full Name *</label><input id="tfBuyerName" value="'+esc(buyerNameVal)+'" placeholder="Full legal name"></div>'+
+            '<div class="field"><label>Relationship *</label><select id="tfBuyerRelation">'+
+              '<option value="S/o" '+(buyerRelVal==='S/o'?'selected':'')+'>Son of (S/o)</option>'+
+              '<option value="W/o" '+(buyerRelVal==='W/o'?'selected':'')+'>Wife of (W/o)</option>'+
+              '<option value="D/o" '+(buyerRelVal==='D/o'?'selected':'')+'>Daughter of (D/o)</option>'+
+            '</select></div>'+
+            '<div class="field"><label>Relative Name *</label><input id="tfBuyerRelName" value="'+esc(buyerRelNameVal)+'" placeholder="Father / Husband / Mother name"></div>'+
+            '<div class="field"><label>Buyer Age *</label><input id="tfBuyerAge" type="number" min="18" max="120" value="'+buyerAgeVal+'"></div>'+
+            '<div class="field full"><label>Full Residential Address (House/Street/Village/Town) *</label><textarea id="tfBuyerAddress" placeholder="Complete postal address for registration records">'+esc(buyerAddrVal)+'</textarea></div>'+
+            '<div class="field"><label>District *</label><input id="tfBuyerDistrict" value="'+esc(buyerDistVal)+'" placeholder="e.g. Kangra / Chandigarh"></div>'+
+            '<div class="field"><label>State *</label><input id="tfBuyerState" value="'+esc(buyerStateVal)+'" placeholder="e.g. Himachal Pradesh"></div>'+
+          '</div>'+
+        '</div>'+
+
+        '<!-- Section D: Declarations & Hypothecation -->'+
+        '<div class="transfer-form-section">'+
+          '<h4>📝 Declarations &amp; Hypothecation</h4>'+
+          '<div class="transfer-grid">'+
+            '<div class="field full" style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0">'+
+              '<label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px"><input type="checkbox" id="tfRcHanded" checked> Registration Certificate (RC) handed over</label>'+
+              '<label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px"><input type="checkbox" id="tfInsHanded" checked> Insurance Certificate handed over</label>'+
+              '<label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px"><input type="checkbox" id="tfNoSuspension" checked> Vehicle is free from encumbrances &amp; not suspended</label>'+
+            '</div>'+
+            '<div class="field"><label>Hypothecation / Finance Status</label>'+
+              '<select id="tfHypoType">'+
+                '<option value="none" '+(hypoVal==='none'?'selected':'')+'>No Finance / Not Hypothecated</option>'+
+                '<option value="hypothecation" '+(hypoVal==='hypothecation'?'selected':'')+'>Hypothecation</option>'+
+                '<option value="hire_purchase" '+(hypoVal==='hire_purchase'?'selected':'')+'>Hire-Purchase</option>'+
+                '<option value="lease" '+(hypoVal==='lease'?'selected':'')+'>Lease Agreement</option>'+
+              '</select>'+
+            '</div>'+
+            '<div class="field"><label>Financier Name</label><input id="tfFinancierName" value="'+esc(finNameVal)+'" placeholder="Bank / Financier name if hypothecated"></div>'+
+            '<div class="field full"><label>Financier Branch Address</label><input id="tfFinancierAddress" value="'+esc(finAddrVal)+'" placeholder="Branch address if hypothecated"></div>'+
+          '</div>'+
+        '</div>'+
+
+        (isOtherState ?
+          '<!-- Section E: Other-State & NOC Details -->'+
+          '<div class="transfer-form-section" style="background:#f0f7ff;border-color:#b9d5f8">'+
+            '<h4>🗺️ Inter-State Clearance &amp; NOC Details</h4>'+
+            '<div class="transfer-grid">'+
+              '<div class="field"><label>NOC / Clearance Certificate Status</label>'+
+                '<select id="tfNocStatus">'+
+                  '<option value="enclosed" '+(nocStatusVal==='enclosed'?'selected':'')+'>NOC Enclosed (Section 48/50)</option>'+
+                  '<option value="applied" '+(nocStatusVal==='applied'?'selected':'')+'>NOC Applied (45-Day Notice)</option>'+
+                  '<option value="refused" '+(nocStatusVal==='refused'?'selected':'')+'>NOC Refused by Financier</option>'+
+                '</select>'+
+              '</div>'+
+              '<div class="field"><label>NOC Number (if issued)</label><input id="tfNocNumber" value="'+esc(nocNumVal)+'" placeholder="e.g. NOC/2026/098"></div>'+
+              '<div class="field"><label>NOC Date</label>'+dateInputHtml('tfNocDate', nocDateVal, false)+'</div>'+
+              '<div class="field"><label>NOC Issuing Authority</label><input id="tfNocRto" value="R&LA Chandigarh" placeholder="Issuing RTO"></div>'+
+            '</div>'+
+            '<div class="transfer-checklist-box">'+
+              '<b>📋 Official Other-State Submission Checklist (Chandigarh R&amp;LA Reference):</b>'+
+              '<ul>'+
+                '<li>Form No. 20 (Application for registration of a motor vehicle)</li>'+
+                '<li>Form No. 27 (In duplicate — assignment of new registration mark)</li>'+
+                '<li>Form No. 28 (In original / quadruplicate — NOC application and grant)</li>'+
+                '<li>Form No. 29 (In duplicate — Notice of transfer of ownership)</li>'+
+                '<li>Form No. 30 (In duplicate — Application for intimation &amp; transfer)</li>'+
+                '<li>Copy of PAN card / Form 60 of Seller &amp; Purchaser</li>'+
+                '<li>Seller’s &amp; Purchaser’s Undertakings with photograph</li>'+
+                '<li>Chassis &amp; Engine pencil print</li>'+
+                '<li>Original Registration Certificate (RC) &amp; Valid Insurance Certificate</li>'+
+                '<li>Clearance certificate letter &amp; Insurance transfer intimation letter</li>'+
+              '</ul>'+
+            '</div>'+
+          '</div>' : '')+
+
+        '<!-- Document Scope and Status Actions -->'+
+        '<div class="transfer-form-section">'+
+          '<div class="transfer-grid">'+
+            '<div class="field"><label>Document Scope</label>'+
+              '<select id="tfDocScope">'+
+                '<option value="full" '+(docScopeVal==='full'?'selected':'')+'>Full Transfer Documents Packet (Form 29 + 30'+(isOtherState?' + Letters':'')+')</option>'+
+                '<option value="form_29" '+(docScopeVal==='form_29'?'selected':'')+'>Form 29 Only (Notice of Transfer)</option>'+
+                '<option value="form_30" '+(docScopeVal==='form_30'?'selected':'')+'>Form 30 Only (Application for Transfer)</option>'+
+              '</select>'+
+            '</div>'+
+            '<div class="field" style="display:flex;align-items:center;padding-top:24px">'+
+              '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600">'+
+                '<input type="checkbox" id="tfMarkSold" '+(markSoldChecked ? 'checked' : '')+(car.vehicle_status==='sold' ? ' disabled' : '')+'> '+(car.vehicle_status==='sold' ? 'Vehicle is already marked as SOLD' : 'Mark vehicle as SOLD in Torq Desk upon generation')+
+              '</label>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+
+        '<div class="full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px">'+
+          '<button type="button" class="ghost" id="tfCancelBtn">Cancel</button>'+
+          '<button type="button" class="primary" id="tfGenerateBtn">'+(isRevision ? 'REGENERATE TRANSFER DOCUMENTS (REVISED COPY)' : 'GENERATE OFFICIAL TRANSFER DOCUMENTS (PDF)')+'</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  };
+
+  const bindModalEvents = () => {
+    $('saleClose').onclick = () => m.remove();
+    $('tfCancelBtn').onclick = () => m.remove();
+
+    $('pillSameState').onclick = () => {
+      if(currentTransferType === 'same_state') return;
+      currentTransferType = 'same_state';
+      m.innerHTML = renderModalContent();
+      bindModalEvents();
+    };
+
+    $('pillOtherState').onclick = () => {
+      if(currentTransferType === 'other_state') return;
+      currentTransferType = 'other_state';
+      m.innerHTML = renderModalContent();
+      bindModalEvents();
+    };
+
+    $('tfGenerateBtn').onclick = async () => {
+      const btn = $('tfGenerateBtn');
+      if(!btn || btn.disabled) return;
+
+      const payload = {
+        transfer_type: currentTransferType,
+        car_id: car.id,
+        registration_no: $('tfRegNo')?.value?.trim() || car.registration_no,
+        vehicle_make_model: $('tfMakeModel')?.value?.trim() || car.make_model,
+        chassis_no: $('tfChassis')?.value?.trim() || car.vin,
+        engine_no: $('tfEngine')?.value?.trim() || car.engine_no,
+        source_state: $('tfSourceState')?.value?.trim(),
+        source_rto: $('tfSourceRto')?.value?.trim(),
+        destination_state: $('tfDestState')?.value?.trim(),
+        destination_rto: $('tfDestRto')?.value?.trim(),
+        sale_date: dateInputValue('tfSaleDate'),
+        transferor_name: $('tfSellerName')?.value?.trim(),
+        transferor_relation: $('tfSellerRelation')?.value,
+        transferor_relation_name: $('tfSellerRelName')?.value?.trim(),
+        transferor_age: Number($('tfSellerAge')?.value) || 35,
+        transferor_address: $('tfSellerAddress')?.value?.trim(),
+        transferor_city: $('tfSellerCity')?.value?.trim(),
+        transferor_state: $('tfSellerState')?.value?.trim(),
+        transferee_name: $('tfBuyerName')?.value?.trim(),
+        transferee_relation: $('tfBuyerRelation')?.value,
+        transferee_relation_name: $('tfBuyerRelName')?.value?.trim(),
+        transferee_age: Number($('tfBuyerAge')?.value) || 0,
+        transferee_address: $('tfBuyerAddress')?.value?.trim(),
+        transferee_district: $('tfBuyerDistrict')?.value?.trim(),
+        transferee_state: $('tfBuyerState')?.value?.trim(),
+        hypothecation_type: $('tfHypoType')?.value || 'none',
+        financier_name: $('tfFinancierName')?.value?.trim(),
+        financier_address: $('tfFinancierAddress')?.value?.trim(),
+        noc_status: $('tfNocStatus')?.value || null,
+        noc_number: $('tfNocNumber')?.value?.trim() || null,
+        noc_date: dateInputValue('tfNocDate'),
+        mark_sold: Boolean($('tfMarkSold')?.checked)
+      };
+
+      const val = validateTransferFormData(payload);
+      if(!val.valid){
+        toast(val.errors[0], 'error');
+        return;
+      }
+
+      if(payload.mark_sold && car.vehicle_status !== 'sold'){
+        if(!confirm('You have selected to mark ' + payload.registration_no + ' as SOLD. This will update the vehicle lifecycle. Continue?')) return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = isRevision ? 'REGENERATING REVISED DOCUMENTS...' : 'GENERATING OFFICIAL DOCUMENTS...';
+
+      try{
+        const scope = $('tfDocScope')?.value || 'full';
+        const res = await generateTransferDocuments(payload, {
+          scope,
+          editingDocId: options.editingDocId,
+          isRevision
+        });
+        m.remove();
+
+        const previewUrl = URL.createObjectURL(res.blob);
+        const pv = document.createElement('div');
+        pv.id = 'saleGeneratedModal';
+        pv.innerHTML = '<div class="sale-generated-card">'+
+          '<div class="toolbar">'+
+            '<div>'+
+              '<h3>Transfer Documents Ready</h3>'+
+              '<p class="muted">Generated and saved securely to vehicle archives ('+esc(res.pdfName)+').</p>'+
+            '</div>'+
+            '<button class="ghost" id="saleGeneratedClose">✕</button>'+
+          '</div>'+
+          '<iframe src="'+previewUrl+'" title="Official Transfer Documents Preview"></iframe>'+
+          '<div class="sale-generated-actions">'+
+            '<a class="ghost button-link" id="saleDownloadBtn" href="'+previewUrl+'" download="'+esc(res.pdfName)+'">Download PDF</a>'+
+            '<button class="ghost" onclick="window.open(\''+previewUrl+'\',\'_blank\')">Open PDF in New Window</button>'+
+            '<button class="primary" onclick="window.print()">Print</button>'+
+          '</div>'+
+        '</div>';
+        document.body.appendChild(pv);
+        $('saleGeneratedClose').onclick = () => {
+          pv.remove();
+          URL.revokeObjectURL(previewUrl);
+        };
+
+        if(payload.mark_sold || isRevision) await loadData();
+        toast('Transfer Documents generated and archived successfully!');
+      }catch(err){
+        console.error('Transfer generation error:', err);
+        toast('Generation failed: ' + (err?.message || err), 'error');
+      }finally{
+        if(document.body.contains(btn)){
+          btn.disabled = false;
+          btn.textContent = isRevision ? 'REGENERATE TRANSFER DOCUMENTS (REVISED COPY)' : 'GENERATE OFFICIAL TRANSFER DOCUMENTS (PDF)';
+        }
+      }
+    };
+  };
+
+  m.innerHTML = renderModalContent();
+  document.body.appendChild(m);
+  m.onclick = e => { if(e.target === m) m.remove(); };
+  bindModalEvents();
+}
+
+function saleEscape(x){ return esc(x).replace(/\n/g,'<br>'); }
+function getTransferor(){ return getTransferorDetails(); }
 function buildSaleFormsHtml(d){
- return '<div class="sale-pdf-sheet">'+
- '<div class="form-page"><div class="official-head"><b>FORM 29</b><span>[See rule 55(1)]</span><h1>NOTICE OF TRANSFER OF OWNERSHIP OF A MOTOR VEHICLE</h1></div><p>To, The Registering Authority, <b>'+saleEscape(d.rto)+'</b></p><p>I/We, the registered owner <b>'+saleEscape(d.transferor)+'</b>, hereby give notice that the motor vehicle bearing registration number <b>'+saleEscape(d.reg)+'</b>, make/model <b>'+saleEscape(d.makeModel)+'</b>, chassis number <b>'+saleEscape(d.vin)+'</b> and engine number <b>'+saleEscape(d.engine)+'</b> has been transferred to <b>'+saleEscape(d.buyer)+'</b>, '+saleEscape(d.relation)+', aged <b>'+d.age+'</b> years, residing at <b>'+saleEscape(d.address)+'</b>.</p><p>Date of transfer / sale: <b>'+saleEscape(d.saleDate)+'</b>.</p><p>The transferee shall make the necessary application for transfer of ownership before the competent registering authority.</p><div class="legal-spacer"></div><div class="signature-grid"><div>Signature / Thumb Impression of Registered Owner (Transferor)<br><br>____________________________</div><div>Signature of Financier (if applicable)<br><br>____________________________<br>'+saleEscape(d.financier)+'</div></div><div class="rto-box"><b>FOR OFFICE USE / ENDORSEMENT</b><br><br>Received / verified by Registering Authority: __________________________<br>Date: ____________________   Seal: ____________________</div></div>'+
- '<div class="form-page"><div class="official-head"><b>FORM 30</b><span>[See Rule 55(2) and (3)]</span><h1>APPLICATION FOR INTIMATION AND TRANSFER OF OWNERSHIP OF A MOTOR VEHICLE</h1></div><h2>PART I — TRANSFEROR DECLARATION</h2><p>I, <b>'+saleEscape(d.transferor)+'</b>, being the registered owner of vehicle <b>'+saleEscape(d.reg)+'</b>, make/model <b>'+saleEscape(d.makeModel)+'</b>, chassis number <b>'+saleEscape(d.vin)+'</b> and engine number <b>'+saleEscape(d.engine)+'</b>, declare that ownership is being transferred on <b>'+saleEscape(d.saleDate)+'</b>.</p><h2>PART II — TRANSFEREE DECLARATION</h2><p>I, <b>'+saleEscape(d.buyer)+'</b>, '+saleEscape(d.relation)+', aged <b>'+d.age+'</b> years, residing at <b>'+saleEscape(d.address)+'</b>, declare that I have acquired the above vehicle and request transfer of ownership through <b>'+saleEscape(d.rto)+'</b>.</p><h2>CONSENT OF FINANCIER</h2><p>Financier: <b>'+saleEscape(d.financier)+'</b></p><div class="legal-spacer small"></div><div class="specimen-grid"><div><b>Specimen signatures of Registered Owner</b><br><br>1. ______________________<br><br>2. ______________________</div><div><b>Specimen signatures of Financier / Transferee</b><br><br>1. ______________________<br><br>2. ______________________</div></div><div class="rto-box"><b>FOR OFFICE USE</b><br><br>RTO endorsement / remarks: __________________________________________<br><br>Signature &amp; Seal: ______________________________</div></div></div>';
+  const mapped = mapOwnershipTransferData({
+    registration_no: d.reg,
+    vehicle_make_model: d.makeModel,
+    chassis_no: d.vin,
+    engine_no: d.engine,
+    transferor_name: d.transferor,
+    transferor_address: d.transferorAddress,
+    transferee_name: d.buyer,
+    transferee_relation: d.relation?.split(' ')[0] || 'S/o',
+    transferee_relation_name: d.relation?.split(' ').slice(1).join(' ') || '',
+    transferee_age: d.age,
+    transferee_address: d.address,
+    destination_rto: d.rto,
+    source_rto: 'Registering Authority',
+    sale_date: d.saleDate,
+    hypothecation_type: (d.financier && d.financier !== 'N/A') ? 'hypothecation' : 'none',
+    financier_name: (d.financier && d.financier !== 'N/A') ? d.financier : ''
+  });
+  return buildOwnershipTransferPacketHtml(mapped, OFFICIAL_FORM_TEMPLATES, 'full');
 }
+
+async function openEditTransferDoc(docId){
+  if(!car) return toast('Select a vehicle first.', 'error');
+  const doc = docs.find(d => d.id === docId);
+  if(!doc) return toast('Document was not found. Refresh and try again.', 'error');
+
+  let rawData = null;
+  if(db && db.from){
+    try{
+      const res = await db.from('sale_history').select('*').eq('form_document_id', docId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if(res.data?.raw_form_data && typeof res.data.raw_form_data === 'object'){
+        rawData = res.data.raw_form_data;
+      }else if(res.data){
+        rawData = {
+          transfer_type: res.data.transfer_type || 'same_state',
+          car_id: car.id,
+          registration_no: car.registration_no,
+          vehicle_make_model: car.make_model,
+          chassis_no: car.vin,
+          engine_no: car.engine_no,
+          source_state: res.data.source_state,
+          source_rto: res.data.source_rto,
+          destination_state: res.data.destination_state,
+          destination_rto: res.data.destination_rto,
+          sale_date: res.data.sale_date,
+          transferor_name: res.data.seller_name,
+          transferor_relation: res.data.seller_relation,
+          transferor_relation_name: res.data.seller_relation_name,
+          transferor_age: res.data.seller_age,
+          transferor_address: res.data.seller_address,
+          transferor_city: res.data.seller_city,
+          transferor_state: res.data.seller_state,
+          transferee_name: res.data.buyer_name,
+          transferee_relation: res.data.buyer_relation,
+          transferee_relation_name: res.data.buyer_relation_name,
+          transferee_age: res.data.buyer_age,
+          transferee_address: res.data.buyer_address,
+          transferee_district: res.data.buyer_district,
+          transferee_state: res.data.buyer_state,
+          hypothecation_type: res.data.hypothecation_type || 'none',
+          financier_name: res.data.financier_name,
+          financier_address: res.data.financier_address,
+          noc_status: res.data.noc_status,
+          noc_number: res.data.noc_number,
+          noc_date: res.data.noc_date
+        };
+      }
+    }catch(err){
+      console.warn('Could not query sale_history for doc edit:', err?.message || err);
+    }
+  }
+
+  openSaleForms({
+    initialData: rawData,
+    editingDocId: docId,
+    isRevision: true
+  });
+}
+
+window.OFFICIAL_FORM_TEMPLATES = OFFICIAL_FORM_TEMPLATES;
+window.fetchFormTemplate = fetchFormTemplate;
+window.formatOrdinalDay = formatOrdinalDay;
+window.mapOwnershipTransferData = mapOwnershipTransferData;
+window.renderFormTemplate = renderFormTemplate;
+window.buildOwnershipTransferPacketHtml = buildOwnershipTransferPacketHtml;
+window.validateTransferFormData = validateTransferFormData;
+window.generateTransferDocuments = generateTransferDocuments;
+window.openSaleForms = openSaleForms;
+window.openEditTransferDoc = openEditTransferDoc;
+window.getOrdinalDay = getOrdinalDay;
+window.parseTransferDateComponents = parseTransferDateComponents;
 function renderFab(){
  let f=document.getElementById('dashboardFab');if(f)f.remove();
  f=document.createElement('div');f.id='dashboardFab';f.innerHTML='<button class="fab-main" aria-label="Quick actions">＋</button><div class="fab-menu"><button onclick="nav(\'add\')">🛠️ <span>Add Service Log</span></button><button onclick="openDocUploader()">📄 <span>Upload Document</span></button><button onclick="openOdometerPrompt()">⛽ <span>Log Odometer / Fuel</span></button><button onclick="openReportAndPrint()">🖨️ <span>Generate A4 Report</span></button></div>';document.body.appendChild(f);
@@ -1698,7 +2658,7 @@ function renderOwnerProfileSummary(p, meta) {
   const address = p.address || meta.address || meta.full_address || '';
 
   return '<div class="owner-profile-summary" id="ownerProfileSummary">'+
-    (!hasProfile ? '<div class="minimal-empty dangerbox" style="margin-bottom:14px"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>' : '')+
+    (!hasProfile ? '<div class="minimal-empty dangerbox" style="margin-bottom:14px"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Transfer Documents.</div></div>' : '')+
     '<div class="profile-summary-grid">'+
       '<div class="profile-summary-item">'+
         '<span class="muted profile-summary-label">Full Name</span>'+
@@ -1757,7 +2717,7 @@ function ownerProfileView(){
       '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
     '</div>'+
     '<div class="card owner-profile-card">'+
-    '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Form 29 &amp; 30 paperwork.</p></div>'+
+    '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Transfer Documents.</p></div>'+
     '<button type="button" class="ghost btn-sm" id="opEditBtn">Edit Profile</button></div>'+
     renderOwnerProfileSummary(p,meta)+
     '<div id="ownerProfileEditSection" class="owner-profile-edit-section '+(isOwnerProfileEditOpen?'':'hidden')+'" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--c-line)">'+
@@ -2626,6 +3586,7 @@ function handleDocumentActionClick(event){
  if(action==='preview')return openDocumentPreview(doc.id,doc.storage_path,doc.file_name);
  if(action==='download')return downloadDoc(doc.id,doc.storage_path);
  if(action==='renew')return openDocUploader(doc.document_type);
+ if(action==='edit-transfer')return openEditTransferDoc(doc.id);
  if(action==='delete')return deleteDoc(doc.id,doc.storage_path,!!doc.archived_at);
 }
 document.addEventListener('click',handleDocumentActionClick,true);
@@ -2638,6 +3599,9 @@ function renderDocRow(d){
  const icon=docTypeIcon(d.document_type);
  const renewBtn=(d.document_type==='insurance'||d.document_type==='puc')?
    '<button type="button" class="primary doc-action" data-action="renew" data-id="'+esc(d.id)+'" data-type="'+esc(d.document_type)+'" onclick="openDocUploader(\''+d.document_type+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-refresh"/></svg> <span>Renew</span></button>':'';
+ const isTransferDoc = (d.archive_name === 'Transfer Documents' || d.archive_name === 'Form 29 & 30' || (d.document_name && /Transfer/i.test(d.document_name)));
+ const editTransferBtn = isTransferDoc ?
+   '<button type="button" class="ghost doc-action" data-action="edit-transfer" data-id="'+esc(d.id)+'" onclick="openEditTransferDoc(\''+esc(d.id)+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-wrench"/></svg> <span>Edit / Regenerate</span></button>' : '';
  return '<div class="doc-row '+cls+'" data-doc-id="'+esc(d.id)+'">'+
    '<div class="doc-row-body">'+
      '<div class="doc-icon-wrap" aria-hidden="true">'+icon+'</div>'+
@@ -2653,15 +3617,16 @@ function renderDocRow(d){
        '<div class="doc-meta-row">'+
          '<span class="doc-meta-item"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-calendar"/></svg> '+formatDateNice(d.created_at?.slice(0,10))+'</span>'+
          (d.document_expiry?'<span class="doc-meta-item doc-expiry '+(status==='Expired'?'expired':'')+'"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-clock"/></svg> '+(status==='Expired'?'Expired: ':'Expiry: ')+esc(formatDateNice(d.document_expiry))+'</span>':'')+
-         (d.archived_at?'<span class="doc-meta-archive"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-folder"/></svg> '+esc(d.archive_name||'Archive')+'</span>':'')+
+         (d.archived_at?'<span class="doc-meta-archive"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-folder"/></svg> '+esc(d.archive_name==='Form 29 & 30'?'Transfer Documents':(d.archive_name||'Archive'))+'</span>':'')+
        '</div>'+
      '</div>'+
    '</div>'+
    '<div class="doc-actions">'+
      '<button type="button" class="ghost doc-action" data-action="preview" data-id="'+esc(d.id)+'" onclick="openDocumentPreview(\''+d.id+'\',\''+safePath+'\',\''+safeName+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-eye"/></svg> <span>Preview</span></button>'+
      '<button type="button" class="ghost doc-action" data-action="download" data-id="'+esc(d.id)+'" onclick="downloadDoc(\''+d.id+'\',\''+safePath+'\')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-download"/></svg> <span>Download</span></button>'+
+     editTransferBtn+
      renewBtn+
-     (!d.archived_at?'<button type="button" class="danger doc-delete doc-action" data-action="delete" data-id="'+esc(d.id)+'" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+safePath+'\','+(d.archived_at?'true':'false')+')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-trash"/></svg> <span>Delete</span></button>':'')+
+     '<button type="button" class="danger doc-delete doc-action" data-action="delete" data-id="'+esc(d.id)+'" '+(deletePasswordChanged()?'':'disabled')+' onclick="deleteDoc(\''+d.id+'\',\''+safePath+'\','+(d.archived_at?'true':'false')+')"><svg class="inline-svg-icon-xs" aria-hidden="true"><use href="#td-icon-trash"/></svg> <span>Delete</span></button>'+
    '</div>'+
  '</div>';
 }
@@ -2696,7 +3661,7 @@ async function docsView(){
  if(!deletePasswordChanged())html+='<div class="doc-security-notice"><svg class="inline-svg-icon" aria-hidden="true"><use href="#td-icon-lock"/></svg> <span>Default security PIN (1234) in use. Change your security PIN above to enable permanent document deletion.</span></div>';
  if(arch.length){
   let by={};
-  arch.forEach(d=>{let k=d.archive_name||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});
+  arch.forEach(d=>{let k=(d.archive_name==='Form 29 & 30'?'Transfer Documents':d.archive_name)||('Archive-'+fyLabel(d.document_expiry||d.created_at));(by[k]??=[]).push(d)});
   html+='<div class="doc-archive"><div class="doc-archive-head"><svg class="inline-svg-icon" aria-hidden="true"><use href="#td-icon-folder"/></svg> <span>Archived Documents</span></div>'+Object.keys(by).sort().reverse().map(k=>'<details><summary>'+esc(k)+' <span>'+by[k].length+'</span></summary>'+by[k].map(renderDocRow).join('')+'</details>').join('')+'</div>';
  }
  $('docList').innerHTML=html;
@@ -2863,10 +3828,13 @@ async function openDocumentPreview(id,path,fileName='Document'){
 window.downloadDoc=async(id,path)=>{
  const doc=docs.find(d=>d.id===id);if(!doc)return toast('Document was not found.','error');
  try{
+   const isTransferDoc=(doc.archive_name==='Transfer Documents'||doc.archive_name==='Form 29 & 30'||(doc.document_name&&/Transfer/i.test(doc.document_name)));
+   const regClean=(car?.registration_no||'').toUpperCase().replace(/[^A-Z0-9]/g,'')||'VEHICLE';
+   const downloadFileName=isTransferDoc?('Transfer_Documents_'+regClean+'.pdf'):(doc.file_name||'document.pdf');
    let url;
    if((doc.storage_backend||'supabase')==='r2'){const r=await workerGet('/api/files/presign-download?document_id='+encodeURIComponent(id)+'&car_id='+encodeURIComponent(car.id));url=r.data.url;}
-   else{const r=await db.storage.from('car-documents').createSignedUrl(path,300,{download:true});if(r.error)throw r.error;url=r.data.signedUrl;}
-   window.open(url,'_blank');
+   else{const r=await db.storage.from('car-documents').createSignedUrl(path,300,{download:downloadFileName});if(r.error)throw r.error;url=r.data.signedUrl;}
+   const a=document.createElement('a');a.href=url;a.download=downloadFileName;a.target='_blank';document.body.appendChild(a);a.click();a.remove();
  }catch(err){toast(err?.message||'Document download failed.','error')}
 };
 const DEFAULT_DELETE_PASSWORD='1234';
@@ -2885,6 +3853,13 @@ async function deleteDoc(id,path,isArchived=false){
  if(!confirm((isArchived?'Delete this archived document permanently from the server?':'Delete this document permanently?')+' This cannot be undone.'))return;
  let btns=[...document.querySelectorAll('.doc-delete')].filter(b=>b.offsetParent!==null);btns.forEach(b=>b.disabled=true);
  try{
+   if(db&&db.from&&target.id){
+     try{
+       await db.from('sale_history').update({form_document_id:null}).eq('form_document_id',target.id);
+     }catch(shCleanErr){
+       console.warn('Could not clean sale_history.form_document_id:',shCleanErr);
+     }
+   }
    if((target.storage_backend||'supabase')==='r2'){
      // R2 documents are deleted entirely by the Worker so the ownership
      // check happens before the Supabase metadata row is removed.

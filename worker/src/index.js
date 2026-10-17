@@ -12,6 +12,7 @@ import { listSaleHistory } from "./sales.js";
 import { handleCacheWebhook } from "./cache-webhook.js";
 import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
 import { createSupportTicket, listUserSupportTickets, adminListSupportTickets } from "./support-tickets.js";
+import { listFormTemplates, getFormTemplate, validateTransferPayload } from "./templates.js";
 
 const RATE_LIMIT_RETRY_AFTER = "60";
 
@@ -114,6 +115,29 @@ export default {
 
     if (url.pathname === "/api/admin/support-tickets" && request.method === "GET") {
       return adminListSupportTickets(request, env, origin);
+    }
+
+    if (url.pathname.startsWith("/api/form-templates") && request.method === "GET") {
+      const parts = route(url.pathname);
+      const bypassCache = url.searchParams.get("bypass_cache") === "1";
+      if (parts.length === 1) {
+        return json({ ok: true, data: await listFormTemplates(env, bypassCache) }, 200, origin);
+      }
+      if (parts.length === 2) {
+        const version = url.searchParams.get("version");
+        const template = await getFormTemplate(env, parts[1], version);
+        if (!template) return error("Form template not found.", 404, origin, "NOT_FOUND");
+        return json({ ok: true, data: template }, 200, origin);
+      }
+    }
+
+    if (url.pathname === "/api/transfer/validate" && request.method === "POST") {
+      const input = await request.json();
+      const validation = validateTransferPayload(input);
+      if (!validation.valid) {
+        return error("Validation failed: " + validation.errors.join(" "), 400, origin, "VALIDATION_FAILED");
+      }
+      return json({ ok: true, valid: true }, 200, origin);
     }
 
     let user;
