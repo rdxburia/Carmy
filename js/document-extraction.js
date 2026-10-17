@@ -127,7 +127,7 @@ function parseInsurance(ps,text){
   if(!m)m=raw.match(/Chassis\s+Number\s*:\s*([A-HJ-NPR-Z0-9]{17})/i);
   if(m)add('chassis_no',chassis(m[1]),i+1,'chassis label/column',4);
   m=raw.match(/Engine(?:\/Motor)?\s+No\.?\s*[:\-]\s*([A-Z0-9]{6,24})/i);
-  if(!m){const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-Z0-9]{17})/i);if(pair)m=[pair[0],pair[1]]}
+  if(!m){const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*[:\-]?\s*([A-Z0-9]{6,24})\s*\/\s*([A-Z0-9]{17})/i);if(pair)m=[pair[0],pair[1]]}
   if(!m){const v=near(rs,/Engine\s+No/i,/[A-Z0-9]{10,24}/);if(v)m=[v,v]}
   if(m)add('engine_no',engine(m[1]),i+1,'engine label/column',4);
   m=raw.match(/(?:Total\s+IDV(?:\s*\(Rs\.?\))?|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value(?:\s*\(IDV\))?)\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
