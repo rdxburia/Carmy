@@ -1,5 +1,5 @@
 import { requireUser, handleAuthError } from "./auth.js";
-import { requireSuperAdmin } from "./super-admin.js";
+import { requireSuperAdmin, recordSuperAdminAudit } from "./super-admin.js";
 import { createWorkshopOnboarding } from "./workshop-onboarding.js";
 import { error, json } from "./response.js";
 import { listVehicles, getVehicle, patchVehicleRc } from "./vehicles.js";
@@ -159,6 +159,10 @@ export default {
         const authorizationFailure = await requireSuperAdmin(user, env, origin);
         if (authorizationFailure) return authorizationFailure;
         if (request.method === "GET" && parts.length === 2 && parts[1] === "support-tickets") {
+          const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.support_tickets.list", {
+            status: url.searchParams.get("status") || null,
+          });
+          if (auditFailure) return auditFailure;
           return adminListSupportTickets(request, env, origin);
         }
         return error("Route not found.", 404, origin, "NOT_FOUND");
