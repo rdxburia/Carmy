@@ -7,7 +7,7 @@ function load(src,id){return new Promise((ok,no)=>{let s=document.getElementById
 async function pdf(){if(window.pdfjsLib)return window.pdfjsLib;if(!pl)pl=load(PDF,'carmy-pdfjs').then(()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFW;return window.pdfjsLib});return pl}
 async function tess(){if(window.Tesseract)return window.Tesseract;if(!tl)tl=load(TESS,'carmy-tesseract').then(()=>window.Tesseract);return tl}
 function validDate(y,m,d){y=+y;m=+m;d=+d;const x=new Date(Date.UTC(y,m-1,d));return y>0&&m>0&&m<13&&d>0&&x.getUTCFullYear()===y&&x.getUTCMonth()===m-1&&x.getUTCDate()===d?y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'):null}
-function date(v){const s=clean(v).replace(/\b(?:HRS?|MIDNIGHT).*$/i,'');let m=s.match(/(\d{1,2})[-/. ]([A-Za-z]{3})[-/. ](\d{4})/);if(m&&MONTHS[m[2].toUpperCase()])return validDate(m[3],MONTHS[m[2].toUpperCase()],m[1]);m=s.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);if(m)return validDate(m[3],m[2],m[1]);m=s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);return m?validDate(m[1],m[2],m[3]):null}
+function date(v){const s=clean(v).replace(/\b(?:HRS?|MIDNIGHT).*$/i,'');let m=s.match(/(\d{1,2})[-/. ]([A-Za-z]{3}),?[-/. ]*(\d{4})/);if(m&&MONTHS[m[2].toUpperCase()])return validDate(m[3],MONTHS[m[2].toUpperCase()],m[1]);m=s.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);if(m)return validDate(m[3],m[2],m[1]);m=s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);return m?validDate(m[1],m[2],m[3]):null}
 function money(v){const n=Number(String(v??'').replace(/[₹Rs,\s]/gi,''));return Number.isFinite(n)?n:null}
 function policyNo(v){const s=clean(v).replace(/\s+/g,'');return /^\d{4}\/\d{8}\/\d{3}\/\d{2}$/.test(s)||/^\d{18}$/.test(s)||/^VPC\d+$/.test(s)||/^[A-Z0-9][A-Z0-9/\-]{6,29}$/.test(s)?s:null}
 function chassis(v){const s=alnum(v);return s&&s.length===17&&!/[IOQ]/.test(s)?s:null}
@@ -103,12 +103,11 @@ function parseInsurance(ps,text){
  const valAfter=(raw,label,pattern)=>{const m=raw.match(label);if(!m)return null;const rest=raw.slice(m.index+m[0].length,Math.min(raw.length,m.index+m[0].length+220));const v=rest.match(pattern);return v?v[0]:null};
  const near=(rs,label,pattern)=>rowValue(rs,label,pattern)||below(rs,label,pattern,220);
  const addPeriod=(i,raw)=>{
-  let m=raw.match(/Period\s+of\s+Own\s+Damage\s*:?\s*(\d{1,2}[-/.][A-Z]{3}[-/.]\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})[\s\S]{0,90}?\bTo\b[\s\S]{0,30}?(\d{1,2}[-/.][A-Z]{3}[-/.]\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i);
-  if(!m)m=raw.match(/Period\s+of\s+Insurance\s*:?\s*From[\s\S]{0,100}?\b(?:on\s+)?(\d{1,2}[‐\-/.]\d{1,2}[‐\-/.]\d{4})[\s\S]{0,120}?\bto\b[\s\S]{0,220}?(\d{1,2}[‐\-/.]\d{1,2}[‐\-/.]\d{4})/i);
+  let m=raw.match(/Period\s+of\s+Own\s+Damage\s*:?\s*(\d{1,2}[-/. ]+(?:[A-Z]{3},?|\d{1,2})[-/. ,]+\d{4})[\s\S]{0,90}?\bTo\b[\s\S]{0,30}?(\d{1,2}[-/. ]+(?:[A-Z]{3},?|\d{1,2})[-/. ,]+\d{4})/i);
+  if(!m)m=raw.match(/Period\s+of\s+Insurance\s*:?\s*From[\s\S]{0,100}?\b(?:on\s+)?(\d{1,2}[‐\-/. ]+(?:[A-Z]{3},?|\d{1,2})[‐\-/. ,]+\d{4})[\s\S]{0,120}?\bto\b[\s\S]{0,220}?(\d{1,2}[‐\-/. ]+(?:[A-Z]{3},?|\d{1,2})[‐\-/. ,]+\d{4})/i);
   if(!m)m=raw.match(/Valid\s+From\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})[\s\S]{0,120}?Valid\s+Till(?:\s*\([^)]*\))?\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/i);
   if(m){add('period_from',date(m[1]),i+1,'policy period label',5);add('period_to',date(m[2]),i+1,'policy period label',5)}
  };
- const nearLabel=(raw,label,pat)=>valAfter(raw,label,pat);
  for(let i=0;i<pageTexts.length;i++){
   const raw=pageTexts[i]||'',rs=pageRows[i]||[],t=norm(raw);
   // Insurer evidence is scored per occurrence and per page; previous-policy blocks never vote for the issuer.
@@ -118,13 +117,13 @@ function parseInsurance(ps,text){
   }
   if(!relevant(i))continue;
   // Read each relevant page independently; no early exit after the first match.
-  let m=raw.match(/^\s*Policy\s*(?:No\.?|Number)\s*:?\s*([A-Z0-9][A-Z0-9\/-]{6,30})/im);
+  let m=raw.match(/^\s*Policy\s*(?:No\.?|Number)\s*:?\s*([A-Z0-9][A-Z0-9\/-]*(?:\s+[A-Z0-9\/-]+){0,5}?)(?=\s+(?:Period|Insured|Vehicle|Proposal|Cover|Date|Issuance|RTO|$)|\s*$)/im);
   const previousSection=raw.search(/PREVIOUS\s+POLICY\s+DETAILS|FULL\s+NAME\s+OF\s+PREVIOUS\s+INSURER/i);
   if(m&&(previousSection<0||m.index<previousSection))add('policy_number',policyNo(m[1]),i+1,'policy number label',5);
   m=raw.match(/(?:Insured(?:'s)?\s+Name|Name\s+of\s+the\s+Insured)\s*:?\s*([A-Z][A-Z .'-]{1,50}?)(?=\s+(?:Insured\s+Date|Previous\s+Insurer|Period\s+of|Policy\s+No|Policy\s+Number|Address|Proposal|Date\s+of|Mobile|Email)|\n|$)/im);
   if(m)add('insured_name',clean(m[1]).replace(/\s+\.$/,''),i+1,'insured name label',4);
   addPeriod(i,raw);
-  m=raw.match(/(?:Vehicle\s+Registration\s+No\.?|Registration\s+No\.?|Regn\.?\s+No\.?)\s*:?\s*([A-Z]{2}\s*\d{2}\s*[A-Z]{1,3}\s*\d{4})/i);
+  m=raw.match(/(?:Vehicle\s+Registration\s+No\.?|Registration\s+No\.?|Regn\.?\s+No\.?)\s*:?\s*([A-Z]{2}[\s-]*\d{2}[\s-]*[A-Z]{1,3}[\s-]*\d{4})/i);
   if(m)add('reg_no',reg(m[1]),i+1,'vehicle registration label',4);
   m=null;{const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-HJ-NPR-Z0-9]{17})/i);if(pair)m=[pair[0],pair[2]]}
   if(!m)m=raw.match(/(?:Chassis\s+No\.?|VIN\/Chassis\s+No\.?)\s*:?\s*([A-HJ-NPR-Z0-9]{17})/i);
@@ -135,7 +134,7 @@ function parseInsurance(ps,text){
   if(!m){const pair=raw.match(/Engine\s+No\.?\s*\/\s*Chassis\s+No\.?\s*([A-Z0-9]{6,24})\s*\/\s*([A-Z0-9]{17})/i);if(pair)m=[pair[0],pair[1]]}
   if(!m){const v=near(rs,/Engine\s+No/i,/[A-Z0-9]{10,24}/);if(v)m=[v,v]}
   if(m)add('engine_no',engine(m[1]),i+1,'engine label/column',4);
-  m=raw.match(/(?:Total\s+IDV(?:\s*\(Rs\.?\))?|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value(?:\s*\(IDV\))?)\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
+  m=raw.match(/(?:Total\s+IDV(?:\s*\([^)]{0,12}\))?|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value(?:\s*\(IDV\))?)\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
   if(!m){const v=near(rs,/Total\s+IDV|Vehicle\s+IDV|Insured'?s\s+Declared\s+Value/i,numeric);if(v)m=[v,v]}
   if(m)add('idv',money(m[1]),i+1,'IDV label/table',4);
   m=raw.match(/Gross\s+Premium(?:\s+Paid)?\s*:?\s*(?:₹|Rs\.?)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);
@@ -186,16 +185,22 @@ async function extract(file,type,onProgress){let text='',ps=[],thumbnail=null,pa
   const initial=parseInsurance(ps,text),critical=['policy_number','period_from','period_to','reg_no','insured_name'];
   const needsSecondPass=critical.some(k=>!initial[k]);
   if(needsSecondPass){
+   const criticalCount=d=>critical.reduce((n,k)=>n+(d[k]?1:0),0);
+   let currentCount=criticalCount(initial);
    for(let i=0;i<x.d.numPages;i++){
     if(pageMeta[i]?.ocr_used)continue;
-    const nativeText=ps[i].map(q=>q.text).join('\\n'),o=await ocrPdfPage(x.d,onProgress,false,i+1),choice=chooseBetterPageText(nativeText,o.text);
-    if(choice.used_ocr){ps[i]=rowsFromText(o.text);pageMeta[i]={...pageMeta[i],text_length:o.text.length,ocr_used:true,quality_score:choice.ocr_quality.score,quality_anchor_hits:choice.ocr_quality.anchor_hits,ocr_reason:'missing-critical-policy-fields'};}
+    const nativeText=ps[i].map(q=>q.text).join('\n'),o=await ocrPdfPage(x.d,onProgress,false,i+1),choice=chooseBetterPageText(nativeText,o.text),ocrRows=rowsFromText(o.text);
+    const candidatePages=ps.slice();candidatePages[i]=ocrRows;
+    const candidateText=candidatePages.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');
+    const candidateData=parseInsurance(candidatePages,candidateText),candidateCount=criticalCount(candidateData);
+    const useOcr=candidateCount>currentCount||(choice.used_ocr&&candidateCount>=currentCount);
+    if(useOcr){ps[i]=ocrRows;text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');pageMeta[i]={...pageMeta[i],text_length:o.text.length,ocr_used:true,quality_score:choice.ocr_quality.score,quality_anchor_hits:choice.ocr_quality.anchor_hits,ocr_reason:candidateCount>currentCount?'improved-critical-field-coverage':'missing-critical-policy-fields'};currentCount=Math.max(currentCount,candidateCount);}
     else pageMeta[i]={...pageMeta[i],ocr_attempted:true,ocr_quality_score:choice.ocr_quality.score};
     onProgress?.(.5+(i+1)/x.d.numPages*.25,'VERIFYING POLICY PAGES');
    }
-   text=ps.map(r=>r.map(q=>q.text).join('\\n')).join('\\n\\f\\n');
+   text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');
   }
- }
+ } 
  if(type==='puc'){const p0=parsePuc(text);if(!p0.test_date||!p0.certificate_number||!p0.cost||!p0.registration_no){for(let i=0;i<x.d.numPages;i++){if((pageMeta[i]?.text_length||0)>30)continue;const o=await ocrPdfPage(x.d,onProgress,false,i+1);const oRows=rowsFromText(o.text);ps[i]=oRows;pageMeta[i]={page:i+1,text_length:o.text.length,ocr_used:true};}text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n')}}}else{const o=await ocr(file,onProgress,type==='rc');text=o.text;thumbnail=o.thumbnail;ps=[rowsFromText(text)];pageMeta=[{page:1,text_length:text.length,ocr_used:true}]}const classification=classifyDetailed(text,type,{pageCount:ps.length||1}),detected=classification.type,data=type==='insurance'?parseInsurance(ps,text):type==='puc'?parsePuc(text):parseRC(text);if(type==='insurance'&&data?.diagnostics){data.diagnostics.pages=data.diagnostics.pages.map((p,i)=>({...p,ocr_used:!!pageMeta[i]?.ocr_used}));}return{kind:type,detected_type:detected,classification,data,text,thumbnail,page_meta:pageMeta,diagnostics:data?.diagnostics||null}}
 function classifyDetailed(text,slot='',meta={}){
  const t=norm(text),len=t.length;

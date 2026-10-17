@@ -69,3 +69,20 @@ test("policy parser flags conflicting values rather than hiding the conflict", (
   const result = extraction.parseInsurance(pages, pages.map(p => p.map(x => x.text).join("\n")).join("\f"));
   assert.ok(result.diagnostics.warnings.some(w => w.includes("policy_number has conflicting values")), JSON.stringify(result.diagnostics.warnings));
 });
+
+
+test("OCR-spaced policy number, hyphenated registration and month-name dates normalize correctly", () => {
+  const page = [
+    { text: "HDFC ERGO General Insurance Company Limited" },
+    { text: "Certificate of Insurance cum Policy Schedule" },
+    { text: "Policy No. 2311 1010 5887 2900 000" },
+    { text: "Period of Insurance From 24 Jun, 2021 00:01 hrs To 23 Jun, 2022 Midnight" },
+    { text: "Registration No. TN-09-BT-1094" },
+    { text: "Total Premium 6435" }
+  ];
+  const result = extraction.parseInsurance([page], page.map(x => x.text).join("\n"));
+  assert.equal(result.policy_number, "2311101058872900000");
+  assert.equal(result.period_from, "2021-06-24");
+  assert.equal(result.period_to, "2022-06-23");
+  assert.equal(result.reg_no, "TN09BT1094");
+});
