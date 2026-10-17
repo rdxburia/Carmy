@@ -1,7 +1,7 @@
 /* Torq Desk PWA shell. Never cache API, auth, POST or other non-GET responses. */
-const CACHE_NAME='torq-desk-shell-v10';
+const CACHE_NAME='torq-desk-shell-v11';
 const BASE='/Carmy/';
-const BUILD='2026.10.17-v10-transfer-security';
+const BUILD='2026.10.17-v11-super-admin-cache-fix';
 const SHELL=[
   BASE,
   BASE+'index.html',
