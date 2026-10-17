@@ -221,37 +221,21 @@ test("Worker Tickets: listUserSupportTickets isolates tickets strictly to authen
   assert.equal(body2.data[0].id, "TD-USER2-B");
 });
 
-test("Worker Tickets: adminListSupportTickets requires valid X-Carmy-Admin-Secret header", async () => {
+test("Worker Tickets: adminListSupportTickets serves data only behind the authenticated admin router", async () => {
   const db = createMockD1();
-  const env = { DB: db, ADMIN_SECRET: "super-secret-admin-token-12345" };
+  const env = { DB: db };
 
   db._store.push(
     { id: "TD-1", user_id: "u-1", email: "u1@test.com", subject: "Ticket 1", created_at: 100 },
     { id: "TD-2", user_id: "u-2", email: "u2@test.com", subject: "Ticket 2", created_at: 200 }
   );
 
-  // Missing secret header -> 403
-  let req = new Request("https://worker.test/api/admin/support-tickets");
-  let res = await adminListSupportTickets(req, env, "*");
-  let body = await res.json();
-  assert.equal(res.status, 403);
-  assert.equal(body.error.code, "FORBIDDEN");
-
-  // Invalid secret header -> 403
-  req = new Request("https://worker.test/api/admin/support-tickets", {
-    headers: { "X-Carmy-Admin-Secret": "wrong-secret" },
-  });
-  res = await adminListSupportTickets(req, env, "*");
-  body = await res.json();
-  assert.equal(res.status, 403);
-  assert.equal(body.error.code, "FORBIDDEN");
-
-  // Valid secret header -> 200 with all tickets
-  req = new Request("https://worker.test/api/admin/support-tickets", {
-    headers: { "X-Carmy-Admin-Secret": "super-secret-admin-token-12345" },
-  });
-  res = await adminListSupportTickets(req, env, "*");
-  body = await res.json();
+  // This handler is intentionally an internal data handler now. The Worker
+  // router must authenticate the JWT, check public.super_admins, and write
+  // the audit event before it calls this function.
+  const req = new Request("https://worker.test/api/admin/support-tickets");
+  const res = await adminListSupportTickets(req, env, "*");
+  const body = await res.json();
   assert.equal(res.status, 200);
   assert.equal(body.ok, true);
   assert.equal(body.data.length, 2);

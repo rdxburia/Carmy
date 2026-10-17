@@ -191,18 +191,10 @@ export async function listUserSupportTickets(request, env, origin, user) {
 
 /**
  * GET /api/admin/support-tickets — admin-only list of all tickets.
- * Requires: X-Carmy-Admin-Secret header matching env.ADMIN_SECRET.
- * This route is intentionally separate from user-facing routes and
- * is NOT exposed via browser authentication or client-side roles.
+ * The index router must call requireSuperAdmin before this handler.
  */
 export async function adminListSupportTickets(request, env, origin) {
   const { error: errorFn, json } = await import("./response.js");
-
-  // Validate admin secret — never trust client-supplied roles
-  const providedSecret = (request.headers.get("X-Carmy-Admin-Secret") || "").trim();
-  if (!providedSecret || !env.ADMIN_SECRET || providedSecret !== env.ADMIN_SECRET) {
-    return errorFn("Unauthorized.", 403, origin, "FORBIDDEN");
-  }
 
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get("status") || null;
