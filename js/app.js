@@ -808,7 +808,13 @@ async function nav(v){
      if(v==='history')renderHistory();
      if(v==='docs')await docsView();
      if(v==='report')report();
-     if(v==='owner')ownerProfileView();
+     if(v==='owner'){
+       if(previous&&previous.id!=='owner'){
+         isOwnerProfileEditOpen=false;
+         isChangePasswordOpen=false;
+       }
+       ownerProfileView();
+     }
      if(v==='help')helpView();
    }catch(err){
      console.error('View render error:',v,err);
@@ -1680,135 +1686,288 @@ async function saveOwnerProfileValues(values){
  ownerProfile=r.data;
  return {data:r.data};
 }
-function ownerProfileFields(p,meta){
- return '<div class="form">'+
-   '<div class="field"><label>Full Name *</label><input id="opName" value="'+esc(p.full_name||meta.full_name||'')+'"></div>'+
-   '<div class="field"><label>Phone</label><input id="opPhone" inputmode="tel" value="'+esc(p.phone||meta.phone||'')+'"></div>'+
-   '<div class="field full"><label>Address</label><textarea id="opAddress">'+esc(p.address||meta.address||meta.full_address||'')+'</textarea></div>'+
-   '<div class="field"><label>City</label><input id="opCity" value="'+esc(p.city||'')+'"></div>'+
-   '<div class="field"><label>State</label><input id="opState" value="'+esc(p.state||'')+'"></div>'+
-   '<div class="field"><label>Pincode</label><input id="opPincode" inputmode="numeric" value="'+esc(p.pincode||'')+'"></div>'+
-   '<div class="full"><button class="primary" id="opSave">SAVE PROFILE</button></div>'+
- '</div>';
+let isOwnerProfileEditOpen = false;
+let isChangePasswordOpen = false;
+
+function renderOwnerProfileSummary(p, meta) {
+  const hasProfile = Boolean(p.full_name);
+  const fullName = p.full_name || meta.full_name || '';
+  const phone = p.phone || meta.phone || '';
+  const cityState = [p.city, p.state].filter(Boolean).join(', ');
+  const pincode = p.pincode || '';
+  const address = p.address || meta.address || meta.full_address || '';
+
+  return '<div class="owner-profile-summary" id="ownerProfileSummary">'+
+    (!hasProfile ? '<div class="minimal-empty dangerbox" style="margin-bottom:14px"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>' : '')+
+    '<div class="profile-summary-grid">'+
+      '<div class="profile-summary-item">'+
+        '<span class="muted profile-summary-label">Full Name</span>'+
+        '<b class="profile-summary-val" id="opsName">'+esc(fullName || 'Not saved')+'</b>'+
+      '</div>'+
+      '<div class="profile-summary-item">'+
+        '<span class="muted profile-summary-label">Phone</span>'+
+        '<b class="profile-summary-val" id="opsPhone">'+esc(phone || 'Not saved')+'</b>'+
+      '</div>'+
+      '<div class="profile-summary-item">'+
+        '<span class="muted profile-summary-label">City &amp; State</span>'+
+        '<b class="profile-summary-val" id="opsCityState">'+esc(cityState || 'Not saved')+'</b>'+
+      '</div>'+
+      '<div class="profile-summary-item">'+
+        '<span class="muted profile-summary-label">Pincode</span>'+
+        '<b class="profile-summary-val" id="opsPincode">'+esc(pincode || 'Not saved')+'</b>'+
+      '</div>'+
+      '<div class="profile-summary-item full">'+
+        '<span class="muted profile-summary-label">Address</span>'+
+        '<b class="profile-summary-val" id="opsAddress">'+esc(address || 'Not saved')+'</b>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
 }
+
+function ownerProfileFields(p, meta, showCancel = false) {
+  return '<div class="form">'+
+    '<div class="field"><label>Full Name *</label><input id="opName" value="'+esc(p.full_name||meta.full_name||'')+'"></div>'+
+    '<div class="field"><label>Phone</label><input id="opPhone" inputmode="tel" value="'+esc(p.phone||meta.phone||'')+'"></div>'+
+    '<div class="field full"><label>Address</label><textarea id="opAddress">'+esc(p.address||meta.address||meta.full_address||'')+'</textarea></div>'+
+    '<div class="field"><label>City</label><input id="opCity" value="'+esc(p.city||'')+'"></div>'+
+    '<div class="field"><label>State</label><input id="opState" value="'+esc(p.state||'')+'"></div>'+
+    '<div class="field"><label>Pincode</label><input id="opPincode" inputmode="numeric" value="'+esc(p.pincode||'')+'"></div>'+
+    '<div class="full" style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">'+
+      (showCancel ? '<button type="button" class="ghost" id="opCancel">Cancel</button>' : '')+
+      '<button class="primary" id="opSave">SAVE PROFILE</button>'+
+    '</div>'+
+  '</div>';
+}
+
 function ownerProfileView(){
- const el=$('ownerProfileContent');if(!el)return;
- const p=ownerProfile||{},meta=user?.user_metadata||{};
- const hasProfile=Boolean(p.full_name);
- el.innerHTML='<div class="owner-profile-shell">'+
-   '<div class="owner-profile-head"><div class="toolbar"><div><span class="muted">SECURITY &amp; IDENTITY</span><h2>Account &amp; Security</h2><p class="muted">Manage your authentication state, 120s idle protection, and saved owner transfer profile.</p></div>'+
-   (hasProfile?'<span class="status ok">PROFILE SAVED</span>':'<span class="status warn">NOT SAVED</span>')+
-   '</div></div>'+
-   '<div class="card security-status-card">'+
-     '<div class="security-card-head"><div class="security-card-icon"><svg aria-hidden="true" style="width:24px;height:24px;stroke:var(--c-accent)"><use href="#td-icon-shield"/></svg></div><div><h3>Account Security &amp; Session Guard</h3><p class="muted">Session protection, identity safeguards and account controls</p></div></div>'+
-     '<div class="security-badges-grid">'+
-       '<div class="sec-item"><span class="sec-tag ok">ACTIVE</span><b>Inactivity Lock (120s)</b><p class="muted">Automatic session protection guards your vehicle records on unattended or shared devices.</p></div>'+
-       '<div class="sec-item"><span class="sec-tag ok">SYNCED</span><b>Active Session Heartbeat</b><p class="muted">Secure background synchronization keeps your session active while you work.</p></div>'+
-       '<div class="sec-item"><span class="sec-tag ok">VERIFIED</span><b>Authenticated Account</b><p class="muted">Signed in as '+esc(user?.email||'Unknown')+'</p></div>'+
-     '</div>'+
-     '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
-   '</div>'+
-   '<div class="card owner-profile-card">'+
-   '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Form 29 &amp; 30 paperwork.</p></div></div>'+
-   (hasProfile?'':'<div class="minimal-empty dangerbox"><b>No owner profile saved yet.</b><div class="muted" style="margin-top:5px">Save your name and address here before generating Form 29 &amp; 30.</div></div>')+
-   ownerProfileFields(p,meta)+
-   '</div>'+
-   '<div class="card change-password-card">'+
-   '<div class="card-head-row"><div><h3>Change Password</h3><p class="muted">Update your account password with instant verification.</p></div></div>'+
-   '<div class="form">'+
-     '<div class="field full"><label for="cpCurrent">Current Password *</label><div class="auth-password-control"><input id="cpCurrent" type="password" autocomplete="current-password" placeholder="Enter current password"><button type="button" class="auth-password-toggle" id="cpCurrentToggle">Show</button></div></div>'+
-     '<div class="field"><label for="cpNew">New Password *</label><div class="auth-password-control"><input id="cpNew" type="password" autocomplete="new-password" placeholder="At least 8 characters"><button type="button" class="auth-password-toggle" id="cpNewToggle">Show</button></div><small class="muted" style="margin-top:3px;display:block">Min 8 characters with letters and numbers.</small></div>'+
-     '<div class="field"><label for="cpConfirm">Confirm New Password *</label><div class="auth-password-control"><input id="cpConfirm" type="password" autocomplete="new-password" placeholder="Repeat new password"><button type="button" class="auth-password-toggle" id="cpConfirmToggle">Show</button></div></div>'+
-     '<div class="full" id="cpMessage" style="display:none;font-size:13px;padding:8px 12px;border-radius:8px;margin-bottom:6px"></div>'+
-     '<div class="full"><button type="button" class="primary" id="cpSubmit">UPDATE PASSWORD</button></div>'+
-   '</div>'+
-   '</div>'+
-   '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>'+
-   '</div>';
- const btn=$('opSave');
- btn.onclick=async()=>{
-   if(btn.disabled)return;
-   btn.disabled=true;btn.textContent='SAVING...';
-   try{
-     const r=await saveOwnerProfileValues({
-       full_name:$('opName').value,
-       phone:$('opPhone').value,
-       address:$('opAddress').value,
-       city:$('opCity').value,
-       state:$('opState').value,
-       pincode:$('opPincode').value
-     });
-     if(r.error){
-       toast('Profile save failed. '+dbSetupHint(r.error),'error');
-     }else{
-       updateIdentityUI();
-       toast('Owner profile saved successfully.');
-       ownerProfileView();
-     }
-   }catch(err){
-     console.error('Owner profile save error:',err);
-     toast('Profile save failed. '+dbSetupHint(err),'error');
-   }finally{
-     if(document.getElementById('opSave')){
-       document.getElementById('opSave').disabled=false;
-       document.getElementById('opSave').textContent='SAVE PROFILE';
-     }
-   }
- };
- const bindToggle=(inputId,toggleId)=>{
-   const inp=$(inputId),b=$(toggleId);
-   if(!inp||!b)return;
-   b.onclick=()=>{
-     const show=inp.type==='password';
-     inp.type=show?'text':'password';
-     b.textContent=show?'Hide':'Show';
-     b.setAttribute('aria-pressed',String(show));
-   };
- };
- bindToggle('cpCurrent','cpCurrentToggle');
- bindToggle('cpNew','cpNewToggle');
- bindToggle('cpConfirm','cpConfirmToggle');
+  const el=$('ownerProfileContent');if(!el)return;
+  const p=ownerProfile||window.ownerProfile||{},meta=user?.user_metadata||window.user?.user_metadata||{};
+  const hasProfile=Boolean(p.full_name);
+  el.innerHTML='<div class="owner-profile-shell">'+
+    '<div class="owner-profile-head"><div class="toolbar"><div><span class="muted">SECURITY &amp; IDENTITY</span><h2>Account &amp; Security</h2><p class="muted">Manage your authentication state, 120s idle protection, and saved owner transfer profile.</p></div>'+
+    (hasProfile?'<span class="status ok">PROFILE SAVED</span>':'<span class="status warn">NOT SAVED</span>')+
+    '</div></div>'+
+    '<div class="card security-status-card">'+
+      '<div class="security-card-head"><div class="security-card-icon"><svg aria-hidden="true" style="width:24px;height:24px;stroke:var(--c-accent)"><use href="#td-icon-shield"/></svg></div><div><h3>Account Security &amp; Session Guard</h3><p class="muted">Session protection, identity safeguards and account controls</p></div></div>'+
+      '<div class="security-badges-grid">'+
+        '<div class="sec-item"><span class="sec-tag ok">ACTIVE</span><b>Inactivity Lock (120s)</b><p class="muted">Automatic session protection guards your vehicle records on unattended or shared devices.</p></div>'+
+        '<div class="sec-item"><span class="sec-tag ok">SYNCED</span><b>Active Session Heartbeat</b><p class="muted">Secure background synchronization keeps your session active while you work.</p></div>'+
+        '<div class="sec-item"><span class="sec-tag ok">VERIFIED</span><b>Authenticated Account</b><p class="muted">Signed in as '+esc(user?.email||'Unknown')+'</p></div>'+
+      '</div>'+
+      '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
+    '</div>'+
+    '<div class="card owner-profile-card">'+
+    '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Form 29 &amp; 30 paperwork.</p></div>'+
+    '<button type="button" class="ghost btn-sm" id="opEditBtn">Edit Profile</button></div>'+
+    renderOwnerProfileSummary(p,meta)+
+    '<div id="ownerProfileEditSection" class="owner-profile-edit-section '+(isOwnerProfileEditOpen?'':'hidden')+'" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--c-line)">'+
+    ownerProfileFields(p,meta,true)+
+    '</div>'+
+    '</div>'+
+    '<div class="card change-password-card">'+
+    '<div class="card-head-row"><div><h3>Change Password</h3><p class="muted">Update your account password with instant verification.</p></div>'+
+    '<button type="button" class="ghost btn-sm" id="cpToggleBtn">Change Password</button></div>'+
+    '<div id="changePasswordFormSection" class="change-password-form-section '+(isChangePasswordOpen?'':'hidden')+'" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--c-line)">'+
+    '<div class="form">'+
+      '<div class="field full"><label for="cpCurrent">Current Password *</label><div class="auth-password-control"><input id="cpCurrent" type="password" autocomplete="current-password" placeholder="Enter current password"><button type="button" class="auth-password-toggle" id="cpCurrentToggle">Show</button></div></div>'+
+      '<div class="field"><label for="cpNew">New Password *</label><div class="auth-password-control"><input id="cpNew" type="password" autocomplete="new-password" placeholder="At least 8 characters"><button type="button" class="auth-password-toggle" id="cpNewToggle">Show</button></div><small class="muted" style="margin-top:3px;display:block">Min 8 characters with letters and numbers.</small></div>'+
+      '<div class="field"><label for="cpConfirm">Confirm New Password *</label><div class="auth-password-control"><input id="cpConfirm" type="password" autocomplete="new-password" placeholder="Repeat new password"><button type="button" class="auth-password-toggle" id="cpConfirmToggle">Show</button></div></div>'+
+      '<div class="full" id="cpMessage" style="display:none;font-size:13px;padding:8px 12px;border-radius:8px;margin-bottom:6px"></div>'+
+      '<div class="full" style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">'+
+        '<button type="button" class="ghost" id="cpCancel">Cancel</button>'+
+        '<button type="button" class="primary" id="cpSubmit">UPDATE PASSWORD</button>'+
+      '</div>'+
+    '</div>'+
+    '</div>'+
+    '</div>'+
+    '<div class="build-version" style="margin:10px 2px 0;color:var(--c-mute);font-size:11px;text-align:right">Build '+esc(window.CARMY_BUILD||'unknown')+'</div>'+
+    '</div>';
 
- const cpBtn=$('cpSubmit');
- if(cpBtn){
-   cpBtn.onclick=async()=>{
-     const cur=$('cpCurrent')?.value||'';
-     const neu=$('cpNew')?.value||'';
-     const cnf=$('cpConfirm')?.value||'';
-     const msgEl=$('cpMessage');
-     const showMsg=(txt,isErr=true)=>{
-       if(!msgEl)return;
-       msgEl.style.display='block';
-       msgEl.style.background=isErr?'rgba(239,68,68,0.1)':'rgba(34,197,94,0.1)';
-       msgEl.style.color=isErr?'#dc2626':'#16a34a';
-       msgEl.style.border=isErr?'1px solid rgba(239,68,68,0.2)':'1px solid rgba(34,197,94,0.2)';
-       msgEl.textContent=txt;
-     };
-     if(!cur)return showMsg('Please enter your current password.');
-     if(!neu||neu.length<8)return showMsg('New password must be at least 8 characters long.');
-     if(!/[A-Za-z]/.test(neu)||!/[0-9]/.test(neu))return showMsg('New password must contain both letters and numbers.');
-     if(neu!==cnf)return showMsg('New password and confirmation do not match.');
-     if(cur===neu)return showMsg('New password must be different from current password.');
+  const editSec = $('ownerProfileEditSection');
+  const editBtn = $('opEditBtn');
+  if (editBtn) editBtn.textContent = 'Edit Profile';
+  const opCancelBtn = $('opCancel');
+  if (opCancelBtn) opCancelBtn.textContent = 'Cancel';
+  const opSaveBtn = $('opSave');
+  if (opSaveBtn) opSaveBtn.textContent = 'SAVE PROFILE';
 
-     cpBtn.disabled=true;cpBtn.textContent='VERIFYING & UPDATING...';
-     try{
-       const verifyRes=await db.auth.signInWithPassword({email:user.email,password:cur});
-       if(verifyRes.error)return showMsg('Current password is incorrect. Please check and try again.');
-       const updateRes=await db.auth.updateUser({password:neu});
-       if(updateRes.error)return showMsg('Password update failed: '+(updateRes.error.message||'Unknown error'));
-       showMsg('Password updated successfully!',false);
-       if($('cpCurrent'))$('cpCurrent').value='';
-       if($('cpNew'))$('cpNew').value='';
-       if($('cpConfirm'))$('cpConfirm').value='';
-       toast('Your password has been updated successfully.');
-     }catch(err){
-       console.error('Password change error:',err);
-       showMsg('An unexpected error occurred. Please try again.');
-     }finally{
-       if(document.body.contains(cpBtn)){cpBtn.disabled=false;cpBtn.textContent='UPDATE PASSWORD';}
-     }
-   };
- }
+  if ($('opName') && !$('opName').value) $('opName').value = p.full_name || meta.full_name || '';
+  if ($('opPhone') && !$('opPhone').value) $('opPhone').value = p.phone || meta.phone || '';
+  if ($('opAddress') && !$('opAddress').value) $('opAddress').value = p.address || meta.address || meta.full_address || '';
+  if ($('opCity') && !$('opCity').value) $('opCity').value = p.city || '';
+  if ($('opState') && !$('opState').value) $('opState').value = p.state || '';
+  if ($('opPincode') && !$('opPincode').value) $('opPincode').value = p.pincode || '';
+
+  const setOwnerProfileEdit = (open) => {
+    isOwnerProfileEditOpen = Boolean(open);
+    if (editSec) {
+      if (isOwnerProfileEditOpen) {
+        editSec.classList.remove('hidden');
+        $('opName')?.focus();
+      } else {
+        editSec.classList.add('hidden');
+      }
+    }
+  };
+  setOwnerProfileEdit(isOwnerProfileEditOpen);
+
+  if (editBtn) {
+    editBtn.onclick = () => setOwnerProfileEdit(!isOwnerProfileEditOpen);
+  }
+
+  if (opCancelBtn) {
+    opCancelBtn.onclick = () => {
+      const curP = ownerProfile || {}, curMeta = user?.user_metadata || {};
+      if ($('opName')) $('opName').value = curP.full_name || curMeta.full_name || '';
+      if ($('opPhone')) $('opPhone').value = curP.phone || curMeta.phone || '';
+      if ($('opAddress')) $('opAddress').value = curP.address || curMeta.address || curMeta.full_address || '';
+      if ($('opCity')) $('opCity').value = curP.city || '';
+      if ($('opState')) $('opState').value = curP.state || '';
+      if ($('opPincode')) $('opPincode').value = curP.pincode || '';
+      setOwnerProfileEdit(false);
+    };
+  }
+
+  const btn = $('opSave');
+  if (btn) {
+    btn.onclick = async () => {
+      if (btn.disabled) return;
+      const nameVal = $('opName')?.value?.trim();
+      if (!nameVal) {
+        toast('Full Name is required.', 'error');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'SAVING...';
+      try {
+        const r = await saveOwnerProfileValues({
+          full_name: $('opName').value,
+          phone: $('opPhone').value,
+          address: $('opAddress').value,
+          city: $('opCity').value,
+          state: $('opState').value,
+          pincode: $('opPincode').value
+        });
+        if (r.error) {
+          toast('Profile save failed. ' + dbSetupHint(r.error), 'error');
+        } else {
+          updateIdentityUI();
+          toast('Owner profile saved successfully.');
+          isOwnerProfileEditOpen = false;
+          ownerProfileView();
+        }
+      } catch (err) {
+        console.error('Owner profile save error:', err);
+        toast('Profile save failed. ' + dbSetupHint(err), 'error');
+      } finally {
+        if (document.getElementById('opSave')) {
+          document.getElementById('opSave').disabled = false;
+          document.getElementById('opSave').textContent = 'SAVE PROFILE';
+        }
+      }
+    };
+  }
+
+  const cpSec = $('changePasswordFormSection');
+  const cpToggleBtn = $('cpToggleBtn');
+  if (cpToggleBtn) cpToggleBtn.textContent = 'Change Password';
+  const cpCancelBtn = $('cpCancel');
+  if (cpCancelBtn) cpCancelBtn.textContent = 'Cancel';
+  const cpSubmitBtn = $('cpSubmit');
+  if (cpSubmitBtn) cpSubmitBtn.textContent = 'UPDATE PASSWORD';
+
+  const setChangePasswordOpen = (open) => {
+    isChangePasswordOpen = Boolean(open);
+    if (cpSec) {
+      if (isChangePasswordOpen) {
+        cpSec.classList.remove('hidden');
+        $('cpCurrent')?.focus();
+      } else {
+        cpSec.classList.add('hidden');
+      }
+    }
+  };
+  setChangePasswordOpen(isChangePasswordOpen);
+
+  if (cpToggleBtn) {
+    cpToggleBtn.onclick = () => setChangePasswordOpen(!isChangePasswordOpen);
+  }
+  if (cpCancelBtn) {
+    cpCancelBtn.onclick = () => {
+      if ($('cpCurrent')) $('cpCurrent').value = '';
+      if ($('cpNew')) $('cpNew').value = '';
+      if ($('cpConfirm')) $('cpConfirm').value = '';
+      const msgEl = $('cpMessage');
+      if (msgEl) {
+        msgEl.style.display = 'none';
+        msgEl.textContent = '';
+      }
+      setChangePasswordOpen(false);
+    };
+  }
+
+  const bindToggle = (inputId, toggleId) => {
+    const inp = $(inputId), b = $(toggleId);
+    if (!inp || !b) return;
+    b.onclick = () => {
+      const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      b.textContent = show ? 'Hide' : 'Show';
+      b.setAttribute('aria-pressed', String(show));
+    };
+  };
+  bindToggle('cpCurrent', 'cpCurrentToggle');
+  bindToggle('cpNew', 'cpNewToggle');
+  bindToggle('cpConfirm', 'cpConfirmToggle');
+
+  const cpBtn = $('cpSubmit');
+  if (cpBtn) {
+    cpBtn.onclick = async () => {
+      const cur = $('cpCurrent')?.value || '';
+      const neu = $('cpNew')?.value || '';
+      const cnf = $('cpConfirm')?.value || '';
+      const msgEl = $('cpMessage');
+      const showMsg = (txt, isErr = true) => {
+        if (!msgEl) return;
+        msgEl.style.display = 'block';
+        msgEl.style.background = isErr ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
+        msgEl.style.color = isErr ? '#dc2626' : '#16a34a';
+        msgEl.style.border = isErr ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(34,197,94,0.2)';
+        msgEl.textContent = txt;
+      };
+      if (!cur) return showMsg('Please enter your current password.');
+      if (!neu || neu.length < 8) return showMsg('New password must be at least 8 characters long.');
+      if (!/[A-Za-z]/.test(neu) || !/[0-9]/.test(neu)) return showMsg('New password must contain both letters and numbers.');
+      if (neu !== cnf) return showMsg('New password and confirmation do not match.');
+      if (cur === neu) return showMsg('New password must be different from current password.');
+
+      cpBtn.disabled = true;
+      cpBtn.textContent = 'VERIFYING & UPDATING...';
+      try {
+        const verifyRes = await db.auth.signInWithPassword({ email: user.email, password: cur });
+        if (verifyRes.error) return showMsg('Current password is incorrect. Please check and try again.');
+        const updateRes = await db.auth.updateUser({ password: neu });
+        if (updateRes.error) return showMsg('Password update failed: ' + (updateRes.error.message || 'Unknown error'));
+        toast('Your password has been updated successfully.');
+        if ($('cpCurrent')) $('cpCurrent').value = '';
+        if ($('cpNew')) $('cpNew').value = '';
+        if ($('cpConfirm')) $('cpConfirm').value = '';
+        if (msgEl) {
+          msgEl.style.display = 'none';
+          msgEl.textContent = '';
+        }
+        setChangePasswordOpen(false);
+      } catch (err) {
+        console.error('Password change error:', err);
+        showMsg('An unexpected error occurred. Please try again.');
+      } finally {
+        if (document.body.contains(cpBtn)) {
+          cpBtn.disabled = false;
+          cpBtn.textContent = 'UPDATE PASSWORD';
+        }
+      }
+    };
+  }
 }
 
 let currentHelpTab='faqs';

@@ -169,6 +169,7 @@ function createAppHarness(overrides = {}) {
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
       refreshSession: async () => ({ data: { session: { access_token: "token-refreshed" } } }),
       signInWithPassword: async () => ({ data: null, error: new Error("Invalid login credentials") }),
+      updateUser: async () => ({ data: { user: {} }, error: null }),
       signOut: async () => ({ error: null })
     },
     rpc: async () => ({ data: true, error: null }),
@@ -179,6 +180,7 @@ function createAppHarness(overrides = {}) {
         order: () => builder,
         insert: () => builder,
         update: () => builder,
+        upsert: () => builder,
         delete: () => builder,
         single: async () => ({ data: {}, error: null }),
         then: (resolve) => resolve({ data: [], error: null })
@@ -1224,6 +1226,316 @@ test("Client Production: Service Worker v9 retirement purges older torq-desk-she
   assert.match(swCode, /CACHE_NAME\s*=\s*['"]torq-desk-shell-v9['"]/, "Must use torq-desk-shell-v9");
   assert.match(swCode, /k\.startsWith\(['"]torq-desk-shell-['"]\)\s*&&\s*k!==CACHE_NAME/, "Must delete all older torq-desk-shell caches");
 });
+
+test("Client Production: Account & Security Owner Profile renders summary and hides editable fields on initial load", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-owner-test", email: "owner@example.com" };
+    ownerProfile = {
+      full_name: "Aman Sharma",
+      phone: "+91 98765 43210",
+      address: "Sector 17, Main Street",
+      city: "Chandigarh",
+      state: "Punjab",
+      pincode: "160017"
+    };
+    nav('owner');
+  `);
+
+  // Verify Saved Owner Profile summary is visible in content
+  const content = h.eval("document.getElementById('ownerProfileContent').innerHTML");
+  assert.ok(content.includes('id="ownerProfileSummary"'), "ownerProfileSummary element must exist in rendered content");
+  assert.ok(content.includes("Aman Sharma"), "Summary must display full name");
+  assert.ok(content.includes("+91 98765 43210"), "Summary must display phone");
+  assert.ok(content.includes("Chandigarh"), "Summary must display city");
+  assert.ok(content.includes("160017"), "Summary must display pincode");
+
+  // Verify editable form section is hidden on initial load
+  const editSection = h.eval("document.getElementById('ownerProfileEditSection')");
+  assert.ok(editSection, "ownerProfileEditSection element must exist");
+  assert.equal(editSection.classList.contains("hidden"), true, "ownerProfileEditSection must be hidden on initial load");
+
+  // Verify Edit Profile button is visible
+  const editBtn = h.eval("document.getElementById('opEditBtn')");
+  assert.ok(editBtn, "opEditBtn button must exist");
+  assert.equal(editBtn.textContent, "Edit Profile", "Button must say Edit Profile");
+});
+
+test("Client Production: Clicking Edit Profile opens form, Cancel reverts edits and collapses form", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-owner-test", email: "owner@example.com" };
+    ownerProfile = {
+      full_name: "Original Name",
+      phone: "1111111111",
+      address: "Original Address",
+      city: "Original City",
+      state: "Original State",
+      pincode: "110001"
+    };
+    nav('owner');
+  `);
+
+  // Initially hidden
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), true);
+
+  // Click Edit Profile -> opens form
+  h.eval("document.getElementById('opEditBtn').click()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), false, "Edit section must be visible after click");
+
+  // Verify pre-populated values
+  assert.equal(h.eval("document.getElementById('opName').value"), "Original Name");
+  assert.equal(h.eval("document.getElementById('opPhone').value"), "1111111111");
+
+  // Modify values without saving
+  h.eval(`
+    document.getElementById('opName').value = "Unsaved Name";
+    document.getElementById('opPhone').value = "9999999999";
+  `);
+
+  // Click Cancel -> collapses and reverts values
+  h.eval("document.getElementById('opCancel').click()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), true, "Edit section must collapse on Cancel");
+  assert.equal(h.eval("document.getElementById('opName').value"), "Original Name", "Input value must be reverted on Cancel");
+  assert.equal(h.eval("document.getElementById('opPhone').value"), "1111111111", "Phone value must be reverted on Cancel");
+});
+
+test("Client Production: Owner profile save validates required name, updates summary and collapses on success", async (t) => {
+  let upsertedData = null;
+  const h = createAppHarness({
+    db: {
+      from: (table) => {
+        const builder = {
+          select: () => builder,
+          eq: () => builder,
+          order: () => builder,
+          insert: () => builder,
+          update: () => builder,
+          upsert: (payload) => {
+            upsertedData = payload;
+            return builder;
+          },
+          delete: () => builder,
+          single: async () => ({
+            data: { ...upsertedData, id: "prof-1" },
+            error: null
+          }),
+          then: (resolve) => resolve({ data: [], error: null })
+        };
+        return builder;
+      }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-owner-save", email: "save@example.com" };
+    ownerProfile = null;
+    nav('owner');
+    document.getElementById('opEditBtn').click();
+  `);
+
+  // Try saving with blank name -> fails validation, stays open
+  h.eval(`
+    document.getElementById('opName').value = "   ";
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), false, "Must stay open on validation failure");
+  assert.equal(upsertedData, null, "Upsert must not be called when name is empty");
+
+  // Fill valid details and save
+  h.eval(`
+    document.getElementById('opName').value = "Vikram Malhotra";
+    document.getElementById('opPhone').value = "9812345678";
+    document.getElementById('opAddress').value = "42 MG Road";
+    document.getElementById('opCity').value = "Gurugram";
+    document.getElementById('opState').value = "Haryana";
+    document.getElementById('opPincode').value = "122001";
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+
+  // Form must collapse after successful save
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), true, "Edit section must collapse on save success");
+
+  // Summary must update to new values
+  const updatedContent = h.eval("document.getElementById('ownerProfileContent').innerHTML");
+  assert.ok(updatedContent.includes("Vikram Malhotra"), "Summary must reflect updated name");
+  assert.ok(updatedContent.includes("Gurugram"), "Summary must reflect updated city");
+  assert.ok(updatedContent.includes("122001"), "Summary must reflect updated pincode");
+});
+
+test("Client Production: Change Password keeps header and button visible, hides fields by default", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-cp-test", email: "cp@example.com" };
+    nav('owner');
+  `);
+
+  // Verify header and button are present and visible
+  const toggleBtn = h.eval("document.getElementById('cpToggleBtn')");
+  assert.ok(toggleBtn, "cpToggleBtn button must exist");
+  assert.equal(toggleBtn.textContent, "Change Password", "Button text must be Change Password");
+
+  // Verify form section is hidden by default
+  const cpSection = h.eval("document.getElementById('changePasswordFormSection')");
+  assert.ok(cpSection, "changePasswordFormSection element must exist");
+  assert.equal(cpSection.classList.contains("hidden"), true, "Change Password fields must be hidden by default");
+});
+
+test("Client Production: Change Password opens on click, Cancel clears fields and collapses form", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-cp-test", email: "cp@example.com" };
+    nav('owner');
+  `);
+
+  // Click Change Password button -> opens form
+  h.eval("document.getElementById('cpToggleBtn').click()");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), false, "Form section must open on click");
+
+  // Enter passwords
+  h.eval(`
+    document.getElementById('cpCurrent').value = "OldPass123";
+    document.getElementById('cpNew').value = "NewPass456";
+    document.getElementById('cpConfirm').value = "NewPass456";
+  `);
+
+  // Click Cancel -> clears values and collapses form
+  h.eval("document.getElementById('cpCancel').click()");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), true, "Form section must collapse on Cancel");
+  assert.equal(h.eval("document.getElementById('cpCurrent').value"), "", "Current password field must be cleared");
+  assert.equal(h.eval("document.getElementById('cpNew').value"), "", "New password field must be cleared");
+  assert.equal(h.eval("document.getElementById('cpConfirm').value"), "", "Confirm password field must be cleared");
+});
+
+test("Client Production: Change Password validation or auth failure preserves entered values and error message while remaining open", async (t) => {
+  const h = createAppHarness({
+    db: {
+      auth: {
+        signInWithPassword: async () => ({ data: null, error: new Error("Current password is incorrect") }),
+        updateUser: async () => ({ data: null, error: null })
+      }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-cp-fail", email: "fail@example.com" };
+    nav('owner');
+    document.getElementById('cpToggleBtn').click();
+    document.getElementById('cpCurrent').value = "WrongCurrent1";
+    document.getElementById('cpNew').value = "ValidNewPassword8";
+    document.getElementById('cpConfirm').value = "ValidNewPassword8";
+  `);
+
+  // Submit with incorrect current password
+  await h.eval("document.getElementById('cpSubmit').onclick()");
+
+  // Form MUST remain open
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), false, "Form must remain open on failure");
+
+  // Entered values MUST be preserved
+  assert.equal(h.eval("document.getElementById('cpCurrent').value"), "WrongCurrent1", "Current password input must be preserved");
+  assert.equal(h.eval("document.getElementById('cpNew').value"), "ValidNewPassword8", "New password input must be preserved");
+  assert.equal(h.eval("document.getElementById('cpConfirm').value"), "ValidNewPassword8", "Confirm password input must be preserved");
+
+  // Error message displayed
+  const msgEl = h.eval("document.getElementById('cpMessage')");
+  assert.equal(msgEl.style.display, "block", "Error message must be displayed");
+  assert.ok(msgEl.textContent.includes("Current password is incorrect"), "Truthful error must be shown");
+
+  // Test validation mismatch
+  h.eval(`
+    document.getElementById('cpConfirm').value = "MismatchPassword9";
+  `);
+  await h.eval("document.getElementById('cpSubmit').onclick()");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), false, "Form must remain open on mismatch");
+  assert.ok(h.eval("document.getElementById('cpMessage').textContent").includes("do not match"), "Mismatch error must be displayed");
+});
+
+test("Client Production: Successful password change clears inputs and collapses section", async (t) => {
+  let updatedPassword = null;
+  const h = createAppHarness({
+    db: {
+      auth: {
+        signInWithPassword: async () => ({ data: { user: { id: "u-cp-ok" } }, error: null }),
+        updateUser: async ({ password }) => {
+          updatedPassword = password;
+          return { data: { user: { id: "u-cp-ok" } }, error: null };
+        }
+      }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-cp-ok", email: "cp-ok@example.com" };
+    nav('owner');
+    document.getElementById('cpToggleBtn').click();
+    document.getElementById('cpCurrent').value = "CorrectOld1";
+    document.getElementById('cpNew').value = "BrandNewPass9";
+    document.getElementById('cpConfirm').value = "BrandNewPass9";
+  `);
+
+  await h.eval("document.getElementById('cpSubmit').onclick()");
+
+  // Must update password
+  assert.equal(updatedPassword, "BrandNewPass9", "Password must be updated via auth.updateUser");
+
+  // Form MUST collapse
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), true, "Form must collapse on success");
+
+  // Passwords cleared
+  assert.equal(h.eval("document.getElementById('cpCurrent').value"), "", "Current password input must be cleared");
+  assert.equal(h.eval("document.getElementById('cpNew').value"), "", "New password input must be cleared");
+  assert.equal(h.eval("document.getElementById('cpConfirm').value"), "", "Confirm password input must be cleared");
+});
+
+test("Client Production: Owner Profile and Change Password visibility states are strictly independent", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-indep", email: "indep@example.com" };
+    nav('owner');
+  `);
+
+  // Both hidden initially
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), true);
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), true);
+
+  // Open Owner Profile edit
+  h.eval("document.getElementById('opEditBtn').click()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), false, "Owner profile should be open");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), true, "Change password should still be hidden");
+
+  // Open Change Password
+  h.eval("document.getElementById('cpToggleBtn').click()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), false, "Owner profile should remain open");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), false, "Change password should now be open");
+
+  // Close Owner Profile
+  h.eval("document.getElementById('opCancel').click()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), true, "Owner profile should now be closed");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), false, "Change password should still remain open");
+
+  // Close Change Password
+  h.eval("document.getElementById('cpCancel').click()");
+  assert.equal(h.eval("document.getElementById('ownerProfileEditSection').classList.contains('hidden')"), true, "Owner profile should still be closed");
+  assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), true, "Change password should now be closed");
+});
+
 
 
 

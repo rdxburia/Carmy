@@ -1513,6 +1513,49 @@ input[type="password"]::-ms-clear {
   line-height: 1.45 !important;
 }
 
+/* Owner Profile Summary Display */
+.owner-profile-summary {
+  margin-bottom: 4px;
+}
+.profile-summary-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  background: var(--c-soft) !important;
+  border: 1px solid var(--c-line) !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+}
+.profile-summary-item {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+.profile-summary-item.full {
+  grid-column: 1 / -1 !important;
+}
+.profile-summary-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  color: var(--c-mute) !important;
+  text-transform: uppercase !important;
+}
+.profile-summary-val {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--c-ink) !important;
+  overflow-wrap: anywhere !important;
+}
+@media (max-width: 600px) {
+  .profile-summary-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    padding: 12px !important;
+  }
+}
+
 /* Mobile Bottom Navigation (Strictly < 768px and when authenticated) */
 @media(max-width: 768px){
   #app:not(.hidden) ~ .mobile-nav,
