@@ -81,6 +81,18 @@
 - `npm install --no-package-lock` reported 8 dependency audit vulnerabilities (7 high, 1 critical); dependency updates were outside this step and were not performed.
 - Authenticated smoke/password tests remain dependent on dedicated staging credentials; private PDF fixtures are still absent and were not synthesized or committed.
 
+## Separate task — multi-page policy OCR improvement (PR #140)
+- User supplied five real policy PDFs from different providers; none of these PDFs were committed to the repository.
+- Implemented on branch `fix/multipage-policy-ocr-extraction`, draft PR [#140](https://github.com/rdxburia/Carmy/pull/140). PR #140 is open and not merged.
+- `js/document-extraction.js`: page text-quality scoring and OCR fallback for scanned/garbled pages; when core fields remain missing, retry OCR across all non-OCR pages and choose OCR text using both quality and critical-field coverage; retain per-page OCR metadata.
+- Parser hardening: OCR-spaced policy numbers, hyphenated registration numbers, and month-name dates such as `24 Jun, 2021`.
+- New regression tests cover garbled-text detection, OCR text choice, cross-page field provenance, conflicting policy numbers, and OCR-normalized policy number/registration/date values.
+- CI run [39006311340](https://github.com/rdxburia/Carmy/actions/runs/39006311340): **PASS** — JavaScript syntax checks passed; 5 tests, 5 passed, 0 failed.
+- Local sample inspection using `pdftotext` heuristic summary: the HDFC ERGO sample (2 pages) flagged both pages for OCR fallback; the other four samples' text was not flagged by this heuristic. A separate Tesseract spot-check of the HDFC first page recovered readable policy fields. This is a smoke check, not a full test of the browser extraction pipeline.
+- Accuracy is not yet benchmarked across the real documents with the app's browser PDF.js/Tesseract path. Current automated tests use synthetic text; real-document field-by-field acceptance and save-flow validation remain outstanding.
+- Existing extraction review and vehicle-mismatch validation remain in place; this PR does not bypass review or silently auto-save uncertain fields.
+- No database migrations applied; no production data changed.
+
 ## Next action
 Step 0b report is ready for review. **Do not start Step 1 until the user explicitly says "go".**
 
