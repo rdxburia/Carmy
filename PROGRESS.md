@@ -83,3 +83,36 @@
 
 ## Next action
 Step 0b report is ready for review. **Do not start Step 1 until the user explicitly says "go".**
+
+
+## User-authorized scoped follow-up — multi-page policy extraction (2026-10-17)
+
+### Scope
+- Process every page in a PDF; do not assume key policy fields are only on page 1.
+- Retry OCR on pages whose embedded text is short, garbled, or semantically weak; compare OCR and embedded-text quality and preserve the better candidate.
+- Record per-page OCR attempt/use, reason, source, text quality, and OCR quality in `page_meta` / diagnostics.
+- Add deterministic regression tests for garbled embedded-font text, OCR candidate selection, 12-page cross-page field extraction, page provenance, and conflicting policy-number warnings.
+- Keep existing review-before-save flow. No database migrations, production changes, private-PDF commits, or UI redesign.
+
+### Changes
+- `js/document-extraction.js`: adaptive per-page OCR fallback and candidate quality scoring; optional-colon handling for combined engine/chassis labels; full per-page OCR/source/quality metadata copied into insurance diagnostics.
+- `tests/document-extraction-quality.test.cjs`: five focused tests.
+- `.github/workflows/step0b-verification.yml`: include new test and run for the scoped branch/PR.
+
+### CI evidence
+- First run [39005645657](https://github.com/rdxburia/Carmy/actions/runs/39005645657): JavaScript syntax passed; 68/69 tests passed. The new 12-page test exposed that the combined engine/chassis parser did not accept a colon after the label.
+- Fixed both combined engine/chassis regex paths in commits `ffaaa0c` and `e82138b`. Run [39005738458](https://github.com/rdxburia/Carmy/actions/runs/39005738458) **PASS**: 55 JavaScript files syntax-checked; 69/69 tests pass; all 22 SQL files parse; garage browser acceptance and 8 responsive viewport runs pass. Authenticated smoke was correctly marked NOT RUN because staging secrets are absent.
+- Follow-up run [39005844695](https://github.com/rdxburia/Carmy/actions/runs/39005844695) covers the final per-page diagnostic metadata propagation change. Syntax, test suite (69/69), and SQL parser steps have passed; Playwright installation/browser checks were still running at the time of this progress update.
+- Real HDFC ERGO PDF checked locally: embedded text is semantically garbled, while Tesseract OCR on page 1 reads the insurer, policy number, period, registration, chassis/engine and premium labels. This confirms the failure mode the adaptive OCR path is designed to address; it is not a complete end-to-end extraction pass across all uploaded PDFs.
+- Uploaded samples remain local/private and are not committed to GitHub. The 13-page Reliance sample is also useful as a boundary test beyond the requested 1–12 page range.
+
+### Explicit limits / NOT RUN
+- End-to-end browser extraction against all five uploaded PDFs and exact expected fields: NOT RUN in GitHub Actions because the uploads are chat-local and must not be committed as fixtures. Local PDF text/OCR inspection performed only; not equivalent to the app's full browser extraction pipeline.
+- Accuracy percentage (including 99.99%): NOT established. Requires a labeled test corpus across providers, page layouts, scans, rotations, and field-level expected values.
+- Live authenticated save to Supabase/R2: NOT RUN; no staging account was used.
+- No migrations applied and no production records modified.
+
+### Review
+- Draft PR #138: https://github.com/rdxburia/Carmy/pull/138
+- PR #138 temporarily targets `chore/step0-project-governance` to avoid duplicating the still-open Step 0b PR #137. Re-target to `main` after PR #137 is resolved.
+- Stop after this scoped follow-up and wait for the user's next explicit approval; do not begin the unrelated Step 1 roadmap.
