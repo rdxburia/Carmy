@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { requireSuperAdmin } from "../worker/src/super-admin.js";
+import { requireSuperAdmin, recordSuperAdminAudit } from "../worker/src/super-admin.js";
 
 const env = {
   SUPABASE_URL: "https://mock.supabase.co",
@@ -51,6 +51,34 @@ test("fails closed when role lookup returns an error or throws", async () => {
     globalThis.fetch = async () => { throw new Error("network down"); };
     response = await requireSuperAdmin(user, env, "null");
     assert.equal(response.status, 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fails closed if the audit log cannot be written", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("audit table missing", { status: 404 });
+  try {
+    const response = await recordSuperAdminAudit(user, env, "null", "admin.test");
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "ADMIN_AUDIT_UNAVAILABLE");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("writes audit events with actor identity and action", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    assert.match(String(url), /super_admin_audit_log/);
+    const body = JSON.parse(init.body);
+    assert.equal(body.actor_user_id, user.id);
+    assert.equal(body.action, "admin.test");
+    return new Response(null, { status: 201 });
+  };
+  try {
+    assert.equal(await recordSuperAdminAudit(user, env, "null", "admin.test"), null);
   } finally {
     globalThis.fetch = originalFetch;
   }
