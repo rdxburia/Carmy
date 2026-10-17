@@ -49,7 +49,7 @@ function pageTextQuality(value){
  const hits=new Set(anchors.filter(x=>upper.includes(x))).size;
  const odd=(text.match(/[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g)||[]).length;
  const ratio=text.length?alnum/text.length:0;
- return{length:text.length,anchor_hits:hits,alnum_ratio:ratio,word_count:words,score:hits*4+Math.min(5,ratio*5)+Math.min(4,words/12)-Math.min(8,odd),needs_ocr:text.replace(/\s/g,'').length<50||(text.length>90&&(hits<2||ratio<.22))};
+ return{length:text.length,anchor_hits:hits,alnum_ratio:ratio,word_count:words,score:hits*4+Math.min(5,ratio*5)+Math.min(4,words/12)-Math.min(8,odd),needs_ocr:text.replace(/\s/g,'').length<50||(text.length>55&&(hits<2||ratio<.22))};
 }
 function shouldOcrPage(value){return pageTextQuality(value).needs_ocr}
 function chooseBetterPageText(nativeText,ocrText){
