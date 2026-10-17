@@ -42,7 +42,37 @@ function rows(items){const a=[];for(const q of items.filter(x=>clean(x.str))){co
 async function ocr(file,progress,rc=false){const b=await createImageBitmap(file),c=document.createElement('canvas');c.width=b.width;c.height=b.height;c.getContext('2d').drawImage(b,0,0);return ocrCanvas(c,progress,rc)}
 async function ocrPdfPage(doc,progress,rc=false,pageNumber=1){const p=await doc.getPage(pageNumber),v=p.getViewport({scale:2}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return ocrCanvas(c,progress,rc)}
 function rowsFromText(text){return String(text||'').split(/\r?\n/).map((line,i)=>({y:i*12,items:[{t:clean(line),x:0,w:line.length}],text:clean(line)})).filter(r=>r.text)}
-async function pdfData(file,progress){const p=await pdf(),d=await p.getDocument({data:await file.arrayBuffer()}).promise,ps=[],pageMeta=[];for(let i=1;i<=d.numPages;i++){const pg=await d.getPage(i),tc=await pg.getTextContent();let rs=rows(tc.items),pageText=rs.map(r=>r.text).join('\n'),ocrUsed=false;if(pageText.replace(/\s/g,'').length<30){const o=await ocrPdfPage(d,progress,false,i);rs=rowsFromText(o.text);pageText=o.text;ocrUsed=true}ps.push(rs);pageMeta.push({page:i,text_length:pageText.length,ocr_used:ocrUsed});progress?.(i/d.numPages*.5,'READING PDF')}return{d,ps,pageMeta}}
+function pageTextQuality(value){
+ const text=clean(value),upper=norm(text),letters=(text.match(/[A-Za-z]/g)||[]).length,digits=(text.match(/\d/g)||[]).length,alnum=letters+digits;
+ const words=(upper.match(/[A-Z]{2,}|\d{2,}/g)||[]).length;
+ const anchors=['POLICY','INSURANCE','INSURED','VEHICLE','REGISTRATION','REGN','PREMIUM','LIABILITY','COVERAGE','CHASSIS','ENGINE','TERMS','CONDITIONS','EXCLUSIONS','CLAIM','DRIVER','ADDRESS','PERIOD','PAYABLE','IDV','NAME','CERTIFICATE','DATE','INSURER','RISK','DAMAGE','COVER','SCHEDULE','TOTAL','VALIDITY','POLICYHOLDER','RENEWAL','MOTOR','DEDUCTIBLE','THIRD PARTY','GST','INVOICE','OWN DAMAGE','PREVIOUS','ENDORSEMENT','CUSTOMER','BENEFIT','LIMITATION','DECLARATION','WARRANTY','PAGE'];
+ const hits=new Set(anchors.filter(x=>upper.includes(x))).size;
+ const odd=(text.match(/[\\uFFFD\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g)||[]).length;
+ const ratio=text.length?alnum/text.length:0;
+ return{length:text.length,anchor_hits:hits,alnum_ratio:ratio,word_count:words,score:hits*4+Math.min(5,ratio*5)+Math.min(4,words/12)-Math.min(8,odd),needs_ocr:text.replace(/\\s/g,'').length<50||(text.length>90&&(hits<2||ratio<.22))};
+}
+function shouldOcrPage(value){return pageTextQuality(value).needs_ocr}
+function chooseBetterPageText(nativeText,ocrText){
+ const a=pageTextQuality(nativeText),b=pageTextQuality(ocrText);
+ if(!clean(ocrText))return{ text:nativeText,used_ocr:false,native_quality:a,ocr_quality:b };
+ const use=!clean(nativeText)||b.score>a.score+1||a.needs_ocr&&!b.needs_ocr;
+ return{text:use?ocrText:nativeText,used_ocr:use,native_quality:a,ocr_quality:b};
+}
+function textRowsForPage(value){return rowsFromText(value)}
+async function pdfData(file,progress){
+ const p=await pdf(),d=await p.getDocument({data:await file.arrayBuffer()}).promise,ps=[],pageMeta=[];
+ for(let i=1;i<=d.numPages;i++){
+  const pg=await d.getPage(i),tc=await pg.getTextContent();let rs=rows(tc.items),pageText=rs.map(r=>r.text).join('\\n'),ocrUsed=false,quality=pageTextQuality(pageText);
+  if(shouldOcrPage(pageText)){
+   const o=await ocrPdfPage(d,progress,false,i),choice=chooseBetterPageText(pageText,o.text);
+   if(choice.used_ocr){pageText=o.text;rs=textRowsForPage(pageText);ocrUsed=true}
+   quality=pageTextQuality(pageText);
+  }
+  ps.push(rs);pageMeta.push({page:i,text_length:pageText.length,ocr_used:ocrUsed,quality_score:quality.score,quality_anchor_hits:quality.anchor_hits});
+  progress?.(i/d.numPages*.5,'READING PDF');
+ }
+ return{d,ps,pageMeta}
+}
 async function thumb(d){try{const p=await d.getPage(1),v=p.getViewport({scale:1.1}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return c.toDataURL('image/jpeg',.72)}catch{return null}}
 async function ocrCanvas(c,progress,rc=false){const T=await tess();const scale=Math.min(1,3200/c.width),src=c,base=document.createElement('canvas');base.width=c.width*scale;base.height=c.height*scale;const g=base.getContext('2d');g.filter='grayscale(1) contrast(1.28)';g.drawImage(src,0,0,base.width,base.height);c=base;const zones=rc?[{x:0,w:1},{x:0,w:.6},{x:.4,w:.6}]:[{x:0,w:1}],out=[];for(let i=0;i<zones.length;i++){const z=zones[i],zC=document.createElement('canvas');zC.width=c.width*z.w;zC.height=c.height;zC.getContext('2d').drawImage(c,c.width*z.x,0,zC.width,zC.height,0,0,zC.width,zC.height);const r=await T.recognize(zC,'eng',{config:'--psm 6',logger:m=>progress?.(.5+(i+(m.progress||0))/zones.length*.5,rc?'RC OCR':'OCR')});out.push(r.data.text||'')}return{text:out.join('\n'),thumbnail:c.toDataURL('image/jpeg',.75)}}
 function rowValue(rs,label,pat){for(const r of rs){const m=r.text.match(label);if(!m)continue;let p=m.index+m[0].length,pos=0;for(const c of r.items){const s=pos;pos+=c.t.length+1;if(s+c.t.length<=p)continue;const x=c.t.match(pat);if(x)return x[0]}}return null}
@@ -201,5 +231,5 @@ function classifyDetailed(text,slot='',meta={}){
  return{type:detected,scores,matchedSignals,confidence,slot_score:slotScore,redirect,ambiguous:!insuranceHardRule&&(detected==='other'||(top[1]-second[1]<3)),page_count:pageCount,hard_rules:{insurance:insuranceHardRule,puc_title:pucTitle,puc_signals:pucSignals,multi_page:pageCount>2}};
 }
 function classify(text,slot='',meta={}){return classifyDetailed(text,slot,meta).type}
-window.CarmyExtraction={extract,parseRC,parseInsurance:parseInsurance,parsePuc,validate,reg,date,canonicalInsurer:insurer,classifyDocument:classify,classifyDetailed};
+window.CarmyExtraction={extract,parseRC,parseInsurance:parseInsurance,parsePuc,validate,reg,date,canonicalInsurer:insurer,classifyDocument:classify,classifyDetailed,pageTextQuality,shouldOcrPage,chooseBetterPageText};
 })();
