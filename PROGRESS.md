@@ -95,13 +95,14 @@ Step 0b report is ready for review. **Do not start Step 1 until the user explici
 - Keep existing review-before-save flow. No database migrations, production changes, private-PDF commits, or UI redesign.
 
 ### Changes
-- `js/document-extraction.js`: adaptive per-page OCR fallback and candidate quality scoring; optional-colon handling for combined engine/chassis labels.
+- `js/document-extraction.js`: adaptive per-page OCR fallback and candidate quality scoring; optional-colon handling for combined engine/chassis labels; full per-page OCR/source/quality metadata copied into insurance diagnostics.
 - `tests/document-extraction-quality.test.cjs`: five focused tests.
 - `.github/workflows/step0b-verification.yml`: include new test and run for the scoped branch/PR.
 
 ### CI evidence
 - First run [39005645657](https://github.com/rdxburia/Carmy/actions/runs/39005645657): JavaScript syntax passed; 68/69 tests passed. The new 12-page test exposed that the combined engine/chassis parser did not accept a colon after the label.
-- Fixed both combined engine/chassis regex paths in commits `ffaaa0c` and `e82138b`. Follow-up run [39005738458](https://github.com/rdxburia/Carmy/actions/runs/39005738458) is in progress at the time of this update; final status must be refreshed before calling the step complete.
+- Fixed both combined engine/chassis regex paths in commits `ffaaa0c` and `e82138b`. Run [39005738458](https://github.com/rdxburia/Carmy/actions/runs/39005738458) **PASS**: 55 JavaScript files syntax-checked; 69/69 tests pass; all 22 SQL files parse; garage browser acceptance and 8 responsive viewport runs pass. Authenticated smoke was correctly marked NOT RUN because staging secrets are absent.
+- Follow-up run [39005844695](https://github.com/rdxburia/Carmy/actions/runs/39005844695) covers the final per-page diagnostic metadata propagation change. Syntax, test suite (69/69), and SQL parser steps have passed; Playwright installation/browser checks were still running at the time of this progress update.
 - Real HDFC ERGO PDF checked locally: embedded text is semantically garbled, while Tesseract OCR on page 1 reads the insurer, policy number, period, registration, chassis/engine and premium labels. This confirms the failure mode the adaptive OCR path is designed to address; it is not a complete end-to-end extraction pass across all uploaded PDFs.
 - Uploaded samples remain local/private and are not committed to GitHub. The 13-page Reliance sample is also useful as a boundary test beyond the requested 1–12 page range.
 
