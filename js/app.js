@@ -20,11 +20,63 @@ function writeIdleActivity(force=false){return sessionGuard.writeActivity(force)
 function idleExpired(){return sessionGuard.isExpired()}
 function installIdleFetchGuard(){sessionGuard.installFetchGuard()}
 installIdleFetchGuard();
+let isSuperAdmin=false;
+let adminCheckPromise=null;
+let adminTickets=[];
+let adminTicketsLoading=false;
+let adminTicketsError=null;
+let adminStatusFilter='all';
+let adminSearchQuery='';
+
+function updateAdminNavVisibility(){
+  const desktopBtn=document.getElementById('adminNavBtn');
+  const drawerBtn=document.getElementById('mobileDrawerAdminLink');
+  if(desktopBtn){
+    if(isSuperAdmin)desktopBtn.classList.remove('hidden');
+    else desktopBtn.classList.add('hidden');
+  }
+  if(drawerBtn){
+    if(isSuperAdmin)drawerBtn.classList.remove('hidden');
+    else drawerBtn.classList.add('hidden');
+  }
+}
+
+async function checkSuperAdminStatus(force=false){
+  if(!user){
+    isSuperAdmin=false;
+    updateAdminNavVisibility();
+    return false;
+  }
+  if(!force&&isSuperAdmin){
+    updateAdminNavVisibility();
+    return true;
+  }
+  if(adminCheckPromise&&!force)return adminCheckPromise;
+  adminCheckPromise=(async()=>{
+    try{
+      const res=await workerGet('/api/admin/support-tickets?limit=1');
+      if(res&&res.ok&&Array.isArray(res.data)){
+        isSuperAdmin=true;
+      }else{
+        isSuperAdmin=false;
+      }
+    }catch(err){
+      isSuperAdmin=false;
+    }finally{
+      updateAdminNavVisibility();
+      adminCheckPromise=null;
+    }
+    return isSuperAdmin;
+  })();
+  return adminCheckPromise;
+}
+
 function clearUserMemory(){
   user=null;cars=[];car=null;records=[];docs=[];ownerProfile=null;
   insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;garageLoadingState='idle';
+  isSuperAdmin=false;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -791,6 +843,16 @@ function updateDrawerContext(){
 async function nav(v){
  closeSideMenu();
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
+ if(isSuperAdmin)validViews.push('admin');
+ if(v==='admin'&&!isSuperAdmin){
+   const verified=await checkSuperAdminStatus(true);
+   if(!verified){
+     toast('Access denied. Super Admin privileges required.','error');
+     v='dashboard';
+   }else{
+     if(!validViews.includes('admin'))validViews.push('admin');
+   }
+ }
  if(!validViews.includes(v))v='dashboard';
  try{
    if(v==='add'&&car?.vehicle_status==='sold'){
@@ -819,6 +881,7 @@ async function nav(v){
        ownerProfileView();
      }
      if(v==='help')helpView();
+     if(v==='admin')await adminView();
    }catch(err){
      console.error('View render error:',v,err);
      if(v==='help'){
@@ -1154,11 +1217,13 @@ async function start(u,force=false){
      await loadData();
      setAppLoadingProgress(70);
      updateIdentityUI();
+     try{await checkSuperAdminStatus();}catch(_){}
      setAppLoadingStatus('Preparing your garage...','Rendering your vehicle dashboard');
      setAppLoadingProgress(90);
      let lastView='dashboard';
      try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
      const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
+     if(isSuperAdmin)validViews.push('admin');
      if(!validViews.includes(lastView))lastView='dashboard';
      if(lastView!=='dashboard'){
        let restored=false;
@@ -3191,6 +3256,329 @@ function renderContactContent(){
     '</div>'+
   '</div>';
 }
+
+/* ===== Super Admin Console Implementation ===== */
+
+function formatAdminDate(ts){
+  if(!ts)return '—';
+  try{
+    const d=new Date(Number(ts)*1000);
+    if(isNaN(d.getTime()))return String(ts);
+    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch(_){
+    return String(ts);
+  }
+}
+
+function renderStatusBadge(status){
+  const s=String(status||'open').toLowerCase();
+  if(s==='in_progress')return '<span class="admin-badge status-in-progress">In Progress</span>';
+  if(s==='resolved')return '<span class="admin-badge status-resolved">Resolved</span>';
+  if(s==='closed')return '<span class="admin-badge status-closed">Closed</span>';
+  return '<span class="admin-badge status-open">Open</span>';
+}
+
+function renderPriorityBadge(priority){
+  const p=String(priority||'normal').toLowerCase();
+  if(p==='urgent')return '<span class="admin-badge prio-urgent">Urgent</span>';
+  if(p==='high')return '<span class="admin-badge" style="background:#ffedd5;color:#c2410c;border:1px solid #fed7aa">High</span>';
+  if(p==='low')return '<span class="admin-badge" style="background:#f1f5f9;color:#64748b">Low</span>';
+  return '<span class="admin-badge prio-normal">Normal</span>';
+}
+
+function formatCategory(cat){
+  if(!cat)return 'General';
+  const c=String(cat).toLowerCase();
+  if(c==='billing')return 'Billing';
+  if(c==='documents')return 'Documents';
+  if(c==='vehicle')return 'Vehicle';
+  if(c==='technical')return 'Technical';
+  return cat.charAt(0).toUpperCase()+cat.slice(1);
+}
+
+function getFilteredAdminTickets(){
+  return adminTickets.filter(t=>{
+    if(adminStatusFilter!=='all'){
+      const s=(t.status||'open').toLowerCase();
+      if(adminStatusFilter==='in_progress'&&s!=='in_progress')return false;
+      else if(adminStatusFilter!=='in_progress'&&s!==adminStatusFilter)return false;
+    }
+    if(adminSearchQuery.trim()){
+      const q=adminSearchQuery.toLowerCase();
+      const matchId=String(t.id||'').toLowerCase().includes(q);
+      const matchEmail=String(t.email||'').toLowerCase().includes(q);
+      const matchSubject=String(t.subject||'').toLowerCase().includes(q);
+      const matchCategory=String(t.category||'').toLowerCase().includes(q);
+      const matchMessage=String(t.message||'').toLowerCase().includes(q);
+      if(!matchId&&!matchEmail&&!matchSubject&&!matchCategory&&!matchMessage)return false;
+    }
+    return true;
+  });
+}
+
+function renderAdminStatsHtml(){
+  const totalCount=adminTickets.length;
+  const openCount=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
+  const inProgressCount=adminTickets.filter(t=>(t.status||'').toLowerCase()==='in_progress').length;
+  const resolvedCount=adminTickets.filter(t=>['resolved','closed'].includes((t.status||'').toLowerCase())).length;
+
+  return '<div class="admin-stats-grid">'+
+    '<div class="admin-stat-card"><span class="admin-stat-val">'+totalCount+'</span><span class="admin-stat-label">Total Tickets</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#2563eb">'+openCount+'</span><span class="admin-stat-label">Open / Unresolved</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+inProgressCount+'</span><span class="admin-stat-label">In Progress</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+resolvedCount+'</span><span class="admin-stat-label">Resolved / Closed</span></div>'+
+  '</div>';
+}
+
+function renderAdminListHtml(){
+  if(adminTicketsLoading&&!adminTickets.length){
+    return '<div class="admin-state-card">'+
+      '<div class="spinner-lg" style="margin:8px auto"></div>'+
+      '<h3>Loading Authoritative Tickets...</h3>'+
+      '<p>Connecting to Cloudflare D1 ticket database via authorized admin gateway.</p>'+
+    '</div>';
+  }
+
+  if(adminTicketsError){
+    return '<div class="admin-state-card" style="border-color:#fca5a5;background:#fff5f5">'+
+      '<div class="admin-state-icon" style="color:#dc2626">⚠️</div>'+
+      '<h3>Admin Service Temporarily Unavailable</h3>'+
+      '<p>'+esc(adminTicketsError)+'</p>'+
+      '<button type="button" class="primary" onclick="loadAdminTickets(true)">Retry Connection</button>'+
+    '</div>';
+  }
+
+  const displayed=getFilteredAdminTickets();
+
+  if(!displayed.length){
+    return '<div class="admin-state-card">'+
+      '<div class="admin-state-icon">🎫</div>'+
+      '<h3>No Support Tickets Found</h3>'+
+      '<p>'+(adminTickets.length===0?'No customer support tickets have been submitted yet.':'No tickets match the selected filters.')+'</p>'+
+      (adminStatusFilter!=='all'||adminSearchQuery?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
+    '</div>';
+  }
+
+  return '<div class="admin-table-wrap">'+
+    '<table class="admin-tickets-table">'+
+      '<thead>'+
+        '<tr>'+
+          '<th>Ticket ID</th>'+
+          '<th>Date</th>'+
+          '<th>Submitter</th>'+
+          '<th>Category</th>'+
+          '<th>Subject</th>'+
+          '<th>Priority</th>'+
+          '<th>Status</th>'+
+          '<th style="text-align:right">Action</th>'+
+        '</tr>'+
+      '</thead>'+
+      '<tbody>'+
+        displayed.map(t=>'<tr onclick="openAdminTicketDetails(\''+esc(t.id)+'\')" style="cursor:pointer">'+
+          '<td><code style="font-weight:700;color:#2563eb">'+esc(t.id||'—')+'</code></td>'+
+          '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(t.created_at))+'</td>'+
+          '<td><div style="font-weight:600">'+esc(t.email||'Anonymous')+'</div><small class="muted" style="font-size:11px">'+esc((t.user_id||'').slice(0,8))+'...</small></td>'+
+          '<td><span class="admin-badge" style="background:#f1f5f9;color:#334155">'+esc(formatCategory(t.category))+'</span></td>'+
+          '<td><div style="font-weight:600;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.subject||'No Subject')+'</div><small class="muted" style="display:block;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.message||'')+'</small></td>'+
+          '<td>'+renderPriorityBadge(t.priority)+'</td>'+
+          '<td>'+renderStatusBadge(t.status)+'</td>'+
+          '<td style="text-align:right" onclick="event.stopPropagation()"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminTicketDetails(\''+esc(t.id)+'\')">View</button></td>'+
+        '</tr>').join('')+
+      '</tbody>'+
+    '</table>'+
+  '</div>';
+}
+
+function renderAdminViewContent(){
+  const container=$('adminContent');
+  if(!container)return;
+
+  const filters=[
+    {id:'all',label:'All'},
+    {id:'open',label:'Open'},
+    {id:'in_progress',label:'In Progress'},
+    {id:'resolved',label:'Resolved'},
+    {id:'closed',label:'Closed'}
+  ];
+
+  container.innerHTML='<div class="admin-view-shell">'+
+    '<div class="admin-toolbar">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">'+
+          '<span class="admin-header-badge">'+
+            '<svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>'+
+            'Authoritative Access'+
+          '</span>'+
+          '<span class="muted" style="font-size:12px">Server-Verified Admin Session</span>'+
+        '</div>'+
+        '<h2>Super Admin Console</h2>'+
+        '<p class="muted">Authoritative support ticket triage, customer issue audit, and system oversight.</p>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<button type="button" class="ghost" id="adminRefreshBtn" onclick="refreshAdminTickets()" '+(adminTicketsLoading?'disabled':'')+'>'+
+          (adminTicketsLoading?'<span class="spinner-sm"></span> Refreshing...':'↻ Refresh Tickets')+
+        '</button>'+
+      '</div>'+
+    '</div>'+
+    '<div id="adminStatsContainer">'+renderAdminStatsHtml()+'</div>'+
+    '<div class="admin-controls-card">'+
+      '<div class="admin-controls-row">'+
+        '<div class="admin-filter-group" id="adminFilterGroup">'+
+          filters.map(f=>'<button type="button" class="admin-filter-btn '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+f.label+'</button>').join('')+
+        '</div>'+
+        '<div>'+
+          '<input type="text" id="adminSearchInput" class="admin-search-input" placeholder="Search ID, email, subject..." value="'+esc(adminSearchQuery)+'" oninput="handleAdminSearch(this.value)">'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="adminListContainer">'+renderAdminListHtml()+'</div>'+
+  '</div>';
+}
+
+async function loadAdminTickets(force=false){
+  if(adminTicketsLoading)return;
+  adminTicketsLoading=true;
+  adminTicketsError=null;
+  const refreshBtn=$('adminRefreshBtn');
+  if(refreshBtn){refreshBtn.disabled=true;refreshBtn.textContent='Refreshing...';}
+  const listCont=$('adminListContainer');
+  if(listCont&&!adminTickets.length){
+    listCont.innerHTML='<div class="admin-state-card"><div class="spinner-lg" style="margin:8px auto"></div><h3>Loading Authoritative Tickets...</h3><p>Connecting to Cloudflare D1 ticket database via authorized admin gateway.</p></div>';
+  }
+  try{
+    const res=await workerGet('/api/admin/support-tickets?limit=250');
+    if(res&&res.ok&&Array.isArray(res.data)){
+      adminTickets=res.data;
+      adminTicketsError=null;
+    }else{
+      adminTickets=[];
+      adminTicketsError='Unexpected response format from admin ticket API.';
+    }
+  }catch(err){
+    console.error('Failed to load admin support tickets:',err);
+    if(err?.status===403||err?.code==='FORBIDDEN'){
+      isSuperAdmin=false;
+      updateAdminNavVisibility();
+      toast('Access denied. Super Admin privileges required.','error');
+      nav('dashboard');
+      return;
+    }
+    adminTicketsError=err?.message||'Failed to load support tickets.';
+  }finally{
+    adminTicketsLoading=false;
+    renderAdminViewContent();
+  }
+}
+
+async function refreshAdminTickets(){
+  await loadAdminTickets(true);
+  if(!adminTicketsError)toast('Support tickets refreshed.','ok');
+}
+
+function filterAdminTicketsByStatus(status){
+  adminStatusFilter=status;
+  document.querySelectorAll('#adminFilterGroup .admin-filter-btn').forEach(b=>{
+    b.classList.toggle('active',b.textContent.trim().toLowerCase().replace(/\s+/g,'_')===status||(status==='all'&&b.textContent.trim()==='All'));
+  });
+  const listCont=$('adminListContainer');
+  if(listCont)listCont.innerHTML=renderAdminListHtml();
+}
+
+function handleAdminSearch(val){
+  adminSearchQuery=String(val||'');
+  const listCont=$('adminListContainer');
+  if(listCont)listCont.innerHTML=renderAdminListHtml();
+}
+
+function resetAdminFilters(){
+  adminStatusFilter='all';
+  adminSearchQuery='';
+  renderAdminViewContent();
+}
+
+function openAdminTicketDetails(ticketId){
+  const ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
+  if(!ticket)return;
+  closeAdminTicketDetails();
+
+  const modal=document.createElement('div');
+  modal.id='adminTicketDetailModal';
+  modal.className='admin-ticket-detail-modal';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-ticket-detail-box">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid var(--c-line,#e2e8f0);padding-bottom:14px">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+          '<code style="font-size:16px;font-weight:800;color:#2563eb">'+esc(ticket.id)+'</code>'+
+          renderStatusBadge(ticket.status)+
+          renderPriorityBadge(ticket.priority)+
+        '</div>'+
+        '<h3 style="margin:0;font-size:18px;font-weight:700">'+esc(ticket.subject||'No Subject')+'</h3>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeAdminTicketDetails()" style="font-size:18px;line-height:1;padding:6px 10px">✕</button>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;font-size:13px">'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Submitter Email</span><b>'+esc(ticket.email||'Anonymous')+'</b></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">User UUID</span><code style="font-size:11px">'+esc(ticket.user_id||'—')+'</code></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Category</span><b>'+esc(formatCategory(ticket.category))+'</b></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Vehicle ID</span><code style="font-size:11px">'+esc(ticket.car_id||'None')+'</code></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Created Timestamp</span><span>'+esc(formatAdminDate(ticket.created_at))+'</span></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Last Updated</span><span>'+esc(formatAdminDate(ticket.updated_at))+'</span></div>'+
+    '</div>'+
+    '<div>'+
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Ticket Message Content</div>'+
+      '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:300px;overflow-y:auto">'+esc(ticket.message||'(Empty message content)')+'</div>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--c-line,#e2e8f0);padding-top:14px">'+
+      '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{
+    if(e.target===modal)closeAdminTicketDetails();
+  };
+
+  const onKey=e=>{
+    if(e.key==='Escape'){
+      closeAdminTicketDetails();
+      document.removeEventListener('keydown',onKey);
+    }
+  };
+  document.addEventListener('keydown',onKey);
+
+  document.body.appendChild(modal);
+}
+
+function closeAdminTicketDetails(){
+  const modal=document.getElementById('adminTicketDetailModal');
+  if(modal)modal.remove();
+}
+
+async function adminView(){
+  if(!isSuperAdmin){
+    const verified=await checkSuperAdminStatus(true);
+    if(!verified){
+      toast('Access denied. Super Admin privileges required.','error');
+      nav('dashboard');
+      return;
+    }
+  }
+  renderAdminViewContent();
+  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
+    await loadAdminTickets();
+  }
+}
+
+window.adminView=adminView;
+window.loadAdminTickets=loadAdminTickets;
+window.refreshAdminTickets=refreshAdminTickets;
+window.filterAdminTicketsByStatus=filterAdminTicketsByStatus;
+window.handleAdminSearch=handleAdminSearch;
+window.resetAdminFilters=resetAdminFilters;
+window.openAdminTicketDetails=openAdminTicketDetails;
+window.closeAdminTicketDetails=closeAdminTicketDetails;
 
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();
