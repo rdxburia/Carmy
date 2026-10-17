@@ -47,9 +47,9 @@ function pageTextQuality(value){
  const words=(upper.match(/[A-Z]{2,}|\d{2,}/g)||[]).length;
  const anchors=['POLICY','INSURANCE','INSURED','VEHICLE','REGISTRATION','REGN','PREMIUM','LIABILITY','COVERAGE','CHASSIS','ENGINE','TERMS','CONDITIONS','EXCLUSIONS','CLAIM','DRIVER','ADDRESS','PERIOD','PAYABLE','IDV','NAME','CERTIFICATE','DATE','INSURER','RISK','DAMAGE','COVER','SCHEDULE','TOTAL','VALIDITY','POLICYHOLDER','RENEWAL','MOTOR','DEDUCTIBLE','THIRD PARTY','GST','INVOICE','OWN DAMAGE','PREVIOUS','ENDORSEMENT','CUSTOMER','BENEFIT','LIMITATION','DECLARATION','WARRANTY','PAGE'];
  const hits=new Set(anchors.filter(x=>upper.includes(x))).size;
- const odd=(text.match(/[\\uFFFD\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g)||[]).length;
+ const odd=(text.match(/[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g)||[]).length;
  const ratio=text.length?alnum/text.length:0;
- return{length:text.length,anchor_hits:hits,alnum_ratio:ratio,word_count:words,score:hits*4+Math.min(5,ratio*5)+Math.min(4,words/12)-Math.min(8,odd),needs_ocr:text.replace(/\\s/g,'').length<50||(text.length>90&&(hits<2||ratio<.22))};
+ return{length:text.length,anchor_hits:hits,alnum_ratio:ratio,word_count:words,score:hits*4+Math.min(5,ratio*5)+Math.min(4,words/12)-Math.min(8,odd),needs_ocr:text.replace(/\s/g,'').length<50||(text.length>90&&(hits<2||ratio<.22))};
 }
 function shouldOcrPage(value){return pageTextQuality(value).needs_ocr}
 function chooseBetterPageText(nativeText,ocrText){
@@ -62,7 +62,7 @@ function textRowsForPage(value){return rowsFromText(value)}
 async function pdfData(file,progress){
  const p=await pdf(),d=await p.getDocument({data:await file.arrayBuffer()}).promise,ps=[],pageMeta=[];
  for(let i=1;i<=d.numPages;i++){
-  const pg=await d.getPage(i),tc=await pg.getTextContent();let rs=rows(tc.items),pageText=rs.map(r=>r.text).join('\\n'),ocrUsed=false,quality=pageTextQuality(pageText);
+  const pg=await d.getPage(i),tc=await pg.getTextContent();let rs=rows(tc.items),pageText=rs.map(r=>r.text).join('\n'),ocrUsed=false,quality=pageTextQuality(pageText);
   if(shouldOcrPage(pageText)){
    const o=await ocrPdfPage(d,progress,false,i),choice=chooseBetterPageText(pageText,o.text);
    if(choice.used_ocr){pageText=o.text;rs=textRowsForPage(pageText);ocrUsed=true}
