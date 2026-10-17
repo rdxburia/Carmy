@@ -1877,3 +1877,16 @@ input[type="password"]::-ms-clear {
   gap: 16px;
 }
 
+
+
+/* Super Admin workspace: keep the authenticated admin out of the customer garage shell. */
+body.td-admin-mode .layout > aside,
+body.td-admin-mode #sideMenu,
+body.td-admin-mode #mobileNav { display: none !important; }
+body.td-admin-mode .layout { grid-template-columns: minmax(0, 1fr) !important; }
+body.td-admin-mode .layout > .main {
+  width: 100%; max-width: 1600px; margin-inline: auto;
+  padding: clamp(18px, 3vw, 42px);
+}
+body.td-admin-mode .top { position: sticky; top: 0; z-index: 100; }
+body.td-admin-mode #admin.view.active { min-height: calc(100vh - 70px); }
