@@ -842,17 +842,14 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
+ const primaryAdminEmail='rnyburia@gmail.com';
+ const isPrimaryAdmin=String(user?.email||'').trim().toLowerCase()===primaryAdminEmail;
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
- if(isSuperAdmin)validViews.push('admin');
- if(v==='admin'&&!isSuperAdmin){
-   const verified=await checkSuperAdminStatus(true);
-   if(!verified){
-     toast('Access denied. Super Admin privileges required.','error');
-     v='dashboard';
-   }else{
-     if(!validViews.includes('admin'))validViews.push('admin');
-   }
+ if(v==='admin'&&!isPrimaryAdmin){
+   toast('Page not found.','error');
+   v='dashboard';
  }
+ if(v==='admin'&&isPrimaryAdmin&&!validViews.includes('admin'))validViews.push('admin');
  if(!validViews.includes(v))v='dashboard';
  try{
    if(v==='add'&&car?.vehicle_status==='sold'){
@@ -1217,13 +1214,15 @@ async function start(u,force=false){
      await loadData();
      setAppLoadingProgress(70);
      updateIdentityUI();
+     const primaryAdminEmail='rnyburia@gmail.com';
+     const isPrimaryAdmin=String(u.email||'').trim().toLowerCase()===primaryAdminEmail;
      try{await checkSuperAdminStatus();}catch(_){}
-     setAppLoadingStatus('Preparing your garage...','Rendering your vehicle dashboard');
+     setAppLoadingStatus('Preparing your garage...','Rendering your dashboard');
      setAppLoadingProgress(90);
-     let lastView='dashboard';
-     try{lastView=localStorage.getItem('carcare_last_view')||'dashboard'}catch(e){}
-     const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
-     if(isSuperAdmin)validViews.push('admin');
+     // The designated admin lands directly in the console. The Worker still
+     // independently authorizes every admin API request using the registry.
+     let lastView=isPrimaryAdmin?'admin':'dashboard';
+     const validViews=['dashboard','cars','add','history','docs','report','owner','help','admin'];
      if(!validViews.includes(lastView))lastView='dashboard';
      if(lastView!=='dashboard'){
        let restored=false;
@@ -3459,11 +3458,10 @@ async function loadAdminTickets(force=false){
     if(err?.status===403||err?.code==='FORBIDDEN'){
       isSuperAdmin=false;
       updateAdminNavVisibility();
-      toast('Access denied. Super Admin privileges required.','error');
-      nav('dashboard');
-      return;
+      adminTicketsError='The admin console opened, but the API rejected this account (403). Confirm the deployed Worker is using the active Super Admin registry entry for rnyburia@gmail.com.';
+    }else{
+      adminTicketsError=err?.message||'Failed to load support tickets.';
     }
-    adminTicketsError=err?.message||'Failed to load support tickets.';
   }finally{
     adminTicketsLoading=false;
     renderAdminViewContent();
@@ -3557,13 +3555,10 @@ function closeAdminTicketDetails(){
 }
 
 async function adminView(){
-  if(!isSuperAdmin){
-    const verified=await checkSuperAdminStatus(true);
-    if(!verified){
-      toast('Access denied. Super Admin privileges required.','error');
-      nav('dashboard');
-      return;
-    }
+  const primaryAdminEmail='rnyburia@gmail.com';
+  if(String(user?.email||'').trim().toLowerCase()!==primaryAdminEmail){
+    nav('dashboard');
+    return;
   }
   renderAdminViewContent();
   if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
