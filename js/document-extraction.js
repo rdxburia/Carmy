@@ -103,10 +103,10 @@ function parseInsurance(ps,text){
  const valAfter=(raw,label,pattern)=>{const m=raw.match(label);if(!m)return null;const rest=raw.slice(m.index+m[0].length,Math.min(raw.length,m.index+m[0].length+220));const v=rest.match(pattern);return v?v[0]:null};
  const near=(rs,label,pattern)=>rowValue(rs,label,pattern)||below(rs,label,pattern,220);
  const addPeriod=(i,raw)=>{
-  const d=String.raw\`(\\d{1,2}[-/. ]+(?:[A-Z]{3},?|\\d{1,2})[-/. ,]+\\d{4})\`;
-  let m=raw.match(new RegExp('Period\\\\s+of\\\\s+Own\\\\s+Damage\\\\s*:?\\\\s*'+d+'[\\\\s\\\\S]{0,90}?\\\\bTo\\\\b[\\\\s\\\\S]{0,30}?'+d,'i'));
-  if(!m)m=raw.match(new RegExp('Period\\\\s+of\\\\s+Insurance\\\\s*:?\\\\s*From[\\\\s\\\\S]{0,100}?\\\\b(?:on\\\\s+)?'+d+'[\\\\s\\\\S]{0,120}?\\\\bto\\\\b[\\\\s\\\\S]{0,220}?'+d,'i'));
-  if(!m)m=raw.match(/Valid\\s+From\\s*:?\\s*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{4})[\\s\\S]{0,120}?Valid\\s+Till(?:\\s*\\([^)]*\\))?\\s*:?\\s*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{4})/i);
+  const datePattern=/(\d{1,2}[-/. ]+(?:[A-Z]{3},?|\d{1,2})[-/. ,]+\d{4})/i;
+  let m=raw.match(/Period\s+of\s+Own\s+Damage\s*:?\s*(\d{1,2}[-/. ]+(?:[A-Z]{3},?|\d{1,2})[-/. ,]+\d{4})[\s\S]{0,90}?\bTo\b[\s\S]{0,30}?(\d{1,2}[-/. ]+(?:[A-Z]{3},?|\d{1,2})[-/. ,]+\d{4})/i);
+  if(!m)m=raw.match(/Period\s+of\s+Insurance\s*:?\s*From[\s\S]{0,100}?\b(?:on\s+)?(\d{1,2}[‐\-/. ]+(?:[A-Z]{3},?|\d{1,2})[‐\-/. ,]+\d{4})[\s\S]{0,120}?\bto\b[\s\S]{0,220}?(\d{1,2}[‐\-/. ]+(?:[A-Z]{3},?|\d{1,2})[‐\-/. ,]+\d{4})/i);
+  if(!m)m=raw.match(/Valid\s+From\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})[\s\S]{0,120}?Valid\s+Till(?:\s*\([^)]*\))?\s*:?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})/i);
   if(m){add('period_from',date(m[1]),i+1,'policy period label',5);add('period_to',date(m[2]),i+1,'policy period label',5)}
  };
  for(let i=0;i<pageTexts.length;i++){
