@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - chore/step0-project-governance
+      - feat/multipage-policy-extraction
   pull_request:
     branches:
       - main
@@ -39,6 +40,7 @@ jobs:
         run: |
           node --test \
             tests/customer-portal-regression.test.mjs \
+            tests/document-extraction-quality.test.cjs \
             tests/fleet-scalability.test.mjs \
             tests/idle-session-auth.test.mjs \
             tests/password-change.test.mjs \
