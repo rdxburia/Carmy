@@ -181,12 +181,19 @@ function createAppHarness(overrides = {}) {
       updateUser: async () => ({ data: { user: {} }, error: null }),
       signOut: async () => ({ error: null })
     },
-    rpc: async () => ({ data: true, error: null }),
+    storage: {
+      from: () => ({
+        upload: async () => ({ error: null }),
+        remove: async () => ({ error: null }),
+        createSignedUrl: async () => ({ data: { signedUrl: "https://test.supabase/signed" }, error: null })
+      })
+    },
     from: () => {
       const builder = {
         select: () => builder,
         eq: () => builder,
         order: () => builder,
+        limit: () => builder,
         insert: () => builder,
         update: () => builder,
         upsert: () => builder,
@@ -329,7 +336,8 @@ function createAppHarness(overrides = {}) {
     atob: globalThis.atob || ((s) => Buffer.from(s, 'base64').toString('binary')),
     btoa: globalThis.btoa || ((s) => Buffer.from(s, 'binary').toString('base64')),
     Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console,
-    URL: window.URL,
+    confirm: overrides.confirm || (() => true),
+    prompt: overrides.prompt || ((msg, def) => def !== undefined ? def : ''),
     fetch: overrides.fetch || (async () => new Response(JSON.stringify({ ok: true, data: [] }))),
     ...overrides
   };
@@ -1614,7 +1622,7 @@ test("Form 29/30: 1. Form 29 generation with valid data produces non-blank PDF",
   const res = await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)}, { scope: 'form_29' })`);
   assert.equal(res.success, true, "Form 29 generation must succeed");
   assert.ok(res.blob.size >= 5000, "Output blob must be non-blank and >= 5000 bytes");
-  assert.ok(res.pdfName.startsWith("Form_29_"), "PDF filename must be Form_29_<Buyer>_<Year>.pdf");
+  assert.equal(res.pdfName, "Transfer_Documents_CH01AB1234.pdf", "PDF filename must be Transfer_Documents_<VEHICLE_NUMBER>.pdf");
   assert.equal(res.mapped.registration_no, "CH01AB1234");
   assert.equal(res.mapped.transferee_name, "Anita Verma");
   assert.equal(res.mapped.transferor_name, "Ramesh Sharma");
@@ -1632,7 +1640,7 @@ test("Form 29/30: 2. Form 30 generation with valid data produces non-blank PDF",
   const res = await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)}, { scope: 'form_30' })`);
   assert.equal(res.success, true, "Form 30 generation must succeed");
   assert.ok(res.blob.size >= 5000, "Output blob must be non-blank");
-  assert.ok(res.pdfName.startsWith("Form_30_"), "PDF filename must start with Form_30_");
+  assert.equal(res.pdfName, "Transfer_Documents_CH01AB1234.pdf", "PDF filename must be Transfer_Documents_<VEHICLE_NUMBER>.pdf");
   assert.equal(res.mapped.transferee_age, 36);
   assert.equal(res.mapped.transferor_age, 45);
 });
@@ -1994,4 +2002,352 @@ test("Worker: 16. /api/form-templates and /api/transfer/validate endpoints", asy
   assert.equal(resInv.status, 400);
   const jsonInv = await resInv.json();
   assert.equal(jsonInv.error.code, "VALIDATION_FAILED");
+});
+
+test("Transfer Documents Polish: 17. Statutory date formatting produces correct ordinals and full month", (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const testCases = [
+    { date: "2026-10-01", expectedDay: "1st", expectedMonth: "October" },
+    { date: "2026-10-02", expectedDay: "2nd", expectedMonth: "October" },
+    { date: "2026-10-03", expectedDay: "3rd", expectedMonth: "October" },
+    { date: "2026-10-11", expectedDay: "11th", expectedMonth: "October" },
+    { date: "2026-10-12", expectedDay: "12th", expectedMonth: "October" },
+    { date: "2026-10-13", expectedDay: "13th", expectedMonth: "October" },
+    { date: "2026-10-17", expectedDay: "17th", expectedMonth: "October" },
+    { date: "2026-10-21", expectedDay: "21st", expectedMonth: "October" },
+    { date: "2026-10-22", expectedDay: "22nd", expectedMonth: "October" },
+    { date: "2026-10-23", expectedDay: "23rd", expectedMonth: "October" },
+    { date: "2026-10-31", expectedDay: "31st", expectedMonth: "October" },
+    { date: "2026-01-15", expectedDay: "15th", expectedMonth: "January" }
+  ];
+
+  for(const tc of testCases){
+    const mapped = h.eval(`mapOwnershipTransferData({
+      ...${JSON.stringify(syntheticValidTransfer)},
+      sale_date: "${tc.date}"
+    })`);
+    assert.equal(mapped.sale_day, tc.expectedDay, `Day ordinal for ${tc.date} must be ${tc.expectedDay}`);
+    assert.equal(mapped.sale_month, tc.expectedMonth, `Month name for ${tc.date} must be ${tc.expectedMonth}`);
+    assert.equal(mapped.sale_year, tc.date.slice(0, 4));
+
+    // Verify rendered packet HTML text
+    const packet = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mapped)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+    const plainPacket = packet.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    assert.ok(plainPacket.includes(`${tc.expectedDay} day of ${tc.expectedMonth} ${tc.date.slice(0, 4)}`), `Rendered packet must include "${tc.expectedDay} day of ${tc.expectedMonth} ${tc.date.slice(0, 4)}"`);
+    assert.ok(!packet.includes("day of the year"), `Rendered packet must never include "day of the year"`);
+  }
+});
+
+test("Transfer Documents Polish: 18. Generated filename standardizes registration number HP 37 J 0628 -> Transfer_Documents_HP37J0628.pdf", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-fname-test", email: "fname@example.com" };
+    car = { id: "c-fname", registration_no: "HP 37 J 0628", make_model: "Toyota Innova", vin: "MB1234567890", engine_no: "2KD1234567" };
+  `);
+
+  const payload = {
+    ...syntheticValidTransfer,
+    registration_no: "HP 37 J 0628",
+    car_id: "c-fname"
+  };
+
+  const res = await h.eval(`generateTransferDocuments(${JSON.stringify(payload)}, { scope: 'full' })`);
+  assert.equal(res.success, true);
+  assert.equal(res.pdfName, "Transfer_Documents_HP37J0628.pdf", "Output filename must normalize spaces to Transfer_Documents_HP37J0628.pdf");
+});
+
+test("Transfer Documents Polish: 19. Engine and Chassis labels appear cleanly without duplicate placeholders and support EV Motor No.", (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // ICE Vehicle (Petrol/Diesel)
+  const iceMapped = h.eval(`mapOwnershipTransferData({
+    ...${JSON.stringify(syntheticValidTransfer)},
+    fuel: "Petrol",
+    chassis_no: "MA3EABCD123456789",
+    engine_no: "K12M1234567"
+  })`);
+  assert.ok(iceMapped.chassis_block.includes("Chassis No. <b>MA3EABCD123456789</b>"));
+  assert.ok(iceMapped.engine_block.includes("Engine No. <b>K12M1234567</b>"));
+  assert.ok(!iceMapped.chassis_block.includes("Chassis No: Chassis No:"));
+  assert.ok(!iceMapped.engine_block.includes("Engine No: Engine No:"));
+
+  // EV / Battery Operated Vehicle
+  const evMapped = h.eval(`mapOwnershipTransferData({
+    ...${JSON.stringify(syntheticValidTransfer)},
+    fuel: "Electric",
+    chassis_no: "TATAEV9876543210",
+    engine_no: "MOTOREV5555"
+  })`);
+  assert.ok(evMapped.chassis_block.includes("Chassis No. <b>TATAEV9876543210</b>"));
+  assert.ok(evMapped.engine_block.includes("Motor No. <b>MOTOREV5555</b>"), "EV must use Motor No. terminology");
+  assert.ok(!evMapped.engine_block.includes("Engine No."), "EV must not label motor as Engine No.");
+});
+
+test("Transfer Documents Polish: 20. Chassis number pencil print box is permanently removed while duplicate badge and chassis number remain", (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(syntheticValidTransfer)})`);
+  const packet = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mapped)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+
+  assert.ok(!packet.includes("chassis-pencil-box"), "Form 29 must NOT render chassis-pencil-box container");
+  assert.ok(!packet.includes("CHASSIS NUMBER PENCIL PRINT"), "Pencil print box must be permanently removed");
+  assert.ok(!packet.includes("Trace chassis impression here"), "Helper text must be removed");
+  assert.ok(packet.includes("DUPLICATE COPY"), "Duplicate Form 29 copy must remain labeled");
+  assert.ok(packet.includes(mapped.chassis_no), "Chassis number must remain cleanly populated in official form text");
+});
+
+test("Transfer Documents Polish: 21. User-facing labels consistently use 'Transfer Documents'", () => {
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.ok(html.includes("Transfer Documents"), "index.html dashboard button must use 'Transfer Documents'");
+  assert.ok(!html.includes("📄 Form 29 &amp; 30"), "Old 'Form 29 & 30' button must be replaced");
+});
+
+test("Transfer Documents Polish: 22. Archived transfer documents can be edited after Sold status and marked (Revised Copy)", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-sold-edit-test", email: "sold@example.com" };
+    car = {
+      id: "c-sold-1",
+      registration_no: "HP37J0628",
+      vehicle_status: "sold",
+      sold_at: "2026-10-15T10:00:00Z",
+      sold_to_name: "Anita Verma"
+    };
+    cars = [car];
+    docs = [{
+      id: "doc-arch-1",
+      car_id: "c-sold-1",
+      user_id: "u-sold-edit-test",
+      document_type: "other",
+      document_name: "Ownership Transfer (HP37J0628)",
+      archive_name: "Transfer Documents",
+      file_name: "Transfer_Documents_HP37J0628.pdf",
+      archived_at: "2026-10-15T10:00:00Z"
+    }];
+  `);
+
+  // Regenerate with revised buyer details
+  const revisedPayload = {
+    ...syntheticValidTransfer,
+    registration_no: "HP37J0628",
+    car_id: "c-sold-1",
+    transferee_name: "Anita Verma Sharma"
+  };
+
+  const res = await h.eval(`generateTransferDocuments(${JSON.stringify(revisedPayload)}, {
+    scope: 'full',
+    editingDocId: 'doc-arch-1',
+    isRevision: true
+  })`);
+
+  assert.equal(res.success, true);
+  assert.equal(res.isRevision, true, "Must flag isRevision = true");
+  assert.equal(res.pdfName, "Transfer_Documents_HP37J0628.pdf");
+  assert.equal(h.eval("car.vehicle_status"), "sold", "Vehicle Sold status must not be reversed or altered");
+});
+
+test("Transfer Documents Polish: 23. Deleting archived transfer document unlinks sale_history without deleting car, service or RC", async (t) => {
+  const h = createAppHarness({
+    prompt: () => '9876',
+    confirm: () => true
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    localStorage.setItem('carcare_delete_password', '9876');
+    prompt = () => '9876';
+    confirm = () => true;
+    docDeleted = false;
+    saleHistoryUnlinked = false;
+    deletedTables = [];
+
+    user = { id: "u-del-test", email: "del@example.com" };
+    car = { id: "c-del-1", registration_no: "HP37J0628", vehicle_status: "sold" };
+    cars = [car];
+    records = [{ id: "r-1", car_id: "c-del-1", record_type: "Service" }];
+    docs = [{
+      id: "doc-to-del",
+      car_id: "c-del-1",
+      user_id: "u-del-test",
+      storage_path: "u-del-test/c-del-1/archives/Transfer_Documents_HP37J0628.pdf",
+      archive_name: "Transfer Documents",
+      archived_at: "2026-10-15T10:00:00Z"
+    }];
+
+    loadData = async () => {};
+
+    db.from = (table) => ({
+      delete: () => {
+        deletedTables.push(table);
+        return {
+          eq: (k1, v1) => ({
+            eq: (k2, v2) => ({
+              eq: (k3, v3) => ({
+                select: () => ({
+                  maybeSingle: async () => {
+                    if(table === 'documents') docDeleted = true;
+                    return { data: { id: v1 }, error: null };
+                  }
+                })
+              })
+            })
+          })
+        };
+      },
+      update: (payload) => ({
+        eq: (k, v) => {
+          if(table === 'sale_history' && payload.form_document_id === null) saleHistoryUnlinked = true;
+          return Promise.resolve({ data: null, error: null });
+        }
+      }),
+      insert: () => Promise.resolve({ data: null, error: null })
+    });
+
+    db.storage = {
+      from: () => ({
+        remove: async () => ({ error: null })
+      })
+    };
+  `);
+
+  await h.eval(`deleteDoc('doc-to-del', 'u-del-test/c-del-1/archives/Transfer_Documents_HP37J0628.pdf', true)`);
+
+  assert.equal(h.eval("docDeleted"), true, "Archived document must be deleted from documents table");
+  assert.equal(h.eval("saleHistoryUnlinked"), true, "sale_history.form_document_id must be cleanly unlinked");
+  assert.equal(h.eval("deletedTables.join(',')"), "documents", "Only documents table must be touched by deleteDoc");
+  assert.equal(h.eval("car.id"), "c-del-1", "Vehicle record must remain intact");
+  assert.equal(h.eval("car.vehicle_status"), "sold", "Vehicle status must remain preserved");
+  assert.equal(h.eval("records.length"), 1, "Service records must remain intact");
+});
+
+test("Transfer Documents Polish: 24. Legacy templates with 'day of the year' are automatically converted on render", (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const legacyTemplate = '<p>have on the {{sale_day}} day of the year {{sale_year}} sold vehicle {{registration_no}}</p>';
+  const mapped = {
+    sale_day: "17th",
+    sale_month: "October",
+    sale_year: "2026",
+    registration_no: "HP37J0628"
+  };
+
+  const rendered = h.eval(`renderFormTemplate(${JSON.stringify(legacyTemplate)}, ${JSON.stringify(mapped)})`);
+  assert.ok(rendered.includes("17th day of October 2026"), "Legacy template must render 17th day of October 2026");
+  assert.ok(!rendered.includes("day of the year"), "Legacy template must not retain 'day of the year'");
+});
+test("Step 0 Foundation: 25. Registration duplicate check stops registration when duplicate email or phone is reported", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    $('email').value = 'duplicate@example.com';
+    $('password').value = 'Secret123!';
+    $('mobile').value = '9876543210';
+    $('fullName').value = 'Duplicate User';
+    signup = true;
+    toasts = [];
+    toast = (msg, type) => { toasts.push({ msg, type }); };
+    signUpCalled = false;
+
+    db.rpc = async (method, args) => {
+      if (method === 'check_registration_duplicate') {
+        return { data: true, error: null };
+      }
+      return { data: null, error: null };
+    };
+
+    db.auth.signUp = async () => {
+      signUpCalled = true;
+      return { data: null, error: null };
+    };
+  `);
+
+  await h.eval(`handleAuthSubmit({ preventDefault: () => {} })`);
+
+  assert.equal(h.eval("signUpCalled"), false, "signUp must NOT be called when duplicate check returns true");
+  const toasts = h.eval("toasts");
+  assert.ok(toasts.some(t => t.msg.includes("already exists")), "Must display duplicate account toast");
+});
+
+test("Step 0 Foundation: 26. Registration duplicate check gracefully falls back to auth guard if RPC function is missing (PGRST202)", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    $('email').value = 'newuser@example.com';
+    $('password').value = 'Secret123!';
+    $('mobile').value = '9876543210';
+    $('fullName').value = 'New User';
+    signup = true;
+    toasts = [];
+    signUpCalled = false;
+
+    db.rpc = async (method, args) => {
+      if (method === 'check_registration_duplicate') {
+        return { data: null, error: { code: 'PGRST202', message: 'Could not find function check_registration_duplicate' } };
+      }
+      return { data: null, error: null };
+    };
+
+    db.auth.signUp = async () => {
+      signUpCalled = true;
+      return { data: { user: { id: 'u-new', identities: [{ id: 'id-1' }] }, session: null }, error: null };
+    };
+  `);
+
+  await h.eval(`handleAuthSubmit({ preventDefault: () => {} })`);
+
+  assert.equal(h.eval("signUpCalled"), true, "Must proceed to db.auth.signUp when RPC is unmigrated");
+});
+
+test("Step 0 Foundation: 27. Registration handles Supabase enumeration-protected identities: [] as account already exists", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    $('email').value = 'existing@example.com';
+    $('password').value = 'Secret123!';
+    $('mobile').value = '9876543210';
+    $('fullName').value = 'Existing User';
+    signup = true;
+    toasts = [];
+    toast = (msg, type) => { toasts.push({ msg, type }); };
+
+    db.rpc = async (method, args) => {
+      return { data: false, error: null };
+    };
+
+    db.auth.signUp = async () => {
+      return {
+        data: {
+          user: { id: 'u-existing', identities: [] },
+          session: null
+        },
+        error: null
+      };
+    };
+  `);
+
+  await h.eval(`handleAuthSubmit({ preventDefault: () => {} })`);
+
+  const toasts = h.eval("toasts");
+  assert.ok(toasts.some(t => t.msg.includes("already exists")), "Must notify user account already exists instead of showing code verification");
+});
+
+test("Step 0 Foundation: 28. Garage workspace script syntax is valid and type definitions are intact", () => {
+  const wsCode = fs.readFileSync(path.join(root, "js", "garage-workspace.js"), "utf8");
+  assert.doesNotThrow(() => {
+    new vm.Script(wsCode);
+  }, "garage-workspace.js must parse with zero syntax errors");
 });
