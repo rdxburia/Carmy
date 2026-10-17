@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { requireSuperAdmin, recordSuperAdminAudit } from "../worker/src/super-admin.js";
+import worker from "../worker/src/index.js";
 
 const env = {
   SUPABASE_URL: "https://mock.supabase.co",
@@ -82,4 +83,13 @@ test("writes audit events with actor identity and action", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("admin route rejects unauthenticated requests before accessing admin data", async () => {
+  const response = await worker.fetch(
+    new Request("https://worker.test/api/admin/support-tickets"),
+    { ALLOWED_ORIGIN: "https://example.test" }
+  );
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error.code, "UNAUTHORIZED");
 });
