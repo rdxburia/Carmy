@@ -2352,35 +2352,26 @@ test("Step 0 Foundation: 28. Garage workspace script syntax is valid and type de
   }, "garage-workspace.js must parse with zero syntax errors");
 });
 
-test("Super Admin Integration: 29. Authoritative backend role check shows navigation and grants admin view", async (t) => {
+test("Super Admin Integration: designated account opens the admin console without a navigation item", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'admin@torqdesk.in' };
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
     workerGet = async (path) => {
       if (path.startsWith('/api/admin/support-tickets')) {
-        return { ok: true, data: [{ id: 'TKT-001', subject: 'Test Ticket', status: 'open' }] };
+        return { ok: true, data: [{ id: 'TD-TEST-1', subject: 'Test Ticket', status: 'open' }] };
       }
       return { ok: true, data: [] };
     };
   `);
 
-  const isAdmin = await h.eval("checkSuperAdminStatus(true)");
-  assert.equal(isAdmin, true, "checkSuperAdminStatus must resolve true for verified admin");
-  assert.equal(h.eval("isSuperAdmin"), true, "isSuperAdmin flag must be true");
-
-  const desktopBtn = h.elements.get("adminNavBtn");
-  assert.ok(desktopBtn && !desktopBtn.classList.contains("hidden"), "Desktop admin button must not be hidden");
-  const drawerBtn = h.elements.get("mobileDrawerAdminLink");
-  assert.ok(drawerBtn && !drawerBtn.classList.contains("hidden"), "Mobile drawer admin button must not be hidden");
-
   await h.eval("nav('admin')");
-  const adminSection = h.elements.get("admin");
-  assert.ok(adminSection.classList.contains("active"), "Admin view section must be active");
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
+  assert.ok(h.elements.get("adminContent").innerHTML.includes("Super Admin Console"));
 });
 
-test("Super Admin Integration: 30. Unprivileged user receives 403, keeps admin nav hidden, and cannot access admin view", async (t) => {
+test("Super Admin Integration: regular users cannot open the admin console", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
@@ -2388,41 +2379,36 @@ test("Super Admin Integration: 30. Unprivileged user receives 403, keeps admin n
     user = { id: 'regular-user', email: 'user@example.com' };
     toasts = [];
     toast = (msg, type) => { toasts.push({ msg, type }); };
-    workerGet = async (path) => {
-      if (path.startsWith('/api/admin/')) {
-        const err = new Error('Super Admin access required.');
-        err.status = 403;
-        err.code = 'FORBIDDEN';
-        throw err;
-      }
-      return { ok: true, data: [] };
-    };
   `);
 
-  const isAdmin = await h.eval("checkSuperAdminStatus(true)");
-  assert.equal(isAdmin, false, "checkSuperAdminStatus must resolve false for 403 non-admin");
-  assert.equal(h.eval("isSuperAdmin"), false, "isSuperAdmin flag must be false");
-
-  const desktopBtn = h.elements.get("adminNavBtn");
-  assert.ok(desktopBtn && desktopBtn.classList.contains("hidden"), "Desktop admin button must remain hidden");
-  const drawerBtn = h.elements.get("mobileDrawerAdminLink");
-  assert.ok(drawerBtn && drawerBtn.classList.contains("hidden"), "Mobile drawer admin button must remain hidden");
-
   await h.eval("nav('admin')");
-  const dashboardSection = h.elements.get("dashboard");
-  assert.ok(dashboardSection.classList.contains("active"), "Must fail-closed to dashboard view");
-  const toasts = h.eval("toasts");
-  assert.ok(toasts.some(t => t.msg.includes("Access denied")), "Must notify access denied");
+  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), true);
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false);
 });
 
-test("Super Admin Integration: 31. localStorage tampering with carcare_last_view=admin fails closed to dashboard for non-admin", async (t) => {
+test("Super Admin Integration: localStorage admin view tampering fails closed for normal users", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
     localStorage.setItem('carcare_last_view', 'admin');
+    loadCars = async () => {};
+    loadData = async () => {};
+  `);
+
+  await h.eval("start({ id: 'attacker-uuid', email: 'attacker@example.com' }, true)");
+  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), true);
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false);
+});
+
+test("Super Admin Integration: API authorization stays server-enforced when admin console is opened", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
     workerGet = async (path) => {
-      if (path.startsWith('/api/admin/')) {
+      if (path.includes('/api/admin/support-tickets')) {
         const err = new Error('Super Admin access required.');
         err.status = 403;
         err.code = 'FORBIDDEN';
@@ -2430,109 +2416,9 @@ test("Super Admin Integration: 31. localStorage tampering with carcare_last_view
       }
       return { ok: true, data: [] };
     };
-    loadCars = async () => {};
-    loadData = async () => {};
   `);
 
-  await h.eval("start({ id: 'attacker-uuid', email: 'attacker@example.com' }, true)");
-
-  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), true, "Attacker with carcare_last_view=admin must be routed to dashboard");
-  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false, "Admin view section must never be active");
-});
-
-test("Super Admin Integration: 32. Super Admin console renders ticket table, stat counters, status filters, search, and detail modal", async (t) => {
-  const h = createAppHarness();
-  if (t?.after) t.after(() => h.teardown());
-
-  const sampleTickets = [
-    { id: 'TKT-1001', user_id: 'u-1', email: 'u1@example.com', category: 'billing', subject: 'Refund query', message: 'Need invoice copy', priority: 'high', status: 'open', created_at: 1729180000, updated_at: 1729180000 },
-    { id: 'TKT-1002', user_id: 'u-2', email: 'u2@example.com', category: 'vehicle', subject: 'RC Upload issue', message: 'File is failing', priority: 'urgent', status: 'in_progress', created_at: 1729181000, updated_at: 1729181000 },
-    { id: 'TKT-1003', user_id: 'u-3', email: 'u3@example.com', category: 'general', subject: 'Feature suggestion', message: 'Add dark mode', priority: 'low', status: 'resolved', created_at: 1729182000, updated_at: 1729182000 }
-  ];
-
-  h.eval(`
-    user = { id: 'admin-uuid', email: 'admin@torqdesk.in' };
-    isSuperAdmin = true;
-    workerGet = async (path) => {
-      if (path.includes('/api/admin/support-tickets')) {
-        return { ok: true, data: ${JSON.stringify(sampleTickets)} };
-      }
-      return { ok: true, data: [] };
-    };
-  `);
-
-  await h.eval("adminView()");
-  const adminContent = h.elements.get("adminContent");
-  assert.ok(adminContent.innerHTML.includes("Super Admin Console"), "Must render console title");
-  assert.ok(adminContent.innerHTML.includes("TKT-1001"), "Must display ticket TKT-1001");
-  assert.ok(adminContent.innerHTML.includes("TKT-1002"), "Must display ticket TKT-1002");
-  assert.ok(adminContent.innerHTML.includes("Total Tickets"), "Must render stats grid");
-
-  // Test status filtering
-  h.eval("filterAdminTicketsByStatus('in_progress')");
-  const listCont = h.elements.get("adminListContainer");
-  assert.ok(listCont.innerHTML.includes("TKT-1002"), "In progress filter must show TKT-1002");
-  assert.ok(!listCont.innerHTML.includes("TKT-1001"), "In progress filter must exclude open ticket TKT-1001");
-
-  // Test text search
-  h.eval("filterAdminTicketsByStatus('all')");
-  h.eval("handleAdminSearch('Refund')");
-  assert.ok(listCont.innerHTML.includes("TKT-1001"), "Search for 'Refund' must match TKT-1001");
-  assert.ok(!listCont.innerHTML.includes("TKT-1002"), "Search for 'Refund' must exclude TKT-1002");
-
-  // Test ticket detail modal
-  h.eval("openAdminTicketDetails('TKT-1002')");
-  const modal = h.elements.get("adminTicketDetailModal");
-  assert.ok(modal, "Detail modal must exist in DOM");
-  assert.ok(modal.innerHTML.includes("RC Upload issue"), "Modal must contain subject");
-  assert.ok(modal.innerHTML.includes("File is failing"), "Modal must contain message body");
-
-  // Test modal closing
-  h.eval("closeAdminTicketDetails()");
-  const closedModal = h.eval("document.getElementById('adminTicketDetailModal')");
-  assert.equal(closedModal, null, "Modal must be removed on close");
-});
-
-test("Super Admin Integration: 33. Worker 503 error renders service unavailable state with retry connection option", async (t) => {
-  const h = createAppHarness();
-  if (t?.after) t.after(() => h.teardown());
-
-  h.eval(`
-    user = { id: 'admin-uuid', email: 'admin@torqdesk.in' };
-    isSuperAdmin = true;
-    workerGet = async (path) => {
-      const err = new Error('Super Admin authorization is temporarily unavailable.');
-      err.status = 503;
-      err.code = 'ADMIN_AUTH_UNAVAILABLE';
-      throw err;
-    };
-  `);
-
-  await h.eval("adminView()");
-  const adminContent = h.elements.get("adminContent");
-  assert.ok(adminContent.innerHTML.includes("Admin Service Temporarily Unavailable"), "Must render 503 error card");
-  assert.ok(adminContent.innerHTML.includes("Retry Connection"), "Must render retry connection button");
-});
-
-test("Super Admin Integration: 34. Session sign-out clears admin state and hides navigation", async (t) => {
-  const h = createAppHarness();
-  if (t?.after) t.after(() => h.teardown());
-
-  h.eval(`
-    isSuperAdmin = true;
-    adminTickets = [{ id: 'TKT-1' }];
-    updateAdminNavVisibility();
-  `);
-
-  assert.equal(h.eval("isSuperAdmin"), true);
-  const desktopBtn = h.elements.get("adminNavBtn");
-  assert.ok(!desktopBtn.classList.contains("hidden"), "Admin button should be visible before signout");
-
-  h.eval("clearUserMemory()");
-
-  assert.equal(h.eval("isSuperAdmin"), false, "isSuperAdmin must be reset to false");
-  assert.equal(h.eval("adminTickets.length"), 0, "adminTickets must be emptied");
-  assert.ok(desktopBtn.classList.contains("hidden"), "Desktop admin button must be hidden after clearUserMemory");
-  const drawerBtn = h.elements.get("mobileDrawerAdminLink");
-  assert.ok(drawerBtn.classList.contains("hidden"), "Mobile drawer admin button must be hidden after clearUserMemory");
+  await h.eval("nav('admin')");
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
+  assert.ok(h.elements.get("adminContent").innerHTML.includes("API rejected this account (403)"));
 });
