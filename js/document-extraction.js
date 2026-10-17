@@ -186,16 +186,22 @@ async function extract(file,type,onProgress){let text='',ps=[],thumbnail=null,pa
   const initial=parseInsurance(ps,text),critical=['policy_number','period_from','period_to','reg_no','insured_name'];
   const needsSecondPass=critical.some(k=>!initial[k]);
   if(needsSecondPass){
+   const criticalCount=d=>critical.reduce((n,k)=>n+(d[k]?1:0),0);
+   let currentCount=criticalCount(initial);
    for(let i=0;i<x.d.numPages;i++){
     if(pageMeta[i]?.ocr_used)continue;
-    const nativeText=ps[i].map(q=>q.text).join('\\n'),o=await ocrPdfPage(x.d,onProgress,false,i+1),choice=chooseBetterPageText(nativeText,o.text);
-    if(choice.used_ocr){ps[i]=rowsFromText(o.text);pageMeta[i]={...pageMeta[i],text_length:o.text.length,ocr_used:true,quality_score:choice.ocr_quality.score,quality_anchor_hits:choice.ocr_quality.anchor_hits,ocr_reason:'missing-critical-policy-fields'};}
+    const nativeText=ps[i].map(q=>q.text).join('\n'),o=await ocrPdfPage(x.d,onProgress,false,i+1),choice=chooseBetterPageText(nativeText,o.text),ocrRows=rowsFromText(o.text);
+    const candidatePages=ps.slice();candidatePages[i]=ocrRows;
+    const candidateText=candidatePages.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');
+    const candidateData=parseInsurance(candidatePages,candidateText),candidateCount=criticalCount(candidateData);
+    const useOcr=choice.used_ocr||candidateCount>currentCount;
+    if(useOcr){ps[i]=ocrRows;text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');pageMeta[i]={...pageMeta[i],text_length:o.text.length,ocr_used:true,quality_score:choice.ocr_quality.score,quality_anchor_hits:choice.ocr_quality.anchor_hits,ocr_reason:candidateCount>currentCount?'improved-critical-field-coverage':'missing-critical-policy-fields'};currentCount=Math.max(currentCount,candidateCount);}
     else pageMeta[i]={...pageMeta[i],ocr_attempted:true,ocr_quality_score:choice.ocr_quality.score};
     onProgress?.(.5+(i+1)/x.d.numPages*.25,'VERIFYING POLICY PAGES');
    }
-   text=ps.map(r=>r.map(q=>q.text).join('\\n')).join('\\n\\f\\n');
+   text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');
   }
- }
+ } 
  if(type==='puc'){const p0=parsePuc(text);if(!p0.test_date||!p0.certificate_number||!p0.cost||!p0.registration_no){for(let i=0;i<x.d.numPages;i++){if((pageMeta[i]?.text_length||0)>30)continue;const o=await ocrPdfPage(x.d,onProgress,false,i+1);const oRows=rowsFromText(o.text);ps[i]=oRows;pageMeta[i]={page:i+1,text_length:o.text.length,ocr_used:true};}text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n')}}}else{const o=await ocr(file,onProgress,type==='rc');text=o.text;thumbnail=o.thumbnail;ps=[rowsFromText(text)];pageMeta=[{page:1,text_length:text.length,ocr_used:true}]}const classification=classifyDetailed(text,type,{pageCount:ps.length||1}),detected=classification.type,data=type==='insurance'?parseInsurance(ps,text):type==='puc'?parsePuc(text):parseRC(text);if(type==='insurance'&&data?.diagnostics){data.diagnostics.pages=data.diagnostics.pages.map((p,i)=>({...p,ocr_used:!!pageMeta[i]?.ocr_used}));}return{kind:type,detected_type:detected,classification,data,text,thumbnail,page_meta:pageMeta,diagnostics:data?.diagnostics||null}}
 function classifyDetailed(text,slot='',meta={}){
  const t=norm(text),len=t.length;
