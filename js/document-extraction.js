@@ -42,7 +42,32 @@ function rows(items){const a=[];for(const q of items.filter(x=>clean(x.str))){co
 async function ocr(file,progress,rc=false){const b=await createImageBitmap(file),c=document.createElement('canvas');c.width=b.width;c.height=b.height;c.getContext('2d').drawImage(b,0,0);return ocrCanvas(c,progress,rc)}
 async function ocrPdfPage(doc,progress,rc=false,pageNumber=1){const p=await doc.getPage(pageNumber),v=p.getViewport({scale:2}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return ocrCanvas(c,progress,rc)}
 function rowsFromText(text){return String(text||'').split(/\r?\n/).map((line,i)=>({y:i*12,items:[{t:clean(line),x:0,w:line.length}],text:clean(line)})).filter(r=>r.text)}
-async function pdfData(file,progress){const p=await pdf(),d=await p.getDocument({data:await file.arrayBuffer()}).promise,ps=[],pageMeta=[];for(let i=1;i<=d.numPages;i++){const pg=await d.getPage(i),tc=await pg.getTextContent();let rs=rows(tc.items),pageText=rs.map(r=>r.text).join('\n'),ocrUsed=false;if(pageText.replace(/\s/g,'').length<30){const o=await ocrPdfPage(d,progress,false,i);rs=rowsFromText(o.text);pageText=o.text;ocrUsed=true}ps.push(rs);pageMeta.push({page:i,text_length:pageText.length,ocr_used:ocrUsed});progress?.(i/d.numPages*.5,'READING PDF')}return{d,ps,pageMeta}}
+function pageTextQuality(raw){
+ const t=clean(raw),tokens=t.match(/[A-Za-z0-9]{2,}/g)||[],letters=(t.match(/[A-Za-z]/g)||[]).length,visible=(t.match(/[A-Za-z0-9₹:/.-]/g)||[]).length;
+ const anchors=(t.match(/\b(?:policy|insurance|insured|insurer|period|premium|vehicle|registration|regn|chassis|engine|IDV|valid|certificate|schedule|cover|GST|IRDAI|UIN|own damage|third party|liability|NCB|exclusions|conditions|deductible|claim|expiry|issued|total)\b/gi)||[]).length;
+ const known=/\b(?:HDFC\s*ERGO|RELIANCE\s+GENERAL|ROYAL\s+SUNDARAM|ICICI\s+LOMBARD|BAJAJ\s+(?:ALLIANZ|GENERAL)|CHOLAMANDALAM|TATA\s+AIG|NEW\s+INDIA|NATIONAL\s+INSURANCE|UNITED\s+INDIA|ORIENTAL\s+INSURANCE|ACKO|GO\s+DIGIT)\b/i.test(t);
+ const bad=(t.match(/[�\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g)||[]).length;
+ const alphaRatio=visible?letters/visible:0;
+ const tokenRatio=tokens.length?tokens.filter(x=>/[AEIOUY]/i.test(x)).length/tokens.length:0;
+ return Math.max(0,Math.min(100,anchors*2.2+(known?8:0)+Math.min(tokens.length,120)*.055+alphaRatio*2+tokenRatio*2-bad*5));
+}
+function shouldOcrPage(raw){
+ const t=clean(raw);
+ if(t.replace(/\s/g,'').length<45)return true;
+ const score=pageTextQuality(t);
+ const bad=(t.match(/[�\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g)||[]).length;
+ if(bad>0||score<8)return true;
+ // Embedded-font PDFs can return plausible-looking but semantically garbled text.
+ return !/\b(?:policy|insurance|insured|period|premium|vehicle|registration|regn|chassis|engine|certificate|schedule|coverage|liability|conditions|exclusions|validity|claim|IDV|IRDAI|GST|HDFC|RELIANCE|SUNDARAM|LOMBARD|BAJAJ|CHOLAMANDALAM)\b/i.test(t);
+}
+function choosePageText(original,ocrText){
+ const a=clean(original),b=clean(ocrText),qa=pageTextQuality(a),qb=pageTextQuality(b);
+ if(!b)return {text:a,source:'pdf-text',text_quality:qa,ocr_quality:null};
+ if(!a||shouldOcrPage(a)&&qb>=qa)return {text:b,source:'ocr',text_quality:qa,ocr_quality:qb};
+ if(qb>=qa+2)return {text:b,source:'ocr-better-quality',text_quality:qa,ocr_quality:qb};
+ return {text:a,source:'pdf-text',text_quality:qa,ocr_quality:qb};
+}
+async function pdfData(file,progress){const p=await pdf(),d=await p.getDocument({data:await file.arrayBuffer()}).promise,ps=[],pageMeta=[];for(let i=1;i<=d.numPages;i++){const pg=await d.getPage(i),tc=await pg.getTextContent();let rs=rows(tc.items),pageText=rs.map(r=>r.text).join('\n'),ocrAttempted=false,ocrUsed=false,ocrReason=null,quality=pageTextQuality(pageText),ocrQuality=null,source='pdf-text';if(shouldOcrPage(pageText)){ocrAttempted=true;ocrReason=pageText.replace(/\s/g,'').length<45?'low-text':'low-semantic-quality';try{const o=await ocrPdfPage(d,(p,s)=>progress?.(.5+(i-1+p/d.numPages)*.45,s||'OCR PAGE '+i),false,i);const selected=choosePageText(pageText,o.text);pageText=selected.text;quality=selected.text_quality;ocrQuality=selected.ocr_quality;source=selected.source;ocrUsed=selected.source!=='pdf-text';if(ocrUsed)rs=rowsFromText(pageText)}catch(err){ocrReason+=';ocr-error';console.warn('[Torq Desk] Page OCR fallback failed',{page:i,error:String(err?.message||err)})}}ps.push(rs);pageMeta.push({page:i,text_length:pageText.length,ocr_attempted:ocrAttempted,ocr_used:ocrUsed,ocr_reason:ocrReason,source,text_quality:quality,ocr_quality:ocrQuality});progress?.(i/d.numPages*.5,'READING PDF PAGE '+i+'/'+d.numPages)}return{d,ps,pageMeta}}
 async function thumb(d){try{const p=await d.getPage(1),v=p.getViewport({scale:1.1}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return c.toDataURL('image/jpeg',.72)}catch{return null}}
 async function ocrCanvas(c,progress,rc=false){const T=await tess();const scale=Math.min(1,3200/c.width),src=c,base=document.createElement('canvas');base.width=c.width*scale;base.height=c.height*scale;const g=base.getContext('2d');g.filter='grayscale(1) contrast(1.28)';g.drawImage(src,0,0,base.width,base.height);c=base;const zones=rc?[{x:0,w:1},{x:0,w:.6},{x:.4,w:.6}]:[{x:0,w:1}],out=[];for(let i=0;i<zones.length;i++){const z=zones[i],zC=document.createElement('canvas');zC.width=c.width*z.w;zC.height=c.height;zC.getContext('2d').drawImage(c,c.width*z.x,0,zC.width,zC.height,0,0,zC.width,zC.height);const r=await T.recognize(zC,'eng',{config:'--psm 6',logger:m=>progress?.(.5+(i+(m.progress||0))/zones.length*.5,rc?'RC OCR':'OCR')});out.push(r.data.text||'')}return{text:out.join('\n'),thumbnail:c.toDataURL('image/jpeg',.75)}}
 function rowValue(rs,label,pat){for(const r of rs){const m=r.text.match(label);if(!m)continue;let p=m.index+m[0].length,pos=0;for(const c of r.items){const s=pos;pos+=c.t.length+1;if(s+c.t.length<=p)continue;const x=c.t.match(pat);if(x)return x[0]}}return null}
@@ -201,5 +226,5 @@ function classifyDetailed(text,slot='',meta={}){
  return{type:detected,scores,matchedSignals,confidence,slot_score:slotScore,redirect,ambiguous:!insuranceHardRule&&(detected==='other'||(top[1]-second[1]<3)),page_count:pageCount,hard_rules:{insurance:insuranceHardRule,puc_title:pucTitle,puc_signals:pucSignals,multi_page:pageCount>2}};
 }
 function classify(text,slot='',meta={}){return classifyDetailed(text,slot,meta).type}
-window.CarmyExtraction={extract,parseRC,parseInsurance:parseInsurance,parsePuc,validate,reg,date,canonicalInsurer:insurer,classifyDocument:classify,classifyDetailed};
+window.CarmyExtraction={extract,parseRC,parseInsurance:parseInsurance,parsePuc,validate,reg,date,canonicalInsurer:insurer,classifyDocument:classify,classifyDetailed,pageTextQuality,shouldOcrPage,choosePageText};
 })();
