@@ -1,0 +1,30 @@
+name: Policy extraction regression
+
+on:
+  push:
+    branches:
+      - fix/multipage-policy-ocr-extraction
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy-extraction-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check extraction source syntax
+        run: node --check js/document-extraction.js
+      - name: Check regression test syntax
+        run: node --check tests/document-extraction-multipage.test.mjs
+      - name: Run multi-page extraction regression tests
+        run: node --test tests/document-extraction-multipage.test.mjs
