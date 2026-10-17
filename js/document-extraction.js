@@ -194,7 +194,7 @@ async function extract(file,type,onProgress){let text='',ps=[],thumbnail=null,pa
     const candidatePages=ps.slice();candidatePages[i]=ocrRows;
     const candidateText=candidatePages.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');
     const candidateData=parseInsurance(candidatePages,candidateText),candidateCount=criticalCount(candidateData);
-    const useOcr=choice.used_ocr||candidateCount>currentCount;
+    const useOcr=candidateCount>currentCount||(choice.used_ocr&&candidateCount>=currentCount);
     if(useOcr){ps[i]=ocrRows;text=ps.map(r=>r.map(q=>q.text).join('\n')).join('\n\f\n');pageMeta[i]={...pageMeta[i],text_length:o.text.length,ocr_used:true,quality_score:choice.ocr_quality.score,quality_anchor_hits:choice.ocr_quality.anchor_hits,ocr_reason:candidateCount>currentCount?'improved-critical-field-coverage':'missing-critical-policy-fields'};currentCount=Math.max(currentCount,candidateCount);}
     else pageMeta[i]={...pageMeta[i],ocr_attempted:true,ocr_quality_score:choice.ocr_quality.score};
     onProgress?.(.5+(i+1)/x.d.numPages*.25,'VERIFYING POLICY PAGES');
