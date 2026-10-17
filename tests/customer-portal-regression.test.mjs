@@ -2351,3 +2351,74 @@ test("Step 0 Foundation: 28. Garage workspace script syntax is valid and type de
     new vm.Script(wsCode);
   }, "garage-workspace.js must parse with zero syntax errors");
 });
+
+test("Super Admin Integration: designated account opens the admin console without a navigation item", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async (path) => {
+      if (path.startsWith('/api/admin/support-tickets')) {
+        return { ok: true, data: [{ id: 'TD-TEST-1', subject: 'Test Ticket', status: 'open' }] };
+      }
+      return { ok: true, data: [] };
+    };
+  `);
+
+  await h.eval("nav('admin')");
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
+  assert.ok(h.elements.get("adminContent").innerHTML.includes("Super Admin Console"));
+});
+
+test("Super Admin Integration: regular users cannot open the admin console", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'regular-user', email: 'user@example.com' };
+    toasts = [];
+    toast = (msg, type) => { toasts.push({ msg, type }); };
+  `);
+
+  await h.eval("nav('admin')");
+  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), true);
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false);
+});
+
+test("Super Admin Integration: localStorage admin view tampering fails closed for normal users", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    localStorage.setItem('carcare_last_view', 'admin');
+    loadCars = async () => {};
+    loadData = async () => {};
+  `);
+
+  await h.eval("start({ id: 'attacker-uuid', email: 'attacker@example.com' }, true)");
+  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), true);
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false);
+});
+
+test("Super Admin Integration: API authorization stays server-enforced when admin console is opened", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async (path) => {
+      if (path.includes('/api/admin/support-tickets')) {
+        const err = new Error('Super Admin access required.');
+        err.status = 403;
+        err.code = 'FORBIDDEN';
+        throw err;
+      }
+      return { ok: true, data: [] };
+    };
+  `);
+
+  await h.eval("nav('admin')");
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
+  assert.ok(h.elements.get("adminContent").innerHTML.includes("API rejected this account (403)"));
+});
