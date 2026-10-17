@@ -844,6 +844,7 @@ async function nav(v){
  closeSideMenu();
  const primaryAdminEmail='rnyburia@gmail.com';
  const isPrimaryAdmin=String(user?.email||'').trim().toLowerCase()===primaryAdminEmail;
+ document.body.classList.toggle('td-admin-mode',v==='admin'&&isPrimaryAdmin);
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(v==='admin'&&!isPrimaryAdmin){
    toast('Page not found.','error');
