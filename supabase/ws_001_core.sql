@@ -93,7 +93,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   target_org uuid;
 begin
@@ -129,7 +129,7 @@ begin
   end if;
   return null;
 end;
-$;
+$$;
 revoke all on function public.ws_assert_active_owner() from public, anon, authenticated;
 
 drop trigger if exists ws_organizations_active_owner on public.ws_organizations;

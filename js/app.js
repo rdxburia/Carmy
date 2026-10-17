@@ -1784,19 +1784,21 @@ function ownerProfileView(){
        msgEl.style.border=isErr?'1px solid rgba(239,68,68,0.2)':'1px solid rgba(34,197,94,0.2)';
        msgEl.textContent=txt;
      };
-     if(!cur)return showMsg('Please enter your current password.');
-     if(!neu||neu.length<8)return showMsg('New password must be at least 8 characters long.');
-     if(!/[A-Za-z]/.test(neu)||!/[0-9]/.test(neu))return showMsg('New password must contain both letters and numbers.');
-     if(neu!==cnf)return showMsg('New password and confirmation do not match.');
-     if(cur===neu)return showMsg('New password must be different from current password.');
+     const validationError=window.CarmyPasswordChange.validate(cur,neu,cnf);
+     if(validationError)return showMsg(validationError);
 
      cpBtn.disabled=true;cpBtn.textContent='VERIFYING & UPDATING...';
      try{
-       const verifyRes=await db.auth.signInWithPassword({email:user.email,password:cur});
-       if(verifyRes.error)return showMsg('Current password is incorrect. Please check and try again.');
-       const updateRes=await db.auth.updateUser({password:neu});
-       if(updateRes.error)return showMsg('Password update failed: '+(updateRes.error.message||'Unknown error'));
-       showMsg('Password updated successfully!',false);
+       const result=await window.CarmyPasswordChange.changePassword({
+         createClient:(url,key,options)=>window.supabase.createClient(url,key,options),
+         url:U,anonKey:K,email:user.email,currentPassword:cur,newPassword:neu,confirmation:cnf,auth:db.auth
+       });
+       if(result.error){
+         if(result.stage==='verify')return showMsg('Current password is incorrect. Please check and try again.');
+         if(result.stage==='revoke-others')return showMsg('Password updated, but other sessions could not be revoked. Please sign out and back in, then retry session review.');
+         return showMsg((result.stage==='validation'?'':'Password update failed: ')+(result.error.message||'Please check your input and try again.'));
+       }
+       showMsg('Password updated successfully. Other sessions have been signed out.',false);
        if($('cpCurrent'))$('cpCurrent').value='';
        if($('cpNew'))$('cpNew').value='';
        if($('cpConfirm'))$('cpConfirm').value='';
