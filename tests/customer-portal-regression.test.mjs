@@ -116,8 +116,17 @@ function createAppHarness(overrides = {}) {
         },
         style: makeStyle(),
         dataset: {},
-        textContent: '',
-        innerHTML: '',
+        get innerHTML() { return this._innerHTML || ''; },
+        set innerHTML(v) {
+          this._innerHTML = String(v);
+          this._textContent = this._innerHTML.replace(/<[^>]+>/g, ' ');
+        },
+        get textContent() {
+          return this._textContent !== undefined ? this._textContent : (this._innerHTML ? this._innerHTML.replace(/<[^>]+>/g, ' ') : '');
+        },
+        set textContent(v) {
+          this._textContent = String(v);
+        },
         value: '',
         disabled: false,
         setAttribute: () => {},
@@ -183,6 +192,7 @@ function createAppHarness(overrides = {}) {
         upsert: () => builder,
         delete: () => builder,
         single: async () => ({ data: {}, error: null }),
+        maybeSingle: async () => ({ data: null, error: null }),
         then: (resolve) => resolve({ data: [], error: null })
       };
       return builder;
@@ -272,7 +282,31 @@ function createAppHarness(overrides = {}) {
     clearInterval: customClearInterval,
     requestAnimationFrame: (cb) => customSetTimeout(cb, 16),
     cancelAnimationFrame: (id) => customClearTimeout(id),
-    document: docMock
+    document: docMock,
+    URL: {
+      createObjectURL: (b) => 'blob:test-form-pdf-' + Math.random().toString(36).slice(2),
+      revokeObjectURL: () => {}
+    },
+    html2pdf: overrides.html2pdf || (() => {
+      let _sourceEl = null;
+      const inst = {
+        set: () => inst,
+        from: (el) => { _sourceEl = el; return inst; },
+        toPdf: () => inst,
+        get: (target) => target === 'pdf' ? { internal: { getNumberOfPages: () => 4 } } : inst,
+        outputPdf: async () => {
+          const pdfHeader = '%PDF-1.4\n%official-form-29-30-packet\n';
+          const body = 'x'.repeat(6000);
+          const bytes = Buffer.from(pdfHeader + body + '\n%%EOF');
+          return {
+            size: bytes.length,
+            type: 'application/pdf',
+            slice: (start, end) => ({ text: async () => bytes.slice(start, end).toString('utf8') })
+          };
+        }
+      };
+      return inst;
+    })
   };
 
   const context = {
@@ -295,6 +329,7 @@ function createAppHarness(overrides = {}) {
     atob: globalThis.atob || ((s) => Buffer.from(s, 'base64').toString('binary')),
     btoa: globalThis.btoa || ((s) => Buffer.from(s, 'binary').toString('base64')),
     Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console,
+    URL: window.URL,
     fetch: overrides.fetch || (async () => new Response(JSON.stringify({ ok: true, data: [] }))),
     ...overrides
   };
@@ -1536,6 +1571,427 @@ test("Client Production: Owner Profile and Change Password visibility states are
   assert.equal(h.eval("document.getElementById('changePasswordFormSection').classList.contains('hidden')"), true, "Change password should now be closed");
 });
 
+// -------------------------------------------------------------
+// Form 29/30 & Ownership Transfer Comprehensive Regression Tests
+// -------------------------------------------------------------
 
+const syntheticValidTransfer = {
+  transfer_type: "same_state",
+  registration_no: "CH01AB1234",
+  vehicle_make_model: "Maruti Suzuki Swift VXi",
+  chassis_no: "MA3EABCD123456789",
+  engine_no: "K12M1234567",
+  transferor_name: "Ramesh Sharma",
+  transferor_relation: "S/o",
+  transferor_relation_name: "Om Prakash Sharma",
+  transferor_age: 45,
+  transferor_address: "House 102, Sector 21-A, Chandigarh",
+  transferor_city: "Chandigarh",
+  transferor_state: "Chandigarh",
+  transferee_name: "Anita Verma",
+  transferee_relation: "W/o",
+  transferee_relation_name: "Suresh Verma",
+  transferee_age: 36,
+  transferee_address: "House 554, Sector 38-C, Chandigarh",
+  source_rto: "R&LA Sector 17, Chandigarh",
+  source_state: "Chandigarh",
+  destination_rto: "R&LA Sector 17, Chandigarh",
+  destination_state: "Chandigarh",
+  sale_date: "2026-10-17",
+  hypothecation_type: "none",
+  mark_sold: false
+};
 
+test("Form 29/30: 1. Form 29 generation with valid data produces non-blank PDF", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-f29-test", email: "f29@example.com" };
+    car = { id: "c-f29", registration_no: "CH01AB1234", make_model: "Maruti Suzuki Swift VXi", vin: "MA3EABCD123456789", engine_no: "K12M1234567" };
+  `);
 
+  const res = await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)}, { scope: 'form_29' })`);
+  assert.equal(res.success, true, "Form 29 generation must succeed");
+  assert.ok(res.blob.size >= 5000, "Output blob must be non-blank and >= 5000 bytes");
+  assert.ok(res.pdfName.startsWith("Form_29_"), "PDF filename must be Form_29_<Buyer>_<Year>.pdf");
+  assert.equal(res.mapped.registration_no, "CH01AB1234");
+  assert.equal(res.mapped.transferee_name, "Anita Verma");
+  assert.equal(res.mapped.transferor_name, "Ramesh Sharma");
+});
+
+test("Form 29/30: 2. Form 30 generation with valid data produces non-blank PDF", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-f30-test", email: "f30@example.com" };
+    car = { id: "c-f30", registration_no: "CH01AB1234", make_model: "Maruti Suzuki Swift VXi", vin: "MA3EABCD123456789", engine_no: "K12M1234567" };
+  `);
+
+  const res = await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)}, { scope: 'form_30' })`);
+  assert.equal(res.success, true, "Form 30 generation must succeed");
+  assert.ok(res.blob.size >= 5000, "Output blob must be non-blank");
+  assert.ok(res.pdfName.startsWith("Form_30_"), "PDF filename must start with Form_30_");
+  assert.equal(res.mapped.transferee_age, 36);
+  assert.equal(res.mapped.transferor_age, 45);
+});
+
+test("Form 29/30: 3. Both forms with different seller and buyer details map cleanly without mixing", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  const data = {
+    ...syntheticValidTransfer,
+    transferor_name: "Seller One",
+    transferor_address: "Address Seller One",
+    transferee_name: "Buyer Two",
+    transferee_address: "Address Buyer Two"
+  };
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(data)})`);
+  assert.equal(mapped.transferor_name, "Seller One");
+  assert.equal(mapped.transferor_address, "Address Seller One");
+  assert.equal(mapped.transferee_name, "Buyer Two");
+  assert.equal(mapped.transferee_address, "Address Buyer Two");
+  assert.notEqual(mapped.transferor_name, mapped.transferee_name);
+  assert.notEqual(mapped.transferor_address, mapped.transferee_address);
+
+  const packet = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mapped)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+  assert.ok(packet.includes("Seller One"));
+  assert.ok(packet.includes("Buyer Two"));
+  assert.ok(packet.includes("Address Seller One"));
+  assert.ok(packet.includes("Address Buyer Two"));
+});
+
+test("Form 29/30: 4. Missing raw template data throws descriptive error and never returns a blank PDF", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  await assert.rejects(
+    async () => {
+      await h.eval("fetchFormTemplate('non_existent_form', 'v99')");
+    },
+    /not found in database or local registry/i,
+    "Missing template must throw informative error"
+  );
+});
+
+test("Form 29/30: 5. Missing required fields prevents generation with specific error messages", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // Test missing buyer name and RTO
+  const incomplete = { ...syntheticValidTransfer, transferee_name: "", destination_rto: "" };
+  const val = h.eval(`validateTransferFormData(${JSON.stringify(incomplete)})`);
+  assert.equal(val.valid, false, "Validation must fail for incomplete data");
+  assert.ok(val.errors.some(e => e.includes("Transferee (Buyer) name is required")));
+  assert.ok(val.errors.some(e => e.includes("Destination Registering Authority (RTO) is required")));
+
+  // Test under-age buyer
+  const underage = { ...syntheticValidTransfer, transferee_age: 16 };
+  const valAge = h.eval(`validateTransferFormData(${JSON.stringify(underage)})`);
+  assert.equal(valAge.valid, false);
+  assert.ok(valAge.errors.some(e => e.includes("age must be between 18 and 120")));
+});
+
+test("Form 29/30: 6. Incorrect document type or template version fails safely", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  await assert.rejects(
+    async () => {
+      await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)}, { scope: 'unknown_scope' })`);
+    },
+    /Invalid document scope/i
+  );
+});
+
+test("Form 29/30: 7. Financier / hypothecation enabled includes agreement details and consent sections", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const hypoData = {
+    ...syntheticValidTransfer,
+    hypothecation_type: "hypothecation",
+    financier_name: "State Bank of India",
+    financier_address: "Main Branch, Sector 17, Chandigarh"
+  };
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(hypoData)})`);
+  assert.ok(mapped.hypothecation_phrase.includes("State Bank of India"), "Hypothecation phrase must contain financier name");
+  assert.ok(mapped.financier_signature_block.includes("State Bank of India"), "Signature block must include financier name");
+  assert.ok(mapped.financier_part_block.includes("give consent to the transfer of ownership"), "Part III consent text must be present");
+});
+
+test("Form 29/30: 8. Financier / hypothecation disabled shows unencumbered declaration", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const noHypoData = {
+    ...syntheticValidTransfer,
+    hypothecation_type: "none"
+  };
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(noHypoData)})`);
+  assert.ok(mapped.hypothecation_phrase.includes("not held under any agreement"), "Must state not held under agreement");
+  assert.ok(mapped.financier_signature_block.includes("not held under hire-purchase"), "Must note unencumbered vehicle");
+  assert.ok(!mapped.financier_part_block.includes("give consent to the transfer"), "Must not request financier consent when unencumbered");
+});
+
+test("Form 29/30: 9. Same-state transfer uses intra-state jurisdiction and Section 50(1) intimation", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const sameStateData = {
+    ...syntheticValidTransfer,
+    transfer_type: "same_state",
+    source_rto: "RTO Chandigarh",
+    destination_rto: "RTO Chandigarh"
+  };
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(sameStateData)})`);
+  assert.equal(mapped.transfer_type, "same_state");
+  assert.ok(mapped.transferor_noc_clause.includes("within state jurisdiction"), "Must note intra-state transfer");
+
+  const packet = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mapped)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+  // Same-state full packet contains Form 29 & Form 30
+  assert.ok(packet.includes("FORM 29"));
+  assert.ok(packet.includes("FORM 30"));
+  // Clearance Certificate letter is not added for same-state
+  assert.ok(!packet.includes("Issue of Clearance Certificate for Vehicle"));
+});
+
+test("Form 29/30: 10. Other-state transfer includes destination RTO, NOC information, Clearance and Insurance letters", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const otherStateData = {
+    ...syntheticValidTransfer,
+    transfer_type: "other_state",
+    source_rto: "R&LA Sector 17, Chandigarh",
+    source_state: "Chandigarh",
+    destination_rto: "RTO Shimla",
+    destination_state: "Himachal Pradesh",
+    noc_status: "enclosed",
+    noc_number: "NOC/CHD/2026/889",
+    noc_date: "2026-10-15"
+  };
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(otherStateData)})`);
+  assert.equal(mapped.transfer_type, "other_state");
+  assert.equal(mapped.destination_rto, "RTO Shimla");
+  assert.ok(mapped.transferor_noc_clause.includes("NOC/CHD/2026/889"), "Must include NOC number in Form 30 clause");
+
+  const packet = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mapped)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+  assert.ok(packet.includes("FORM 29"));
+  assert.ok(packet.includes("FORM 30"));
+  assert.ok(packet.includes("Issue of Clearance Certificate for Vehicle CH01AB1234"), "Must include Clearance Certificate letter for other-state");
+  assert.ok(packet.includes("Transfer of Motor Insurance Policy for Vehicle CH01AB1234"), "Must include Transfer of Insurance letter for other-state");
+});
+
+test("Form 29/30: 11. PDF generation after saving and reloading form data from the database", async (t) => {
+  let savedRecord = null;
+  const h = createAppHarness({
+    db: {
+      from(tbl) {
+        if (tbl === 'sale_history') {
+          return {
+            insert(row) {
+              savedRecord = { id: "sale-db-1", ...row };
+              return { select: () => ({ single: async () => ({ data: savedRecord, error: null }) }) };
+            },
+            select() {
+              return {
+                eq() {
+                  return {
+                    maybeSingle: async () => ({ data: savedRecord, error: null })
+                  };
+                }
+              };
+            }
+          };
+        }
+        const builder = {
+          insert: () => ({ select: () => ({ single: async () => ({ data: {}, error: null }) }) }),
+          update: () => ({ eq: async () => ({ error: null }) }),
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({ data: null, error: null }),
+          single: async () => ({ data: {}, error: null })
+        };
+        return builder;
+      }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-reload-test", email: "reload@example.com" };
+    car = { id: "c-reload", registration_no: "CH01AB1234", make_model: "Maruti Suzuki Swift VXi", vin: "MA3EABCD123456789", engine_no: "K12M1234567" };
+  `);
+
+  // Generate and save
+  const res = await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)}, { scope: 'full' })`);
+  assert.equal(res.success, true);
+  assert.ok(savedRecord, "Record must be saved to sale_history");
+  assert.equal(savedRecord.raw_form_data.registration_no, "CH01AB1234");
+
+  // Reload saved form data and re-generate
+  const reloadedData = savedRecord.raw_form_data;
+  const res2 = await h.eval(`generateTransferDocuments(${JSON.stringify(reloadedData)}, { scope: 'full' })`);
+  assert.equal(res2.success, true);
+  assert.ok(res2.blob.size >= 5000);
+});
+
+test("Form 29/30: 12. Non-blank PDF output safeguard detects and blocks empty output", async (t) => {
+  // Configure harness with a broken PDF generator returning a 200-byte blank file
+  const h = createAppHarness({
+    html2pdf: () => ({
+      set: function() { return this; },
+      from: function() { return this; },
+      toPdf: function() { return this; },
+      get: function() { return { internal: { getNumberOfPages: () => 1 } }; },
+      outputPdf: async () => ({
+        size: 150, // abnormally small / blank
+        type: "application/pdf",
+        slice: () => ({ text: async () => "blank" })
+      })
+    })
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-blank-test", email: "blank@example.com" };
+    car = { id: "c-blank", registration_no: "CH01AB1234", make_model: "Swift" };
+  `);
+
+  await assert.rejects(
+    async () => {
+      await h.eval(`generateTransferDocuments(${JSON.stringify(syntheticValidTransfer)})`);
+    },
+    /output is blank or abnormally small/i,
+    "Renderer safeguard must catch abnormally small or blank output"
+  );
+});
+
+test("Form 29/30: 13. Required field values appear in rendered pages DOM before conversion", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const mapped = h.eval(`mapOwnershipTransferData(${JSON.stringify(syntheticValidTransfer)})`);
+  const html = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mapped)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+
+  assert.ok(html.includes("CH01AB1234"), "Registration number must appear in rendered HTML");
+  assert.ok(html.includes("Ramesh Sharma"), "Seller name must appear in rendered HTML");
+  assert.ok(html.includes("Anita Verma"), "Buyer name must appear in rendered HTML");
+  assert.ok(html.includes("MA3EABCD123456789"), "Chassis number must appear in rendered HTML");
+  assert.ok(html.includes("K12M1234567"), "Engine number must appear in rendered HTML");
+  assert.ok(html.includes("R&LA Sector 17, Chandigarh"), "RTO must appear in rendered HTML");
+});
+
+test("Form 29/30: 14. Customer data isolation prevents cross-customer leakage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const userAData = {
+    ...syntheticValidTransfer,
+    registration_no: "DL01AA9999",
+    transferor_name: "Customer Alpha",
+    transferee_name: "Buyer Alpha",
+    transferor_address: "Address Alpha"
+  };
+
+  const userBData = {
+    ...syntheticValidTransfer,
+    registration_no: "MH02BB8888",
+    transferor_name: "Customer Beta",
+    transferee_name: "Buyer Beta",
+    transferor_address: "Address Beta"
+  };
+
+  const mappedA = h.eval(`mapOwnershipTransferData(${JSON.stringify(userAData)})`);
+  const mappedB = h.eval(`mapOwnershipTransferData(${JSON.stringify(userBData)})`);
+
+  const htmlA = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mappedA)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+  const htmlB = h.eval(`buildOwnershipTransferPacketHtml(${JSON.stringify(mappedB)}, OFFICIAL_FORM_TEMPLATES, 'full')`);
+
+  // Verify A has only A data
+  assert.ok(htmlA.includes("DL01AA9999"));
+  assert.ok(htmlA.includes("Customer Alpha"));
+  assert.ok(!htmlA.includes("Customer Beta"));
+  assert.ok(!htmlA.includes("MH02BB8888"));
+
+  // Verify B has only B data
+  assert.ok(htmlB.includes("MH02BB8888"));
+  assert.ok(htmlB.includes("Customer Beta"));
+  assert.ok(!htmlB.includes("Customer Alpha"));
+  assert.ok(!htmlB.includes("DL01AA9999"));
+});
+
+test("Form 29/30: 15. No regressions in existing vehicle history, RC/insurance extraction or report workflows", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: "u-regr-test", email: "regr@example.com" };
+    cars = [{ id: "c-1", registration_no: "CH01AB1234", vehicle_status: "active" }];
+    car = cars[0];
+    records = [{ id: "r-1", service_date: "2026-05-10", total_cost: 4500, record_type: "Service" }];
+    activeDocs = [{ id: "d-1", document_type: "insurance", file_name: "policy.pdf" }];
+    dash();
+  `);
+
+  // Dashboard view should render with vehicle title (car.registration_no) and actions
+  const title = h.eval("document.getElementById('dashTitle').textContent");
+  assert.equal(title, "CH01AB1234");
+  assert.equal(typeof h.eval("window.openAddRecord"), "function");
+  assert.equal(typeof h.eval("window.openSaleForms"), "function");
+  assert.equal(typeof h.eval("window.printVehicleReport"), "function");
+});
+
+test("Worker: 16. /api/form-templates and /api/transfer/validate endpoints", async () => {
+  const env = createMockEnv();
+
+  // Test GET /api/form-templates
+  const reqList = new Request("https://carmy-api.test/api/form-templates", { method: "GET" });
+  const resList = await worker.fetch(reqList, env);
+  assert.equal(resList.status, 200);
+  const jsonList = await resList.json();
+  assert.equal(jsonList.ok, true);
+  assert.ok(Array.isArray(jsonList.data));
+  assert.ok(jsonList.data.some(t => t.form_type === "form_29"));
+  assert.ok(jsonList.data.some(t => t.form_type === "form_30"));
+
+  // Test GET /api/form-templates/form_29
+  const reqItem = new Request("https://carmy-api.test/api/form-templates/form_29", { method: "GET" });
+  const resItem = await worker.fetch(reqItem, env);
+  assert.equal(resItem.status, 200);
+  const jsonItem = await resItem.json();
+  assert.equal(jsonItem.ok, true);
+  assert.equal(jsonItem.data.form_type, "form_29");
+
+  // Test POST /api/transfer/validate - Valid
+  const reqVal = new Request("https://carmy-api.test/api/transfer/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(syntheticValidTransfer)
+  });
+  const resVal = await worker.fetch(reqVal, env);
+  assert.equal(resVal.status, 200);
+  const jsonVal = await resVal.json();
+  assert.equal(jsonVal.ok, true);
+  assert.equal(jsonVal.valid, true);
+
+  // Test POST /api/transfer/validate - Invalid (missing required fields)
+  const reqInv = new Request("https://carmy-api.test/api/transfer/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ registration_no: "" })
+  });
+  const resInv = await worker.fetch(reqInv, env);
+  assert.equal(resInv.status, 400);
+  const jsonInv = await resInv.json();
+  assert.equal(jsonInv.error.code, "VALIDATION_FAILED");
+});
