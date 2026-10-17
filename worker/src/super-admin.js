@@ -41,3 +41,31 @@ export async function requireSuperAdmin(user, env, origin) {
     return error("Super Admin authorization is temporarily unavailable.", 503, origin, "ADMIN_AUTH_UNAVAILABLE");
   }
 }
+
+/** Record privileged API access; fail closed if the audit log cannot be written. */
+export async function recordSuperAdminAudit(user, env, origin, action, metadata = {}) {
+  try {
+    const response = await fetch(new URL("/rest/v1/super_admin_audit_log", env.SUPABASE_URL).toString(), {
+      method: "POST",
+      headers: {
+        apikey: env.SUPABASE_SECRET_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        actor_user_id: user.id,
+        action: String(action).slice(0, 120),
+        metadata,
+      }),
+    });
+    if (!response.ok) {
+      console.error("Super Admin audit write failed", response.status);
+      return error("Super Admin audit logging is unavailable.", 503, origin, "ADMIN_AUDIT_UNAVAILABLE");
+    }
+    return null;
+  } catch (err) {
+    console.error("Super Admin audit write failed", err?.message || err);
+    return error("Super Admin audit logging is unavailable.", 503, origin, "ADMIN_AUDIT_UNAVAILABLE");
+  }
+}
