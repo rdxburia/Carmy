@@ -133,5 +133,5 @@ test("ticket workflow: valid admin update uses one atomic D1 batch", async () =>
   assert.equal(response.status, 200);
   const batch = calls.find((call) => call.method === "batch");
   assert.ok(batch);
-  assert.equal(batch.statements.length, 5);
+  assert.equal(batch.statements.length, 3);
 });
