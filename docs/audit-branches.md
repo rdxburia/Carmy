@@ -622,3 +622,7 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 
 ### Production hold
 - Production D1, Worker, and Supabase were not changed. Production ticket contents were never read. No production backup/bookmark/export was performed because staging E2E is not verified; all five production preconditions are not met. Production rollout remains HOLD.
+
+
+### PR #168 follow-up
+- PR [#168](https://github.com/rdxburia/Carmy/pull/168) — `docs(audit): record autonomous staging isolation and rollout hold` — merged at `3e050234079df6157dc718e625be0339584ed3f4`, three documentation files changed. This entry is a post-snapshot inventory correction; the preceding addendum already covers PRs #165–#167.
