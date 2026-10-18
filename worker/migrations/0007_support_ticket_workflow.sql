@@ -26,9 +26,9 @@ SET status = CASE lower(status)
   WHEN 'solved' THEN 'solved'
   WHEN 'resolved' THEN 'solved'
   WHEN 'closed' THEN 'closed'
-  ELSE status
+  ELSE 'pending'
 END
-WHERE lower(status) IN ('open','new','pending','assigned','in_progress','working','need_info','solved','resolved','closed');
+WHERE lower(status) NOT IN ('pending','assigned','working','need_info','solved','closed') OR status <> lower(status);
 
 -- The legacy schema stores title-cased priorities (Normal/Urgent); the workflow
 -- API expects lowercase values. Normalize valid values and use normal for unknowns.
