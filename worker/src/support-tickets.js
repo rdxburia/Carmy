@@ -94,18 +94,20 @@ export async function createSupportTicket(request, env, origin, user, userToken)
           },
         }
       );
-      if (carRes.ok) {
-        const rows = await carRes.json();
-        if (Array.isArray(rows) && rows.length > 0) {
-          carId = carIdRaw; // Confirmed owned by this user
-        } else {
-          return errorFn("The specified vehicle does not belong to your account.", 403, origin, "VEHICLE_FORBIDDEN");
-        }
+      if (!carRes.ok) {
+        console.error("Car ownership check returned HTTP", carRes.status);
+        return errorFn("Vehicle ownership could not be verified right now. Please try again.", 503, origin, "VEHICLE_CHECK_UNAVAILABLE");
+      }
+      const rows = await carRes.json();
+      if (Array.isArray(rows) && rows.length > 0) {
+        carId = carIdRaw; // Confirmed owned by this user
+      } else {
+        return errorFn("The specified vehicle does not belong to your account.", 403, origin, "VEHICLE_FORBIDDEN");
       }
     } catch (err) {
       console.error("Car ownership check failed:", err);
-      // Non-fatal: proceed without car_id rather than fail the entire submission
-      carId = null;
+      // Fail closed: never accept a ticket tied to a vehicle unless ownership is verified.
+      return errorFn("Vehicle ownership could not be verified right now. Please try again.", 503, origin, "VEHICLE_CHECK_UNAVAILABLE");
     }
   }
 
@@ -125,8 +127,9 @@ export async function createSupportTicket(request, env, origin, user, userToken)
       );
     }
   } catch (err) {
-    // Table may not exist yet (migration pending). Allow submission but log.
-    console.warn("Support ticket rate check failed (migration pending?):", err?.message || err);
+    // Fail closed: the rate-limit check is part of abuse protection.
+    console.error("Support ticket rate check unavailable:", err?.message || err);
+    return errorFn("Support ticket service is temporarily unavailable. Please try again later.", 503, origin, "TICKETS_UNAVAILABLE");
   }
 
   // --- Persist ticket in D1 ---
@@ -185,7 +188,7 @@ export async function listUserSupportTickets(request, env, origin, user) {
     return json({ ok: true, data: rows.results ?? [] }, 200, origin);
   } catch (err) {
     console.error("List support tickets failed:", err?.message || err);
-    return json({ ok: true, data: [] }, 200, origin);
+    return errorFn("Failed to retrieve your support tickets. Please try again.", 503, origin, "TICKETS_UNAVAILABLE");
   }
 }
 
@@ -198,8 +201,16 @@ export async function adminListSupportTickets(request, env, origin) {
 
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get("status") || null;
-  const limit = Math.min(Number(url.searchParams.get("limit") || 100), 500);
-  const offset = Number(url.searchParams.get("offset") || 0);
+  const rawLimit = url.searchParams.get("limit");
+  const rawOffset = url.searchParams.get("offset");
+  const limit = rawLimit === null ? 100 : Number(rawLimit);
+  const offset = rawOffset === null ? 0 : Number(rawOffset);
+  const allowedStatuses = new Set(["open", "in_progress", "resolved", "closed"]);
+  if ((statusFilter && !allowedStatuses.has(statusFilter)) ||
+      !Number.isInteger(limit) || limit < 1 || limit > 500 ||
+      !Number.isInteger(offset) || offset < 0) {
+    return errorFn("Invalid ticket filters. Use a supported status, limit 1–500, and non-negative offset.", 400, origin, "INVALID_FILTER");
+  }
 
   try {
     let stmt;

@@ -240,3 +240,43 @@ test("Worker Tickets: adminListSupportTickets serves data only behind the authen
   assert.equal(body.ok, true);
   assert.equal(body.data.length, 2);
 });
+
+
+test("Worker Tickets: vehicle ownership API failures fail closed", async () => {
+  const db = createMockD1();
+  const env = { DB: db, SUPABASE_URL: "https://mock.supabase.co", SUPABASE_SECRET_KEY: "secret" };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  try {
+    const req = new Request("https://worker.test/api/support-tickets", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: "Vehicle Garage & Records", subject: "Vehicle issue", message: "Please help", car_id: "car-1" }),
+    });
+    const res = await createSupportTicket(req, env, "*", { id: "u-1", email: "u1@test.com" }, "token");
+    const body = await res.json();
+    assert.equal(res.status, 503);
+    assert.equal(body.error.code, "VEHICLE_CHECK_UNAVAILABLE");
+    assert.equal(db._store.length, 0);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("Worker Tickets: user list returns an error when D1 is unavailable", async () => {
+  const env = { DB: { prepare() { throw new Error("database unavailable"); } } };
+  const req = new Request("https://worker.test/api/support-tickets");
+  const res = await listUserSupportTickets(req, env, "*", { id: "u-1" });
+  const body = await res.json();
+  assert.equal(res.status, 503);
+  assert.equal(body.ok, false);
+  assert.equal(body.error.code, "TICKETS_UNAVAILABLE");
+});
+
+test("Worker Tickets: admin list rejects invalid filters", async () => {
+  const env = { DB: createMockD1() };
+  for (const query of ["?status=secret", "?limit=0", "?limit=501", "?offset=-1", "?limit=NaN"]) {
+    const req = new Request("https://worker.test/api/admin/support-tickets" + query);
+    const res = await adminListSupportTickets(req, env, "*");
+    const body = await res.json();
+    assert.equal(res.status, 400, query);
+    assert.equal(body.error.code, "INVALID_FILTER", query);
+  }
+});
