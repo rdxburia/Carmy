@@ -22,13 +22,6 @@ function normalizeEvent(row) {
 async function ownedTicket(env,id,userId) {
   return env.DB.prepare("SELECT * FROM support_tickets WHERE id = ? AND user_id = ?").bind(id,userId).first();
 }
-async function event(env,{ticketId,actorId,actorType,type,visibility="public",message=null,metadata={}}) {
-  const result = await env.DB.prepare("INSERT INTO ticket_events (ticket_id,actor_user_id,actor_type,event_type,visibility,message,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .bind(ticketId,actorId,actorType,type,visibility,message,JSON.stringify(metadata),nowSec()).run();
-  await env.DB.prepare("INSERT INTO audit_log (actor_user_id,ticket_id,action,metadata_json,created_at) VALUES (?,?,?,?,?)")
-    .bind(actorId,ticketId,type,JSON.stringify({visibility,...metadata}),nowSec()).run();
-  return result;
-}
 function eventBatchStatements(env,{ticketId,actorId,actorType,type,visibility="public",message=null,metadata={},now}) {
   return [
     env.DB.prepare("INSERT INTO ticket_events (ticket_id,actor_user_id,actor_type,event_type,visibility,message,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)")
