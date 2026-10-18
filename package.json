@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "start": "node scripts/local-preview-server.cjs",
+    "dev": "node scripts/local-preview-server.cjs",
+    "serve": "node scripts/local-preview-server.cjs",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "preview": "wrangler preview",
