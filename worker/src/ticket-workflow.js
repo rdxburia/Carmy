@@ -83,6 +83,7 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
       const ticket=await env.DB.prepare("SELECT * FROM support_tickets WHERE id=?").bind(ticketId).first();
       if(!ticket)return fail("Ticket not found.",404,origin,"NOT_FOUND");
       const now=nowSec(), changes=[], events=[];
+      let effectiveStatus=ticket.status;
       const hasStatus=Object.prototype.hasOwnProperty.call(body,"status");
       const hasAssignee=Object.prototype.hasOwnProperty.call(body,"assignee_id");
       if(hasStatus && hasAssignee)return fail("Update status and assignment separately.",400,origin,"CONFLICTING_CHANGES");
@@ -91,6 +92,7 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
         if(!STATUSES.has(next)||!TRANSITIONS[ticket.status]?.has(next))return fail("Invalid ticket status transition.",409,origin,"INVALID_TRANSITION");
         if(ticket.status==="closed" && next==="working" && Number(ticket.reopen_until||0)<now)return fail("Ticket reopen window has expired.",409,origin,"INVALID_TRANSITION");
         changes.push(["status",next]);
+        effectiveStatus=next;
         events.push({type:"status_changed",metadata:{from:ticket.status,to:next}});
         if(next==="closed")changes.push(["closed_at",now],["reopen_until",now+7*86400],["chat_enabled",0],["chat_enabled_until",null]);
       }
@@ -106,11 +108,12 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
         if(assignee && assignee!==user.id)return fail("You can only assign a ticket to your own verified account.",403,origin,"ASSIGNEE_NOT_ALLOWED");
         if(!["pending","assigned"].includes(ticket.status))return fail("Assignment can only change while a ticket is pending or assigned.",409,origin,"INVALID_TRANSITION");
         changes.push(["assignee_id",assignee],["status",assignee?"assigned":"pending"]);
+        effectiveStatus=assignee?"assigned":"pending";
         events.push({type:"assignment_changed",metadata:{assignee_id:assignee}});
       }
       if(Object.prototype.hasOwnProperty.call(body,"chat_enabled")) {
         if(typeof body.chat_enabled!=="boolean")return fail("chat_enabled must be a boolean.",400,origin,"INVALID_REQUEST");
-        const enabled=body.chat_enabled && ticket.status!=="closed";
+        const enabled=body.chat_enabled && effectiveStatus!=="closed";
         changes.push(["chat_enabled",enabled?1:0],["chat_enabled_until",enabled?now+48*3600:null]);
         events.push({type:"chat_toggled",metadata:{enabled,until:enabled?now+48*3600:null}});
       }
