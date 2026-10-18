@@ -1,6 +1,6 @@
 -- 0007_support_ticket_workflow.sql
 -- ADDITIVE ONLY. Staging only: do not apply to production until the reviewed PR is approved.
--- Existing ticket content is preserved. Existing status values are normalized only where status is NULL.
+-- Existing ticket content is preserved. Known legacy status and priority values are normalized to the workflow vocabulary.
 -- Row-count evidence must be captured on staging before/after applying this migration.
 
 ALTER TABLE support_tickets ADD COLUMN assignee_id TEXT;
