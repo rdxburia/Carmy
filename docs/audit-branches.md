@@ -385,3 +385,31 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | `fix/super-admin-persistent-mode` | 2 | 12 | diverged | js/app.js, tests/customer-portal-regression.test.mjs | **needs review / admin UI** |
 | `fix/super-admin-stale-service-worker-cache` | 2 | 14 | diverged | index.html, sw.js | **needs review / service-worker cache** |
 | `fix/super-admin-workspace-and-ticket-errors` | 5 | 13 | diverged | css/styles.css, js/app.js, tests/customer-portal-regression.test.mjs, tests/workshop-m0-contract.test.mjs | **needs review / admin and ticket UI** |
+
+
+## Full branch comparison table — chunk 6/6 (22 branches)
+
+| Branch | Ahead | Behind | Status | Changed files returned | Classification |
+|---|---:|---:|---|---|---|
+| `fix/support-tickets-fail-closed` | 2 | 11 | diverged | tests/support-tickets-worker.test.mjs, worker/src/support-tickets.js | **risky / authorization fail-closed** |
+| `fix/ticket-workflow-route-dispatch` | 28 | 7 | diverged | package.json, tests/super-admin-auth.test.mjs, tests/ticket-workflow-route.test.mjs, worker/migrations/0007_support_ticket_workflow.sql, worker/src/index.js, worker/src/ticket-workflow.js, wrangler.staging.toml | **risky / migration and Worker routing; do not blind merge** |
+| `fix/torqdesk-auth-modal-dashboard-qa` | 5 | 274 | diverged | css/premium.css, index.html, js/app.js | **stale + needs review** |
+| `fix/torqdesk-logo-wordmark-spacing` | 1 | 269 | diverged | assets/torqdesk-logo.svg | **stale + needs review** |
+| `fix/torqdesk-tagline-popup` | 1 | 275 | diverged | index.html | **stale + needs review** |
+| `fix/ws-a-server-enforced-idle` | 7 | 412 | diverged | index.html, js/app.js, supabase/migrations/20261012060000_carmy_idle_session_enforcement.sql | **risky + stale / session security SQL** |
+| `fix/ws-a-server-enforced-idle-v2` | 0 | 406 | behind | none returned | **stale (zero unique commits)** |
+| `fix/xp-print-progress-live` | 2 | 381 | diverged | index.html, js/app.js | **stale + needs review** |
+| `fix-logo-placement-duplicate-text` | 3 | 521 | diverged | css/premium.css, index.html, js/app.js | **stale + needs review** |
+| `main` | 0 | 0 | identical | none returned | **current baseline** |
+| `perf/motordesk-report-pdf` | 0 | 362 | behind | none returned | **stale (zero unique commits)** |
+| `perf/vehicle-report-page-render` | 1 | 363 | diverged | js/app.js | **stale + needs review** |
+| `repair/ui-performance-audit` | 4 | 573 | diverged | css/premium.css, css/styles.css | **stale + needs review** |
+| `security/r2-file-signature-validation` | 1 | 404 | diverged | .github/workflows/r2-file-validation.yml | **risky + stale / security workflow** |
+| `security/r2-signature-validation-ci` | 0 | 402 | behind | none returned | **stale (zero unique commits)** |
+| `security/ws-a-server-authoritative-idle-session` | 0 | 396 | behind | none returned | **stale (zero unique commits)** |
+| `task3-current-main` | 0 | 452 | behind | none returned | **stale (zero unique commits)** |
+| `task3-report-insurance` | 18 | 498 | diverged | .gitignore, css/premium.css, index.html, js/app.js, js/build-info.js, js/document-extraction.js, package.json, scripts/debug-document-classifier.cjs, scripts/debug-insurance-extraction.cjs, tests/document-classifier-real-files.test.cjs, tests/insurance-real-files.test.cjs | **risky + stale / document extraction and test fixtures** |
+| `temp-carcarecloud-logo-test` | 10 | 523 | diverged | .github/workflows/pages.yml, assets/carcarecloud-icon.svg, assets/carcarecloud-logo.svg, css/premium.css, favicon.svg, icons/apple-touch-icon-180.svg, icons/icon-192.svg, icons/icon-512.svg, index.html, js/app.js | **stale + needs review / branding and workflow** |
+| `ui/motordesk-global-footer-links` | 0 | 337 | behind | none returned | **stale (zero unique commits)** |
+| `ui/remove-info-links-from-mobile-drawer` | 1 | 334 | diverged | index.html | **stale + needs review** |
+| `ui/restore-motordesk-info-popup` | 0 | 320 | behind | none returned | **stale (zero unique commits)** |
