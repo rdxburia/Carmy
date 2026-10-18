@@ -129,3 +129,41 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Rechecked Supabase project inventory: only the existing `Carmy` project is visible; no dedicated staging Supabase project or safe staging credentials are available. Its development branch reports `MIGRATIONS_FAILED`.
 - **STOP POINT reached:** no staging Worker config change/deploy or authenticated E2E test will be attempted without a dedicated staging Supabase project/credentials. Live staging Worker still points to production D1, so staging mutations remain prohibited.
 - Next requires provisioning a dedicated staging Supabase project/credentials (without copying production secrets), then resuming Phase 2. Production remains untouched and held.
+
+
+## 2026-10-19 — Verified staging D1 UUID correction and branch audit chunk 1/6
+- Cloudflare D1 inventory confirms `carmy-ticket-workflow-staging` UUID is `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; production `carmy-cache` is `57c85007-1cf7-470f-bb4d-3b28cbb555b7`. Earlier differing staging UUID spelling was a documentation typo; this entry supersedes it.
+- Appended 24 branch comparison rows to `docs/audit-branches.md` on `audit/complete-branch-pr-inventory-2026-10-19`; each row includes ahead/behind, status, returned changed paths, and triage classification.
+- PR #162 diff contained only `AGENT.md`, `PROGRESS.md`, and `docs/audit-branches.md`; it was merged at `2908e7b763b505366c18df8bae1ebdedd54ff0a9`.
+- PR #163 changes only `wrangler.staging.toml`; config already contains the verified UUID. Policy run `39156681624` passed; Pages run `39156681657` was still in progress at last check. Do not merge until all required checks are green.
+- Supabase settings/secrets unchanged; staging E2E remains stopped pending dedicated staging project. No production ticket content read; no DB writes or Worker deployment.
+
+
+## 2026-10-19 — Branch audit chunk 2/6
+- Appended 24 additional main-vs-branch comparison rows to `docs/audit-branches.md` (branches 25–48 of the 142-branch inventory). Security-sensitive, SQL, Worker, auth, or config diffs are classified risky; no branch is approved for merge by classification alone.
+- Staging D1 UUID correction remains `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, verified against Cloudflare inventory. Supabase secrets untouched; no staging E2E/deploy or production mutation.
+
+
+## 2026-10-19 — Branch audit chunk 3/6
+- Appended 24 additional main-vs-branch rows (branches 49–72 of 142) with exact ahead/behind and changed paths returned by GitHub. SQL/security/Worker changes are classified risky; stale branches are not deleted.
+- Correct staging D1 UUID remains `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. No Supabase secrets changed, no E2E, no D1 writes, and no production ticket content read.
+
+
+## 2026-10-19 — Branch audit chunk 4/6
+- Appended 24 branch comparison rows (branches 73–96 of the 142-branch inventory) with ahead/behind, changed files returned, and triage classification.
+- Authentication/password, Worker, and service-worker changes remain review/risk items. No branch merge/delete/force-push performed. Staging UUID remains verified as `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; Supabase secrets untouched; no database writes or production ticket reads.
+
+
+## 2026-10-19 — Branch audit chunk 5/6
+- Appended 24 more branch comparison rows (branches 97–120 of 142), including returned changed paths and triage labels. Stale/risky labels do not authorize merge or deletion.
+- Staging D1 UUID remains Cloudflare-verified as `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; Supabase settings/secrets untouched. Production ticket contents not read; no DB writes or Worker deployment.
+
+
+## 2026-10-19 — Branch audit chunk 6/6 completed
+- Appended the final 22 comparison rows (branches 121–142). All 142 remote branch names now have a branch table row with ahead/behind, status, returned changed paths, and a triage classification; comparisons that failed/omitted file data remain explicitly unverified/none returned as applicable.
+- Staging D1 UUID verified as `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. Supabase secrets remain untouched; E2E remains STOP. No production ticket content read; no D1 writes, migration, or production Worker deployment.
+
+
+## 2026-10-19 — All-time PR inventory appended
+- Queried GitHub's all-state pull request collection page 1 and page 2 (100 records per page). 154 PR records were returned, including open, merged, and closed-unmerged state, head/base branch, changed-file count, creation date, and URL in `docs/audit-branches.md`.
+- Per-PR full changed-file names remain unverified except for PRs whose patches were separately inspected. The 142-branch ahead/behind table is now complete in six append-only chunks. No branch was deleted/force-pushed; no database writes or Worker deploy.

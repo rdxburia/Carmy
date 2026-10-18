@@ -348,3 +348,54 @@ The user was given an Antigravity prompt to:
 - Supabase inventory recheck still shows only project `Carmy`; no dedicated staging project/safe credentials were available. The listed development branch status is `MIGRATIONS_FAILED`.
 - Reached the user's explicit Phase 2 STOP condition. No staging config mutation, Worker deploy, or authenticated ticket E2E was attempted; live staging Worker remains bound to production D1 and must not be used for mutation tests.
 - Production ticket contents were not read; production migration/deploy and all D1 writes remain untouched. Resume only after dedicated staging Supabase is provisioned and safe staging credentials are available.
+
+
+---
+
+## 2026-10-19 — Verified staging D1 UUID correction and branch audit chunk 1/6
+- Verified from Cloudflare D1 inventory: staging DB `carmy-ticket-workflow-staging` = `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; production DB `carmy-cache` = `57c85007-1cf7-470f-bb4d-3b28cbb555b7`. Corrected earlier UUID transcription error by appending this note; history preserved.
+- Added first 24 branch comparison rows to `docs/audit-branches.md` in one commit with synchronized append-only updates to `AGENT.md` and `PROGRESS.md`.
+- PR #162 merged; PR #163 remains open while required checks are pending. No staging deploy, Supabase secret change, migration, ticket test, production read/write, branch deletion, or force-push.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 2/6
+- Added branches 25–48 (24 rows) with ahead/behind, GitHub compare status, changed file names returned, and classification. This was committed together with append-only updates to `AGENT.md` and `PROGRESS.md`.
+- No branches merged/deleted/force-pushed; no production ticket contents read; no D1 writes or Worker deployment.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 3/6
+- Added branches 49–72 (24 rows) to `docs/audit-branches.md` and appended synchronized entries to `AGENT.md` and `PROGRESS.md`.
+- No merges/deletions/force-pushes for audited branches; no production or staging database mutation, migration, or Worker deployment.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 4/6
+- Added branches 73–96 (24 rows) to the audit table and appended this work to both logs. The branch classification is triage only and does not approve merging.
+- No staging E2E, no migrations, no production D1 reads beyond allowed schema/aggregate scope, no Worker deploy yet.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 5/6
+- Added branches 97–120 (24 rows) to `docs/audit-branches.md` and appended matching notes to both logs. Auth, grants, SQL, Worker, and workflow diffs are marked risky for manual review.
+- No branch merges/deletions/force-pushes; no staging E2E or database mutations; production remains untouched.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 6/6 completed
+- Added final 22 rows (branches 121–142), completing the branch comparison table for all 142 enumerated remote branches. Per-file lists are limited to filenames returned by GitHub compare responses; any unreturned data remains unverified.
+- No branch merges/deletions/force-pushes, no DB mutation, no staging E2E, no production D1 ticket content read, and no production deploy.
+
+
+---
+
+## 2026-10-19 — All-time PR inventory appended
+- Appended all 154 pull requests returned by GitHub's `state=all` REST collection (pages 1–2) to `docs/audit-branches.md`. The inventory includes PR state, head/base branch, changed-file count, creation date, and link; full changed-file lists for every PR remain unverified unless separately inspected.
+- Completed six branch-comparison chunks covering 142 remote branches. This commit updates both `AGENT.md` and `PROGRESS.md` append-only.
+- Production ticket content not read; production migration/deploy not performed; staging Supabase/E2E remain STOP.
