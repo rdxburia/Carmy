@@ -281,3 +281,48 @@ The user was given an Antigravity prompt to:
   - Zero backend/Worker/migration edits.
   - Zero modifications to production D1 or Supabase auth/RLS.
   - Vehicle owner dashboard, document vault, Form 29/30, and session guard preserved intact.
+
+
+## 2026-10-18 — Comprehensive synchronization, PR #159 merge, and live deployment verification
+- **User Prompt:**
+  ```text
+  # TORQ DESK / CARMY — SYNC ALL ACTUAL WORK TO LATEST GITHUB
+  Repository: https://github.com/rdxburia/Carmy
+  Live website: https://rdxburia.github.io/Carmy/
+  Priority: Preserve all work → sync actual local changes → deploy frontend → verify live site.
+  Backend: Deferred. Do not modify or deploy it.
+  ```
+- **Local Work Inspection & Inventory:**
+  - Audited all 14 local branches, working tree, and stash list (`git status -uall`, `git stash list`):
+    - `main`: Up to date with `origin/main` at commit `c29eaef`. Working tree completely clean.
+    - `feat/garage-frontend-redesign`: All 3 commits (`f46ae46`, `04bfe85`, `be2787e`) successfully merged into `main` via PR #159. `git diff feat/garage-frontend-redesign..main` verified empty.
+    - `feat/ticket-frontend`: Commit `ad38162` (`feat(support): implement customer and admin support ticket workflows`) safely tracked on `origin/feat/ticket-frontend`. Excluded from this deployment because backend Worker API is currently pinned at rollback v232 and D1 migration 0007 is not applied to production. Merging customer ticket workflow UI ahead of backend migration would result in production 404/503 errors.
+    - `feat/super-admin-frontend-integration` & `feat/super-admin-frontend-screens`: Merged in PR #146 and PR #151.
+    - `fix/ci-idle-session-regression`: Merged in PR #130.
+- **Frontend Changes Included & Deployed Live:**
+  1. Garage Signup 5-step wizard (`garage-onboarding.html`, `js/garage-onboarding.js`).
+  2. Workshop Portal with Plan Tiers, Billing Calculator, and Invoice Drawer (`garage-portal.html`, `js/garage-workspace.js`).
+  3. Feature Locks & Subscription Expiration State (`css/garage-workspace.css`, `css/styles.css`).
+  4. Localhost preview server with dual-path routing and Worker proxy (`scripts/local-preview-server.cjs`, `package.json`).
+  5. Service worker localhost compatibility (`sw.js`).
+  6. Direct navigation links in homepage hero and header dropdown (`index.html`, `partials/public-header.html`).
+  7. Regression test suite adaptations for `torq-desk-shell-v14` (`tests/customer-portal-regression.test.mjs`, `tests/workshop-m0-contract.test.mjs`).
+- **PR & Merge Evidence:**
+  - Pull Request: https://github.com/rdxburia/Carmy/pull/159
+  - State: MERGED into `main` via squash merge.
+  - Merge Commit SHA: `c29eaef263c91a3297a760b940989b5c3ffbe076`.
+- **GitHub Actions Deployment Run:**
+  - Workflow: [Deploy CarCare Cloud to GitHub Pages (Run 39149923718)](https://github.com/rdxburia/Carmy/actions/runs/39149923718)
+  - Jobs:
+    - `validate-pages`: SUCCESS (5s)
+    - `visual-acceptance`: SUCCESS (56s)
+    - `deploy`: SUCCESS (34s)
+- **Live Site HTTP 200 Evidence (`https://rdxburia.github.io/Carmy/`):**
+  - Homepage (`/`): HTTP 200, 49,277 bytes; contains `Register workshop` and `garage-onboarding.html`.
+  - Onboarding (`/garage-onboarding.html`): HTTP 200, 20,041 bytes; contains `garage-wizard`, Lite (₹2,999) & Ultra (₹9,999).
+  - Portal (`/garage-portal.html`): HTTP 200, 28,181 bytes; contains `portalPlansGrid`, `cardPlanLite/Premium/Ultra`, `garageExpiredBanner`.
+  - Stylesheet (`/css/garage-workspace.css`): HTTP 200, 18,163 bytes.
+  - Scripts (`/js/garage-onboarding.js`, `/js/garage-workspace.js`, `/sw.js`): All HTTP 200.
+- **Backend Restrictions Maintained:**
+  - Zero backend/Worker/migration edits.
+  - No changes to Cloudflare Workers, production D1, database schemas, Supabase auth/RLS, or secrets.

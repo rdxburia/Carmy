@@ -85,3 +85,27 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
   - `tests/customer-portal-regression.test.mjs`
   - `tests/workshop-m0-contract.test.mjs`
 - **Scope check:** Frontend only. No Cloudflare Workers, database schemas, migrations, secrets, or API infrastructure modified.
+
+
+## 2026-10-18 — Verification: Garage frontend live deployment and local work synchronization
+- **Prompt:** "# TORQ DESK / CARMY — SYNC ALL ACTUAL WORK TO LATEST GITHUB: Preserve all work → sync actual local changes → deploy frontend → verify live site. Backend: Deferred. Do not modify or deploy it."
+- **Inventory of Local Work:**
+  1. `feat/garage-frontend-redesign`: All 3 commits (`f46ae46`, `04bfe85`, `be2787e`) successfully merged into `main` via PR #159 (`c29eaef`). Diffs between branch and `main` confirmed clean (0 remaining differences).
+  2. `feat/ticket-frontend`: Commit `ad38162` (`feat(support): implement customer and admin support ticket workflows`) is safely stored and pushed on remote `origin/feat/ticket-frontend`. Intentionally held back from `main` deployment because the corresponding backend ticket workflow (`0007_support_ticket_workflow.sql`) and Worker endpoints have not yet been deployed to production D1/Worker (Worker remains pinned at rolled-back v232 per instructions).
+  3. `feat/super-admin-frontend-integration` & `feat/super-admin-frontend-screens`: Merged earlier in PR #146 and PR #151.
+  4. `fix/ci-idle-session-regression`: Merged earlier in PR #130.
+  5. Working tree & unpushed commits: Clean on `main` at `c29eaef`.
+- **Merge & Deployment Evidence:**
+  - Pull Request: https://github.com/rdxburia/Carmy/pull/159 (Merged at commit `c29eaef`).
+  - GitHub Pages Workflow: https://github.com/rdxburia/Carmy/actions/runs/39149923718 (Status: SUCCESS in 1m35s; `validate-pages` 5s, `visual-acceptance` 56s, `deploy` 34s).
+  - Live Verification:
+    - `https://rdxburia.github.io/Carmy/` (HTTP 200, 49,277 bytes; contains `Register workshop` and `garage-onboarding.html` links).
+    - `https://rdxburia.github.io/Carmy/garage-onboarding.html` (HTTP 200, 20,041 bytes; 5-step wizard, plan selection Lite ₹2,999 / Ultra ₹9,999).
+    - `https://rdxburia.github.io/Carmy/garage-portal.html` (HTTP 200, 28,181 bytes; `portalPlansGrid`, `cardPlanLite/Premium/Ultra`, `garageExpiredBanner`).
+    - Assets `css/garage-workspace.css`, `js/garage-onboarding.js`, `js/garage-workspace.js`, `sw.js` all verified HTTP 200.
+- **Test Suite Results:**
+  - Automated tests: 148 / 148 passed (`node --test tests/*.test.mjs`).
+  - Full test suite: 128 / 128 passed (`npm test`).
+- **Deferred Backend State:**
+  - Worker production deployment and migrations (`0007_support_ticket_workflow.sql`, `ws_001_core.sql`) remain untouched.
+  - Zero backend, Worker, D1, or database changes applied.
