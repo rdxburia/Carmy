@@ -2368,6 +2368,10 @@ test("Super Admin Integration: designated account opens the admin console withou
 
   await h.eval("nav('admin')");
   assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), true, "Admin workspace mode must activate for the designated account");
+  await h.eval("nav('dashboard')");
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), true, "Admin workspace mode must persist through navigation until sign-out");
+  await h.eval("nav('admin')");
   assert.ok(h.elements.get("adminContent").innerHTML.includes("Super Admin Console"));
 });
 
