@@ -15,6 +15,7 @@ import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from
 import { createSupportTicket, listUserSupportTickets, adminListSupportTickets } from "./support-tickets.js";
 import { listFormTemplates, getFormTemplate, validateTransferPayload } from "./templates.js";
 import { createAdminInvite } from "./admin-invites.js";
+import { ticketApi } from "./ticket-workflow.js";
 
 const RATE_LIMIT_RETRY_AFTER = "60";
 
@@ -155,10 +156,13 @@ export default {
 
       const parts = route(url.pathname);
 
+      if (parts[0] === "tickets") return ticketApi(request, env, origin, user, userToken, parts, url);
+
       // All /api/admin/* routes require a verified user and a server-side role lookup.
       if (parts[0] === "admin") {
         const authorizationFailure = await requireSuperAdmin(user, env, origin);
         if (authorizationFailure) return authorizationFailure;
+        if (parts[1] === "tickets") return ticketApi(request, env, origin, user, userToken, parts, url);
         if (request.method === "GET" && parts.length === 2 && parts[1] === "me") {
           return json({ ok: true, data: { id: user.id, email: user.email || null, role: "super_admin" } }, 200, origin);
         }
