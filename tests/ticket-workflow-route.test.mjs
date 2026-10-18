@@ -6,6 +6,10 @@ function mockEnv({ ticket = {}, events = [] } = {}) {
   const calls = [];
   const env = {
     DB: {
+      batch(statements) {
+        calls.push({ method: "batch", statements });
+        return Promise.resolve(statements.map(() => ({ success: true })));
+      },
       prepare(sql) {
         return {
           bind(...args) {
@@ -81,4 +85,53 @@ test("ticket workflow: admin detail resolves /api/admin/tickets/:id", async () =
   assert.equal(response.status, 200);
   assert.equal(body.data.id, "T-1");
   assert.ok(calls.some((call) => call.sql.includes("SELECT * FROM support_tickets WHERE id=?") && call.args[0] === "T-1"));
+});
+
+
+test("ticket workflow: invalid admin mutation causes no partial event writes", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
+  });
+  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "assigned", priority: "not-a-priority" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error.code, "INVALID_PRIORITY");
+  assert.equal(calls.some((call) => call.method === "batch"), false);
+});
+
+test("ticket workflow: admin cannot assign ticket to an arbitrary account", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
+  });
+  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignee_id: "some-other-user" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+  const body = await response.json();
+  assert.equal(response.status, 403);
+  assert.equal(body.error.code, "ASSIGNEE_NOT_ALLOWED");
+  assert.equal(calls.some((call) => call.method === "batch"), false);
+});
+
+test("ticket workflow: valid admin update uses one atomic D1 batch", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
+  });
+  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignee_id: "user-1" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+  assert.equal(response.status, 200);
+  const batch = calls.find((call) => call.method === "batch");
+  assert.ok(batch);
+  assert.equal(batch.statements.length, 5);
 });
