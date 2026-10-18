@@ -12,6 +12,13 @@ const TRANSITIONS = {
 };
 const nowSec = () => Math.floor(Date.now()/1000);
 const fail = (message,status,origin,code) => error(message,status,origin,code);
+function normalizeEvent(row) {
+  let metadata_json = row?.metadata_json;
+  if (typeof metadata_json === "string") {
+    try { metadata_json = JSON.parse(metadata_json); } catch { metadata_json = {}; }
+  }
+  return { ...row, metadata_json: metadata_json && typeof metadata_json === "object" ? metadata_json : {} };
+}
 async function ownedTicket(env,id,userId) {
   return env.DB.prepare("SELECT * FROM support_tickets WHERE id = ? AND user_id = ?").bind(id,userId).first();
 }
@@ -75,7 +82,7 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
       const ticket=await env.DB.prepare("SELECT * FROM support_tickets WHERE id=?").bind(ticketId).first();
       if(!ticket)return fail("Ticket not found.",404,origin,"NOT_FOUND");
       const events=await env.DB.prepare("SELECT * FROM ticket_events WHERE ticket_id=? ORDER BY id ASC").bind(ticketId).all();
-      return json({ok:true,data:{...ticket,events:events.results||[]}},200,origin);
+      return json({ok:true,data:{...ticket,events:(events.results||[]).map(normalizeEvent)}},200,origin);
     }
     if(ticketId && parts.length===3 && method==="PATCH") {
       const body=await request.json().catch(()=>null);
