@@ -167,3 +167,11 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — All-time PR inventory appended
 - Queried GitHub's all-state pull request collection page 1 and page 2 (100 records per page). 154 PR records were returned, including open, merged, and closed-unmerged state, head/base branch, changed-file count, creation date, and URL in `docs/audit-branches.md`.
 - Per-PR full changed-file names remain unverified except for PRs whose patches were separately inspected. The 142-branch ahead/behind table is now complete in six append-only chunks. No branch was deleted/force-pushed; no database writes or Worker deploy.
+
+
+## 2026-10-19 — Staging D1 isolation deployment completed; E2E STOP retained
+- PR #163 merged at `54c0b827bf30ee6e5fed3d62ed6e029307dbd6c9` after Worker builds and policy regression passed. Only `wrangler.staging.toml` changed; staging config now uses Cloudflare-verified D1 UUID `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb` and omits the production Supabase URL. No secret values were read or changed.
+- Cloudflare staging Worker config deployment: active version 16 `45e2bdb5-ca58-481c-b3f6-00515eca978e`, deployment `9369670c-639d-4b8a-8b54-2a6f01e81d67`, 100% traffic. Live settings confirm DB binding to staging D1. No ticket/E2E requests were sent.
+- Staging D1 read-only schema/count check: 4 support tickets, 2 ticket events, 0 reads, 0 audit rows. `d1_migrations` table is absent; schema includes migration 0007 workflow columns, so migration 0007 was not re-run.
+- PR #164 merged at `dd67518e6664025ee75faeba29c22ee316c50921`; full 142-branch table and 154-record PR snapshot are merged. Append-only correction in audit report records #164 as created after the snapshot.
+- STOP remains: no authenticated E2E until dedicated staging Supabase is provisioned. Production D1 and production Worker untouched; no production ticket content read.

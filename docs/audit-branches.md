@@ -575,3 +575,17 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | [#161](https://github.com/rdxburia/Carmy/pull/161) | feat(support): implement customer and admin support ticket workflows | open | `feat/ticket-frontend` → `main` | unverified | 2026-10-18 |
 | [#162](https://github.com/rdxburia/Carmy/pull/162) | docs(audit): record branch and staging isolation findings | merged | `audit/phase0-phase1-2026-10-19` → `main` | unverified | 2026-10-18 |
 | [#163](https://github.com/rdxburia/Carmy/pull/163) | fix(staging): pin isolated Worker config to verified staging D1 | open | `fix/staging-d1-binding-2026-10-19` → `main` | unverified | 2026-10-18 |
+
+
+## 2026-10-19 — Post-inventory PR and staging deployment correction
+
+### PR inventory addendum
+- PR #164 was created after the two-page `state=all` pull request snapshot was fetched. It is now merged: https://github.com/rdxburia/Carmy/pull/164 (merge commit `dd67518e6664025ee75faeba29c22ee316c50921`). Add this record to the prior snapshot: `#164 — docs(audit): complete branch and pull request inventories — merged — audit/complete-branch-pr-inventory-2026-10-19 → main — 3 changed files — created 2026-10-18`.
+- PR #163 is also now merged: https://github.com/rdxburia/Carmy/pull/163 (merge commit `54c0b827bf30ee6e5fed3d62ed6e029307dbd6c9`). The original all-state inventory snapshot included #163 but predated #164.
+
+### Staging D1 binding deployment evidence
+- Cloudflare D1 inventory confirmed `carmy-ticket-workflow-staging` UUID `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; production `carmy-cache` UUID is `57c85007-1cf7-470f-bb4d-3b28cbb555b7`. This supersedes the earlier transcribed UUID typo.
+- PR #163 changed only `wrangler.staging.toml` and passed Worker build checks (`Workers Builds: carmy-api-staging` and `Workers Builds: carmy-api`) plus policy extraction tests. Supabase Preview was skipped, not failed. The config omits `SUPABASE_URL` until a dedicated staging Supabase project exists; no secret value was read, printed, changed, or committed.
+- A staging-only Cloudflare settings deployment was performed after the PR merge. Active deployment ID: `9369670c-639d-4b8a-8b54-2a6f01e81d67`; active version 16 ID: `45e2bdb5-ca58-481c-b3f6-00515eca978e`, 100% traffic. Live Cloudflare GET settings verified `DB` -> `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. `SUPABASE_URL`, R2, and RATE_LIMITER bindings are absent in the new version; the existing secret binding name remains inherited, but no Supabase URL is configured and no E2E request was sent.
+- Staging D1 read-only verification: `support_tickets` schema includes workflow columns; counts remain 4 tickets, 2 `ticket_events`, 0 `ticket_reads`, 0 `audit_log`. No rows were inserted, updated, or deleted. `d1_migrations` ledger table is absent, so migration ledger evidence is unverified; because the workflow schema is already present, migration 0007 was not re-run.
+- **STOP:** no authenticated E2E, Supabase mutation, or ticket mutation until the user provisions a dedicated staging Supabase project. Production D1/Worker remain untouched; production ticket contents were never read.
