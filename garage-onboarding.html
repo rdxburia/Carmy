@@ -1,5 +1,280 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Register your garage with Torq Desk."><meta name="theme-color" content="#0B1F3B"><title>Garage onboarding | Torq Desk</title><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="css/public-site.css?v=2026.10.13-inter-unified"><link rel="stylesheet" href="css/readability.css?v=2026.10.13-readable-type"><style>
-.onboard{max-width:960px;margin:auto;padding:42px 20px 72px}.onboard-hero{padding:34px;border-radius:24px;background:linear-gradient(135deg,#0b1f3b,#174a84);color:white;margin-bottom:22px}.onboard-hero h1{color:white;margin:10px 0;font-size:clamp(30px,5vw,46px)}.onboard-hero p{color:#e1eafa;max-width:660px}.onboard-card{background:#fff;border:1px solid #dfe7f2;border-radius:20px;padding:26px;box-shadow:0 12px 36px #0b1f3b0c}.onboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.onboard label{display:grid;gap:7px;color:#344054;font-weight:650;font-size:13px}.onboard input,.onboard select,.onboard textarea{width:100%;min-height:44px;padding:10px 12px;border:1px solid #cfd8e6;border-radius:10px;background:#fff;color:#101828;font:inherit}.onboard textarea{min-height:90px;resize:vertical}.onboard .wide{grid-column:1/-1}.onboard fieldset{border:1px solid #e0e7f1;border-radius:12px;padding:14px}.onboard legend{font-size:13px;font-weight:750;padding:0 6px}.onboard .checks{display:flex;gap:12px;flex-wrap:wrap}.onboard .checks label{display:flex;align-items:center;gap:7px;font-weight:500}.onboard .checks input,.onboard .consent input{width:16px;min-height:16px}.onboard .consent{display:flex;align-items:flex-start;gap:10px;font-weight:500;line-height:1.5}.onboard button{margin-top:18px}.onboard-status{margin-top:16px;padding:13px 15px;border-radius:10px;background:#eef5ff;color:#174ea6;font-size:14px}.onboard-status[hidden]{display:none}.onboard-status.error{background:#fff0f0;color:#a32020}.onboard-note{font-size:12px;color:#667085;line-height:1.55}.onboard h2{margin-top:0;color:#0b1f3b}@media(max-width:640px){.onboard{padding:24px 14px 44px}.onboard-hero{padding:24px}.onboard-card{padding:18px}.onboard-grid{grid-template-columns:1fr}.onboard .wide{grid-column:auto}}
-</style></head><body class="td-public"><!-- TD_SHARED_HEADER --><main class="onboard"><section class="onboard-hero"><span class="td-kicker">TORQ DESK · WORKSHOP PARTNER</span><h1>Bring your garage onto Torq Desk.</h1><p>Tell us about your workshop. We’ll save your application securely and contact you to help set up your workspace.</p></section><section class="onboard-card"><h2>Garage onboarding form</h2><p class="onboard-note">Required fields are marked *. Submitting this form requests onboarding; it does not create a login or activate a plan automatically.</p><form id="garageOnboardingForm"><div class="onboard-grid">
-<label>Garage / workshop name *<input name="workshop_name" required minlength="2" maxlength="160" autocomplete="organization"></label><label>Owner / contact person *<input name="owner_name" required minlength="2" maxlength="120" autocomplete="name"></label><label>Business email *<input name="email" type="email" required maxlength="254" autocomplete="email"></label><label>Mobile number *<input name="phone" type="tel" required pattern="[0-9+() .-]{10,20}" maxlength="20" autocomplete="tel" placeholder="+91 98XXXXXXXX"></label><label>City *<input name="city" required maxlength="100" autocomplete="address-level2"></label><label>State *<select name="state" required><option value="">Choose state</option><option>Himachal Pradesh</option><option>Punjab</option><option>Haryana</option><option>Delhi</option><option>Uttarakhand</option><option>Rajasthan</option><option>Uttar Pradesh</option><option>Chandigarh</option><option>Other Indian state / UT</option></select></label><label>Workshop address<input name="address" maxlength="300" autocomplete="street-address"></label><label>PIN code<input name="pincode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="postal-code"></label><label>Staff members *<input name="staff_count" type="number" min="1" max="500" value="1" required></label><label>Service bays *<input name="service_bays" type="number" min="1" max="100" value="1" required></label><label>GSTIN (optional)<input name="gstin" maxlength="15" pattern="[0-9A-Za-z]{15}" placeholder="15-character GSTIN"></label><label>Current job-card process *<select name="job_card_process" required><option value="paper">Paper register</option><option value="spreadsheet">Excel / spreadsheet</option><option value="software">Existing software</option><option value="none">No fixed process</option></select></label>
-<fieldset class="wide"><legend>Services offered *</legend><div class="checks"><label><input type="checkbox" name="services" value="General service">General service</label><label><input type="checkbox" name="services" value="Mechanical repairs">Mechanical repairs</label><label><input type="checkbox" name="services" value="Electrical / diagnostics">Electrical / diagnostics</label><label><input type="checkbox" name="services" value="Car wash / detailing">Car wash / detailing</label><label><input type="checkbox" name="services" value="Tyres / alignment">Tyres / alignment</label><label><input type="checkbox" name="services" value="Bodywork / paint">Bodywork / paint</label></div></fieldset><label class="wide">Anything else we should know?<textarea name="notes" maxlength="1500" placeholder="Main needs, locations, current challenges…"></textarea></label><label class="wide consent"><input type="checkbox" name="consent" value="yes" required><span>I agree that Torq Desk may use these details to contact me about this onboarding request. *</span></label></div><button class="td-btn" id="submitOnboarding" type="submit">Submit garage application →</button><div id="onboardingStatus" class="onboard-status" role="status" aria-live="polite" hidden></div></form></section></main><!-- TD_SHARED_FOOTER --><script src="js/public-site.js"></script><script src="js/garage-onboarding.js?v=2026.10.13-1"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Register your workshop with Torq Desk. Multi-step garage signup wizard.">
+  <meta name="theme-color" content="#0B1F3B">
+  <title>Garage Onboarding &amp; Signup | Torq Desk</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="css/public-site.css?v=2026.10.13-inter-unified">
+  <link rel="stylesheet" href="css/readability.css?v=2026.10.13-readable-type">
+  <link rel="stylesheet" href="css/garage-workspace.css?v=2026.10.18-v1-garage-redesign">
+</head>
+<body class="td-public">
+<!-- TD_SHARED_HEADER -->
+<main class="garage-wizard-container">
+  <div style="margin-bottom:24px;text-align:center">
+    <span class="td-kicker">TORQ DESK · WORKSHOP PARTNER</span>
+    <h1 style="margin:8px 0 6px;color:#0b1f3b;font-size:clamp(28px,4vw,38px);letter-spacing:-0.03em">Register your workshop.</h1>
+    <p style="margin:0 auto;color:#64748b;max-width:560px;font-size:14.5px;line-height:1.5">Set up your digital garage account in five simple steps. Your progress is automatically saved as you type.</p>
+  </div>
+
+  <section class="garage-wizard-card">
+    <!-- Stepper indicator -->
+    <div class="garage-step-indicator" id="garageWizardSteps" aria-label="Signup wizard progress">
+      <span class="garage-step-pill garage-step-active" data-step="1"><span class="garage-step-num">1</span> Account</span>
+      <span class="garage-step-pill" data-step="2"><span class="garage-step-num">2</span> Mobile</span>
+      <span class="garage-step-pill" data-step="3"><span class="garage-step-num">3</span> Garage Details</span>
+      <span class="garage-step-pill" data-step="4"><span class="garage-step-num">4</span> Plan</span>
+      <span class="garage-step-pill" data-step="5"><span class="garage-step-num">5</span> Review</span>
+    </div>
+
+    <!-- Real error or status banner -->
+    <div id="wizardStatus" class="garage-error-banner" role="alert" hidden></div>
+
+    <form id="garageOnboardingForm" novalidate>
+      <!-- STEP 1: Account -->
+      <div id="wizardStep1" class="garage-step-content" data-step-panel="1">
+        <h2 style="margin:0 0 6px;font-size:18px;color:#0f172a">Step 1: Account credentials</h2>
+        <p style="margin:0 0 16px;color:#64748b;font-size:13px">Enter the administrative email and password to secure your workshop desk.</p>
+        <div class="garage-form-grid">
+          <div class="garage-full-col">
+            <label class="garage-field-label" for="stepEmail">Administrative Email *</label>
+            <input id="stepEmail" name="email" type="email" required autocomplete="email" class="garage-input" placeholder="workshop@example.com">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepPassword">Create Password *</label>
+            <input id="stepPassword" name="password" type="password" required minlength="8" autocomplete="new-password" class="garage-input" placeholder="Minimum 8 characters">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepPasswordConfirm">Confirm Password *</label>
+            <input id="stepPasswordConfirm" name="password_confirm" type="password" required minlength="8" autocomplete="new-password" class="garage-input" placeholder="Re-enter password">
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Mobile -->
+      <div id="wizardStep2" class="garage-step-content" data-step-panel="2" hidden>
+        <h2 style="margin:0 0 6px;font-size:18px;color:#0f172a">Step 2: Mobile verification</h2>
+        <p style="margin:0 0 16px;color:#64748b;font-size:13px">A valid, unique mobile number is compulsory for all garage owner accounts.</p>
+        <div class="garage-form-grid">
+          <div class="garage-full-col">
+            <label class="garage-field-label" for="stepPhone">Mobile Phone Number *</label>
+            <input id="stepPhone" name="phone" type="tel" required pattern="[0-9+() .-]{10,20}" maxlength="20" autocomplete="tel" class="garage-input" placeholder="+91 98XXXXXXXX">
+            <small style="color:#64748b;font-size:11.5px;margin-top:4px;display:block">Enter a 10-digit Indian mobile number. Used for workshop login and urgent notifications.</small>
+          </div>
+          <div class="garage-full-col">
+            <div class="garage-status-banner" style="margin-top:4px">
+              <span class="garage-blocked-badge">BLOCKED · PENDING BACKEND API</span>
+              <p style="margin:4px 0 0;font-size:12.5px;color:#1e3a8a;line-height:1.5">Server-side mobile OTP verification endpoints (<code>/api/otp/send</code> and <code>/api/otp/verify</code>) are not yet implemented in the Cloudflare Worker (Step 10 Backend Roadmap). You may proceed to step 3; mobile number uniqueness is verified during submission.</p>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+              <input id="stepOtp" name="otp" type="text" disabled class="garage-input" placeholder="OTP verification pending backend endpoint" style="flex:1;background:#f8fafc;cursor:not-allowed">
+              <button type="button" class="td-btn secondary" disabled style="opacity:0.6;cursor:not-allowed">Send OTP (Pending)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3: Garage Details -->
+      <div id="wizardStep3" class="garage-step-content" data-step-panel="3" hidden>
+        <h2 style="margin:0 0 6px;font-size:18px;color:#0f172a">Step 3: Garage details</h2>
+        <p style="margin:0 0 16px;color:#64748b;font-size:13px">Provide your garage identity and operational capacity.</p>
+        <div class="garage-form-grid">
+          <div>
+            <label class="garage-field-label" for="stepWorkshopName">Garage / Workshop Name *</label>
+            <input id="stepWorkshopName" name="workshop_name" required minlength="2" maxlength="160" autocomplete="organization" class="garage-input" placeholder="Apex Motors">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepOwnerName">Owner / Contact Person *</label>
+            <input id="stepOwnerName" name="owner_name" required minlength="2" maxlength="120" autocomplete="name" class="garage-input" placeholder="Rajesh Kumar">
+          </div>
+          <div class="garage-full-col">
+            <label class="garage-field-label" for="stepAddress">Workshop Address</label>
+            <input id="stepAddress" name="address" maxlength="300" autocomplete="street-address" class="garage-input" placeholder="Plot No. 12, Industrial Area, Phase 2">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepCity">City *</label>
+            <input id="stepCity" name="city" required maxlength="100" autocomplete="address-level2" class="garage-input" placeholder="Shimla / Chandigarh">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepState">State *</label>
+            <select id="stepState" name="state" required class="garage-select">
+              <option value="">Choose state</option>
+              <option>Himachal Pradesh</option>
+              <option>Punjab</option>
+              <option>Haryana</option>
+              <option>Delhi</option>
+              <option>Uttarakhand</option>
+              <option>Rajasthan</option>
+              <option>Uttar Pradesh</option>
+              <option>Chandigarh</option>
+              <option>Other Indian state / UT</option>
+            </select>
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepPincode">PIN Code</label>
+            <input id="stepPincode" name="pincode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="postal-code" class="garage-input" placeholder="171001">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepGstin">GSTIN (Optional)</label>
+            <input id="stepGstin" name="gstin" maxlength="15" pattern="[0-9A-Za-z]{15}" class="garage-input" placeholder="15-character GSTIN">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepStaffCount">Staff Members *</label>
+            <input id="stepStaffCount" name="staff_count" type="number" min="1" max="500" value="3" required class="garage-input">
+          </div>
+          <div>
+            <label class="garage-field-label" for="stepServiceBays">Service Bays *</label>
+            <input id="stepServiceBays" name="service_bays" type="number" min="1" max="100" value="2" required class="garage-input">
+          </div>
+          <div class="garage-full-col">
+            <label class="garage-field-label">Services Offered *</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" name="services" value="General service" checked> General service</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" name="services" value="Mechanical repairs" checked> Mechanical repairs</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" name="services" value="Electrical / diagnostics"> Electrical / diagnostics</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" name="services" value="Car wash / detailing"> Car wash / detailing</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" name="services" value="Tyres / alignment"> Tyres / alignment</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" name="services" value="Bodywork / paint"> Bodywork / paint</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 4: Plan Choice -->
+      <div id="wizardStep4" class="garage-step-content" data-step-panel="4" hidden>
+        <h2 style="margin:0 0 6px;font-size:18px;color:#0f172a">Step 4: Choose your plan</h2>
+        <p style="margin:0 0 16px;color:#64748b;font-size:13px">Select the plan tailored to your workshop size. First-time garages receive a free trial.</p>
+        
+        <div class="garage-plans-grid" id="wizardPlansGrid">
+          <!-- Lite Plan -->
+          <label class="garage-plan-card" style="cursor:pointer">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span class="garage-plan-title">Lite</span>
+                <input type="radio" name="plan" value="lite" checked style="width:18px;height:18px">
+              </div>
+              <div class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price">Rs 2,999</div>
+              <div class="garage-plan-period">per 6 months (excluding GST)</div>
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <ul class="garage-plan-features">
+                <li><span>👥</span> 3 staff including owner</li>
+                <li><span>📄</span> Digital job cards &amp; estimates</li>
+                <li><span>🧾</span> Invoices &amp; billing</li>
+                <li class="garage-feature-dim"><span>✕</span> No inventory</li>
+                <li class="garage-feature-dim"><span>✕</span> No WhatsApp automation</li>
+              </ul>
+            </div>
+          </label>
+
+          <!-- Premium Plan -->
+          <label class="garage-plan-card" style="cursor:pointer">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span class="garage-plan-title">Premium</span>
+                <input type="radio" name="plan" value="premium" style="width:18px;height:18px">
+              </div>
+              <div class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price">Rs 3,299</div>
+              <div class="garage-plan-period">per 6 months (excluding GST)</div>
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <ul class="garage-plan-features">
+                <li><span>👥</span> 6 staff</li>
+                <li><span>💬</span> WhatsApp bill &amp; reminder automation</li>
+                <li><span>🏷️</span> Invoice logo branding</li>
+                <li><span>📊</span> Reports &amp; customer feedback link</li>
+                <li><span>📸</span> Job-card photos &amp; estimate approvals</li>
+                <li class="garage-feature-dim"><span>✕</span> No inventory</li>
+              </ul>
+            </div>
+          </label>
+
+          <!-- Ultra Plan -->
+          <label class="garage-plan-card" style="cursor:pointer">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span class="garage-plan-title">Ultra</span>
+                <input type="radio" name="plan" value="ultra" style="width:18px;height:18px">
+              </div>
+              <div class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price">Rs 9,999</div>
+              <div class="garage-plan-period">per 6 months (excluding GST)</div>
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <ul class="garage-plan-features">
+                <li><span>👥</span> Staff count <span class="garage-pending-tag">PENDING (proposed 15)</span></li>
+                <li><span>⚙️</span> Parts &amp; inventory tracking</li>
+                <li><span>📧</span> Garage email alias (name@torqdesk.in)</li>
+                <li><span>🌐</span> Public garage web page</li>
+                <li><span>🏢</span> Multi-branch &amp; full invoice branding</li>
+                <li><span>📥</span> Advanced reports &amp; CSV data export</li>
+              </ul>
+            </div>
+          </label>
+        </div>
+
+        <div class="garage-plan-footer-note">
+          Prices exclude GST. GST is added at checkout. <span class="garage-pending-tag">PENDING</span>
+        </div>
+      </div>
+
+      <!-- STEP 5: Review & Submit -->
+      <div id="wizardStep5" class="garage-step-content" data-step-panel="5" hidden>
+        <h2 style="margin:0 0 6px;font-size:18px;color:#0f172a">Step 5: Review and submit</h2>
+        <p style="margin:0 0 16px;color:#64748b;font-size:13px">Please verify your details before submitting your workshop application.</p>
+        
+        <div class="garage-review-grid">
+          <div class="garage-review-item">
+            <small>Admin Account</small>
+            <b id="reviewEmail">—</b>
+          </div>
+          <div class="garage-review-item">
+            <small>Mobile Phone</small>
+            <b id="reviewPhone">—</b>
+            <span style="font-size:11px;color:#d97706;font-weight:600">OTP: PENDING (Step 10 Backend Roadmap)</span>
+          </div>
+          <div class="garage-review-item">
+            <small>Workshop &amp; Owner</small>
+            <b id="reviewWorkshop">—</b>
+          </div>
+          <div class="garage-review-item">
+            <small>Location</small>
+            <b id="reviewLocation">—</b>
+          </div>
+          <div class="garage-review-item">
+            <small>GSTIN</small>
+            <b id="reviewGstin">—</b>
+          </div>
+          <div class="garage-review-item">
+            <small>Selected Plan</small>
+            <b id="reviewPlan">—</b>
+            <span style="font-size:11.5px;color:#047857;font-weight:700">First month free trial</span>
+          </div>
+        </div>
+
+        <div style="margin:20px 0;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#334155;line-height:1.5;cursor:pointer">
+            <input type="checkbox" id="stepConsent" name="consent" required style="margin-top:3px">
+            <span>I agree that Torq Desk may use these details to contact me about this workshop registration and set up my garage workspace. *</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Wizard Navigation Controls -->
+      <div class="garage-wizard-nav">
+        <button type="button" id="wizardBackBtn" class="td-btn secondary" disabled>← Back</button>
+        <div style="display:flex;gap:10px">
+          <button type="button" id="wizardNextBtn" class="td-btn">Next Step →</button>
+          <button type="submit" id="wizardSubmitBtn" class="td-btn" style="display:none">Submit Application →</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</main>
+<!-- TD_SHARED_FOOTER -->
+<script src="js/public-site.js"></script>
+<script src="js/garage-onboarding.js?v=2026.10.18-v1-garage-redesign"></script>
+</body>
+</html>

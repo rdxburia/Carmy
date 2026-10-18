@@ -1,1 +1,510 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Garage workspace | Torq Desk</title><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="css/public-site.css?v=2026.10.13-inter-unified"><link rel="stylesheet" href="css/readability.css?v=2026.10.13-readable-type"><link rel="stylesheet" href="css/garage-workspace.css?v=2026.10.13-workspace-2"></head><body class="td-public"><!-- TD_SHARED_HEADER --><main class="gd-portal"><div class="gd-portal-top"><div><span class="td-kicker">TORQ DESK · WORKSHOP WORKSPACE</span><h1>Garage dashboard</h1><p>Manage workshop jobs, customers, inventory and reports.</p></div><div class="gd-top-actions"><span class="gd-demo-chip">PREVIEW · BROWSER SESSION</span><span class="gd-account-name" id="gdAccountName">Workshop Admin</span><button class="td-btn secondary" id="garageLogout">Sign out</button></div></div><div class="gd-demo-banner"><b>Preview workspace.</b> Changes stay in this browser session and are not sent to a server or database. Use sample data only.</div><div class="gd-shell"><aside class="gd-sidebar"><button class="active" data-gd-view="overview">▦ <span>Overview</span></button><button class="" data-gd-view="jobs">▤ <span>Job cards</span></button><button class="" data-gd-view="estimates">₹ <span>Estimates</span></button><button class="" data-gd-view="invoices">▧ <span>Invoices & payments</span></button><button class="" data-gd-view="customers">♙ <span>Customers & vehicles</span></button><button class="" data-gd-view="inventory">⚙ <span>Parts & inventory</span></button><button class="" data-gd-view="bookings">◷ <span>Bookings</span></button><button class="" data-gd-view="expenses">↘ <span>Expenses</span></button><button class="" data-gd-view="reports">▥ <span>Reports</span></button><button class="" data-gd-view="staff">♧ <span>Staff & settings</span></button></aside><section class="gd-workspace"><section class="gd-view active" data-gd-panel="overview"><div class="gd-section-heading"><div><h2>Today at a glance</h2><p>Counts update as you work</p></div><button class="td-btn" data-gd-action="job">+ New job card</button></div><div class="gd-stats"><article><span>Open jobs</span><strong id="sJobs">0</strong><small>Session data</small></article><article><span>Pending estimates</span><strong id="sEst">0</strong><small>Session data</small></article><article><span>Unpaid invoices</span><strong id="sUnpaid">0</strong><small>Session data</small></article><article><span>Low stock</span><strong id="sLow">0</strong><small>Session data</small></article></div><div class="gd-two-col"><article class="gd-panel"><h3>Recent job cards</h3><div class="gd-table-wrap"><table><thead><tr><th>ID</th><th>Customer</th><th>Vehicle</th><th>Concern</th><th>Status</th><th>Actions</th></tr></thead><tbody id="recentJobs"></tbody></table></div></article><article class="gd-panel"><h3>Quick actions</h3><div class="gd-quick-actions"><button data-gd-action="job"><span>＋</span><b>Check in vehicle</b><small>Open workspace form</small></button><button data-gd-action="booking"><span>◷</span><b>Book service</b><small>Open workspace form</small></button><button data-gd-action="estimate"><span>₹</span><b>Create estimate</b><small>Open workspace form</small></button><button data-gd-action="expense"><span>↘</span><b>Record expense</b><small>Open workspace form</small></button><button data-gd-action="customer"><span>♙</span><b>Add customer</b><small>Open workspace form</small></button><button data-gd-action="part"><span>⚙</span><b>Add inventory part</b><small>Open workspace form</small></button></div></article></div></section><section class="gd-view" data-gd-panel="jobs"><div class="gd-section-heading"><div><h2>Job cards</h2><p>Manage job cards in this browser session.</p></div><button class="td-btn" data-gd-action="job">+ New job card</button></div><div class="gd-toolbar"><input data-gd-search="jobs" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Job ID</th><th>Customer</th><th>Vehicle / registration</th><th>Concern</th><th>Assigned staff</th><th>Status</th><th>Actions</th></tr></thead><tbody id="table-jobs"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="estimates"><div class="gd-section-heading"><div><h2>Estimates & quotations</h2><p>Manage estimates and quotations in this browser session.</p></div><button class="td-btn" data-gd-action="estimate">+ New estimate</button></div><div class="gd-toolbar"><input data-gd-search="estimates" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Estimate</th><th>Customer</th><th>Job</th><th>Parts</th><th>Labour</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody id="table-estimates"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="invoices"><div class="gd-section-heading"><div><h2>Invoices & payments</h2><p>Manage invoices and payments in this browser session.</p></div><button class="td-btn" data-gd-action="invoice">+ Create invoice</button></div><div class="gd-toolbar"><input data-gd-search="invoices" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Invoice</th><th>Customer</th><th>Job</th><th>Total</th><th>Payment status</th><th>Actions</th></tr></thead><tbody id="table-invoices"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="customers"><div class="gd-section-heading"><div><h2>Customers & vehicles</h2><p>Manage customers and vehicles in this browser session.</p></div><button class="td-btn" data-gd-action="customer">+ Add customer</button></div><div class="gd-toolbar"><input data-gd-search="customers" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Vehicle</th><th>Registration</th><th>Actions</th></tr></thead><tbody id="table-customers"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="inventory"><div class="gd-section-heading"><div><h2>Parts & inventory</h2><p>Manage parts and inventory in this browser session.</p></div><button class="td-btn" data-gd-action="part">+ Add part</button></div><div class="gd-toolbar"><input data-gd-search="inventory" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Part / SKU</th><th>Category</th><th>Quantity</th><th>Reorder at</th><th>Cost</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead><tbody id="table-inventory"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="bookings"><div class="gd-section-heading"><div><h2>Bookings & appointments</h2><p>Manage bookings and appointments in this browser session.</p></div><button class="td-btn" data-gd-action="booking">+ New booking</button></div><div class="gd-toolbar"><input data-gd-search="bookings" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Vehicle</th><th>Service</th><th>Status</th><th>Actions</th></tr></thead><tbody id="table-bookings"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="expenses"><div class="gd-section-heading"><div><h2>Workshop expenses</h2><p>Manage sample workshop expenses in this browser session.</p></div><button class="td-btn" data-gd-action="expense">+ Add expense</button></div><div class="gd-toolbar"><input data-gd-search="expenses" placeholder="Search records…"></div><div class="gd-panel"><div class="gd-table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Payment mode</th><th>Amount</th><th>Actions</th></tr></thead><tbody id="table-expenses"></tbody></table></div></div></section><section class="gd-view" data-gd-panel="reports"><div class="gd-section-heading"><div><h2>Reports & insights</h2><p>Totals calculated from records in this session.</p></div><button class="td-btn" id="exportCsv">Export CSV</button></div><div class="gd-stats"><article><span>Jobs</span><strong id="rJobs">0</strong></article><article><span>Estimates</span><strong id="rEst">0</strong></article><article><span>Invoices</span><strong id="rInv">0</strong></article><article><span>Expenses</span><strong id="rExp">0</strong></article></div><div class="gd-panel"><div id="reportSummary"></div></div></section><section class="gd-view" data-gd-panel="staff"><div class="gd-section-heading"><div><h2>Workshop profile & staff</h2><p>Customize the workshop profile and manage staff roles.</p></div><button class="td-btn" data-gd-action="profile">Edit profile</button></div><div class="gd-two-col"><article class="gd-panel"><h3>Workshop profile</h3><div id="profileSummary"></div></article><article class="gd-panel"><div class="gd-panel-head"><h3>Staff & roles</h3><button class="gd-text-btn" data-gd-action="staff">+ Add staff</button></div><div class="gd-table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Actions</th></tr></thead><tbody id="table-staff"></tbody></table></div><p class="gd-muted-note">Role access is illustrative only, not a security boundary.</p></article></div><div class="gd-panel"><h3>Workspace tools</h3><button class="td-btn secondary" id="resetWorkspace">Reset session data</button> <button class="td-btn secondary" id="printReport">Print report</button> <button class="td-btn secondary" id="sendSummary">Share summary</button></div></section></section></div><div class="gd-toast" id="gdToast" role="status" aria-live="polite" hidden></div><div class="gd-modal" id="gdModal" hidden><div class="gd-modal-backdrop" data-gd-close></div><section class="gd-modal-card" role="dialog" aria-modal="true"><button class="gd-modal-close" type="button" data-gd-close>×</button><span class="td-kicker">WORKSHOP FORM</span><h2 id="modalTitle">Add record</h2><p>Use sample information in this preview workspace.</p><form id="workspaceForm"><div id="modalFields" class="gd-form-grid"></div><div class="gd-modal-actions"><button type="button" class="td-btn secondary" data-gd-close>Cancel</button><button class="td-btn" type="submit">Save record</button></div></form></section></div></main><!-- TD_SHARED_FOOTER --><script src="js/public-site.js"></script><script src="js/garage-workspace.js?v=2026.10.13-workspace-2"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Garage workspace | Torq Desk</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="css/public-site.css?v=2026.10.13-inter-unified">
+  <link rel="stylesheet" href="css/readability.css?v=2026.10.13-readable-type">
+  <link rel="stylesheet" href="css/garage-workspace.css?v=2026.10.18-v1-garage-redesign">
+</head>
+<body class="td-public">
+<!-- TD_SHARED_HEADER -->
+<main class="gd-portal">
+  <!-- Top Portal Header -->
+  <div class="gd-portal-top">
+    <div>
+      <span class="td-kicker">TORQ DESK · WORKSHOP WORKSPACE</span>
+      <h1>Garage dashboard</h1>
+      <p id="gdSubtitle">Manage workshop jobs, customers, billing, inventory, staff and plans.</p>
+    </div>
+    <div class="gd-top-actions">
+      <span id="gdPlanStatusChip" class="garage-trial-pill">First month free trial · 28 days left</span>
+      <span class="gd-account-name" id="gdAccountName">Workshop Admin</span>
+      <button class="td-btn secondary" id="garageLogout">Sign out</button>
+    </div>
+  </div>
+
+  <!-- State & Demo Switcher Bar (for inspecting active, trial, and expired states) -->
+  <div class="garage-state-bar" id="garageStateBar" aria-label="Workshop state simulator">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-weight:700;color:#0f172a">Workspace State:</span>
+      <label style="display:inline-flex;align-items:center;gap:4px">
+        <span>Plan:</span>
+        <select id="statePlanSelect" class="garage-select" style="min-height:32px;padding:4px 8px;font-size:12px">
+          <option value="ultra" selected>Ultra (15 staff · Inventory · Alias)</option>
+          <option value="lite">Lite (3 staff · No inventory)</option>
+          <option value="premium">Premium (6 staff · WhatsApp automation)</option>
+        </select>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:4px">
+        <span>Status:</span>
+        <select id="stateStatusSelect" class="garage-select" style="min-height:32px;padding:4px 8px;font-size:12px">
+          <option value="trial" selected>Trial (First month free trial)</option>
+          <option value="active">Active (Paid)</option>
+          <option value="expired">Expired (Read-only beyond grace)</option>
+        </select>
+      </label>
+    </div>
+    <span class="garage-pending-tag">Session Simulator · Fallback Labels</span>
+  </div>
+
+  <!-- Read-only Expired Banner (Visible when expired beyond grace) -->
+  <div id="garageExpiredBanner" class="garage-expired-banner" role="alert" hidden>
+    <div>
+      <span style="font-size:16px;margin-right:6px">⚠️</span>
+      <strong>Your plan has expired. Your data is safe. Renew to add or edit.</strong>
+    </div>
+    <button type="button" class="td-btn" style="background:#b91c1c;color:#ffffff;border:0;padding:6px 14px;font-size:12.5px" data-gd-view-link="plans">Renew plan →</button>
+  </div>
+
+  <!-- Workspace Shell -->
+  <div class="gd-shell">
+    <aside class="gd-sidebar">
+      <button class="active" data-gd-view="overview">▦ <span>Overview</span></button>
+      <button class="" data-gd-view="jobs">▤ <span>Job cards</span></button>
+      <button class="" data-gd-view="estimates">₹ <span>Estimates</span></button>
+      <button class="" data-gd-view="invoices">▧ <span>Invoices &amp; billing</span></button>
+      <button class="" data-gd-view="customers">♙ <span>Customers &amp; vehicles</span></button>
+      <button class="" data-gd-view="inventory">⚙ <span>Parts &amp; inventory</span></button>
+      <button class="" data-gd-view="bookings">◷ <span>Bookings</span></button>
+      <button class="" data-gd-view="expenses">↘ <span>Expenses</span></button>
+      <button class="" data-gd-view="reports">▥ <span>Reports</span></button>
+      <button class="" data-gd-view="staff">♧ <span>Staff &amp; settings</span></button>
+      <button class="" data-gd-view="plans">₹ <span>Plans &amp; pricing</span></button>
+    </aside>
+
+    <section class="gd-workspace">
+      <!-- 1. OVERVIEW -->
+      <section class="gd-view active" data-gd-panel="overview">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Today at a glance</h2>
+            <p>Counts update in real-time as you work</p>
+          </div>
+          <button class="td-btn" data-gd-action="job">+ New job card</button>
+        </div>
+        <div class="gd-stats">
+          <article><span>Open jobs</span><strong id="sJobs">0</strong><small>Session data</small></article>
+          <article><span>Pending estimates</span><strong id="sEst">0</strong><small>Session data</small></article>
+          <article><span>Unpaid invoices</span><strong id="sUnpaid">0</strong><small>Session data</small></article>
+          <article><span>Low stock</span><strong id="sLow">0</strong><small>Session data</small></article>
+        </div>
+        <div class="gd-two-col">
+          <article class="gd-panel">
+            <h3>Recent job cards</h3>
+            <div class="gd-table-wrap">
+              <table>
+                <thead>
+                  <tr><th>ID</th><th>Customer</th><th>Vehicle</th><th>Concern</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="recentJobs"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="gd-panel">
+            <h3>Quick actions</h3>
+            <div class="gd-quick-actions">
+              <button data-gd-action="job"><span>＋</span><b>Check in vehicle</b><small>Open workspace form</small></button>
+              <button data-gd-action="booking"><span>◷</span><b>Book service</b><small>Open workspace form</small></button>
+              <button data-gd-action="estimate"><span>₹</span><b>Create estimate</b><small>Open workspace form</small></button>
+              <button data-gd-action="invoice"><span>▧</span><b>Create invoice</b><small>Open invoice form</small></button>
+              <button data-gd-action="customer"><span>♙</span><b>Add customer</b><small>Open workspace form</small></button>
+              <button data-gd-action="part"><span>⚙</span><b>Add inventory part</b><small>Open workspace form</small></button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 2. JOB CARDS -->
+      <section class="gd-view" data-gd-panel="jobs">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Job cards</h2>
+            <p>Manage workshop repair and service jobs.</p>
+          </div>
+          <button class="td-btn" data-gd-action="job">+ New job card</button>
+        </div>
+        <div class="gd-toolbar"><input data-gd-search="jobs" placeholder="Search records…"></div>
+        <div class="gd-panel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Job ID</th><th>Customer</th><th>Vehicle / registration</th><th>Concern</th><th>Assigned staff</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-jobs"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. ESTIMATES -->
+      <section class="gd-view" data-gd-panel="estimates">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Estimates &amp; quotations</h2>
+            <p>Prepare cost estimates for customer approval.</p>
+          </div>
+          <button class="td-btn" data-gd-action="estimate">+ New estimate</button>
+        </div>
+        <div class="gd-toolbar"><input data-gd-search="estimates" placeholder="Search records…"></div>
+        <div class="gd-panel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Estimate</th><th>Customer</th><th>Job</th><th>Parts</th><th>Labour</th><th>Total</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-estimates"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. INVOICES & BILLING (BILLING SCREEN) -->
+      <section class="gd-view" data-gd-panel="invoices">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Invoices &amp; billing</h2>
+            <p>List invoices with GST status, totals, and customer sharing.</p>
+          </div>
+          <button class="td-btn" data-gd-action="invoice">+ Create invoice</button>
+        </div>
+
+        <div id="invoiceWhatsAppNotice" class="garage-status-banner" style="display:none">
+          💬 Automated WhatsApp bills and reminders are active for your plan.
+        </div>
+        <div id="invoiceWhatsAppLocked" class="garage-locked-card" style="margin:0 0 16px;padding:16px 20px;text-align:left;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <span class="garage-locked-badge">Available on Premium and Ultra</span>
+            <p style="margin:4px 0 0;font-size:13px;color:#64748b">Automated WhatsApp bills, payment reminders, and digital approval links are available on Premium and Ultra plans.</p>
+          </div>
+          <button type="button" class="td-btn secondary" data-gd-view-link="plans" style="font-size:12px;padding:6px 12px">View plans →</button>
+        </div>
+
+        <div class="gd-toolbar"><input data-gd-search="invoices" placeholder="Search invoices…"></div>
+        <div class="gd-panel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Invoice ID</th><th>Date</th><th>Customer</th><th>Vehicle</th><th>Type</th><th>Total</th><th>Payment</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-invoices"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. CUSTOMERS -->
+      <section class="gd-view" data-gd-panel="customers">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Customers &amp; vehicles</h2>
+            <p>Maintain your customer directory and vehicle histories.</p>
+          </div>
+          <button class="td-btn" data-gd-action="customer">+ Add customer</button>
+        </div>
+        <div class="gd-toolbar"><input data-gd-search="customers" placeholder="Search records…"></div>
+        <div class="gd-panel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Customer</th><th>Phone</th><th>Vehicle</th><th>Registration</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-customers"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. PARTS & INVENTORY (FEATURE SCREEN - ULTRA ONLY) -->
+      <section class="gd-view" data-gd-panel="inventory">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Parts &amp; inventory</h2>
+            <p>Track workshop spare parts, stock levels, and reorder alerts.</p>
+          </div>
+          <button class="td-btn" data-gd-action="part" id="inventoryAddPartBtn">+ Add part</button>
+        </div>
+
+        <!-- Locked Card on Lite & Premium -->
+        <div id="garageInventoryLockedCard" class="garage-locked-card" hidden>
+          <span class="garage-locked-badge">⚙ Available on Ultra</span>
+          <h3>Parts &amp; inventory management is locked on this plan</h3>
+          <p>Inventory management, automated low-stock warnings, and parts cost tracking are exclusive to the Ultra plan. Your existing view below remains visible in read-only mode.</p>
+          <button type="button" class="td-btn" data-gd-view-link="plans">Upgrade to Ultra →</button>
+        </div>
+
+        <div class="gd-toolbar"><input data-gd-search="inventory" placeholder="Search parts…"></div>
+        <div class="gd-panel" id="inventoryTablePanel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Part / SKU</th><th>Category</th><th>Quantity</th><th>Reorder at</th><th>Cost</th><th>Price</th><th>Stock</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-inventory"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. BOOKINGS -->
+      <section class="gd-view" data-gd-panel="bookings">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Bookings &amp; appointments</h2>
+            <p>Schedule service bay arrivals and customer bookings.</p>
+          </div>
+          <button class="td-btn" data-gd-action="booking">+ New booking</button>
+        </div>
+        <div class="gd-toolbar"><input data-gd-search="bookings" placeholder="Search records…"></div>
+        <div class="gd-panel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Time</th><th>Customer</th><th>Vehicle</th><th>Service</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-bookings"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. EXPENSES -->
+      <section class="gd-view" data-gd-panel="expenses">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Workshop expenses</h2>
+            <p>Record operating costs, utilities, and vendor payouts.</p>
+          </div>
+          <button class="td-btn" data-gd-action="expense">+ Add expense</button>
+        </div>
+        <div class="gd-toolbar"><input data-gd-search="expenses" placeholder="Search records…"></div>
+        <div class="gd-panel">
+          <div class="gd-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Category</th><th>Description</th><th>Payment mode</th><th>Amount</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="table-expenses"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. REPORTS -->
+      <section class="gd-view" data-gd-panel="reports">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Reports &amp; insights</h2>
+            <p>Performance metrics and workshop financial summaries.</p>
+          </div>
+          <button class="td-btn" id="exportCsv">Export CSV</button>
+        </div>
+        <div class="gd-stats">
+          <article><span>Jobs</span><strong id="rJobs">0</strong></article>
+          <article><span>Estimates</span><strong id="rEst">0</strong></article>
+          <article><span>Invoices</span><strong id="rInv">0</strong></article>
+          <article><span>Expenses</span><strong id="rExp">0</strong></article>
+        </div>
+        <div class="gd-panel"><div id="reportSummary"></div></div>
+      </section>
+
+      <!-- 10. STAFF & SETTINGS (STAFF LIMIT SCREEN) -->
+      <section class="gd-view" data-gd-panel="staff">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Workshop profile &amp; staff</h2>
+            <p>Manage staff accounts up to your plan limit and configure garage details.</p>
+          </div>
+          <button class="td-btn" data-gd-action="profile">Edit profile</button>
+        </div>
+
+        <!-- At-Limit Staff Banner -->
+        <div id="garageStaffLimitBanner" class="garage-limit-banner" hidden>
+          <span style="font-size:16px">⚠️</span>
+          <span id="garageStaffLimitMsg">Staff limit reached. Upgrade plan to add more staff.</span>
+        </div>
+
+        <div class="gd-two-col">
+          <article class="gd-panel">
+            <h3>Workshop profile</h3>
+            <div id="profileSummary"></div>
+
+            <!-- Email Alias & Public Page Locked Card (Ultra only) -->
+            <div id="garageAliasLockedCard" class="garage-locked-card" style="margin-top:16px;text-align:left" hidden>
+              <span class="garage-locked-badge">🌐 Available on Ultra</span>
+              <h4 style="margin:4px 0 6px;color:#0f172a;font-size:15px">Custom email alias &amp; public garage page</h4>
+              <p style="margin:0 0 10px;font-size:12.5px;color:#64748b">Garage email alias (<code>name@torqdesk.in</code>) and verified public workshop landing page are exclusive to Ultra.</p>
+              <button type="button" class="td-btn secondary" data-gd-view-link="plans" style="font-size:12px;padding:4px 10px">View Ultra plan →</button>
+            </div>
+            <div id="garageAliasActiveCard" style="margin-top:16px;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;display:none">
+              <span class="garage-trial-pill" style="margin-bottom:6px">Ultra Active</span>
+              <div style="font-size:13px;font-weight:600;color:#0f172a">Email: <span id="aliasDisplay">workshop@torqdesk.in</span></div>
+              <div style="font-size:12px;color:#64748b;margin-top:2px">Public page: <span id="pageDisplay">https://torqdesk.in/g/workshop</span></div>
+            </div>
+          </article>
+
+          <article class="gd-panel">
+            <div class="gd-panel-head">
+              <div>
+                <h3>Staff &amp; roles</h3>
+                <span id="staffCountLabel" style="font-size:12px;color:#64748b">3 staff</span>
+              </div>
+              <button class="gd-text-btn" data-gd-action="staff" id="staffAddBtn">+ Add staff</button>
+            </div>
+            <div class="gd-table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Name</th><th>Role</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="table-staff"></tbody>
+              </table>
+            </div>
+            <p class="gd-muted-note" id="staffLimitFootnote">Staff capacity is governed by your active workshop plan.</p>
+          </article>
+        </div>
+
+        <div class="gd-panel">
+          <h3>Workspace tools</h3>
+          <button class="td-btn secondary" id="resetWorkspace">Reset session data</button>
+          <button class="td-btn secondary" id="printReport">Print report</button>
+          <button class="td-btn secondary" id="sendSummary">Share summary</button>
+        </div>
+      </section>
+
+      <!-- 11. PLANS & PRICING (PLANS SCREEN) -->
+      <section class="gd-view" data-gd-panel="plans">
+        <div class="gd-section-heading">
+          <div>
+            <h2>Workshop plans &amp; pricing</h2>
+            <p>Select or upgrade your workshop plan. All prices exclude GST.</p>
+          </div>
+        </div>
+
+        <!-- Plan selection real error banner -->
+        <div id="planActionStatus" class="garage-error-banner" role="alert" hidden></div>
+
+        <div class="garage-plans-grid" id="portalPlansGrid">
+          <!-- Lite Plan -->
+          <div class="garage-plan-card" id="cardPlanLite">
+            <div>
+              <div id="tagCurrentLite" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
+              <h3 class="garage-plan-title">Lite</h3>
+              <div class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price">Rs 2,999</div>
+              <div class="garage-plan-period">per 6 months (excluding GST)</div>
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <ul class="garage-plan-features">
+                <li><span>👥</span> 3 staff including owner</li>
+                <li><span>📄</span> Digital job cards &amp; estimates</li>
+                <li><span>🧾</span> Invoices &amp; billing</li>
+                <li class="garage-feature-dim"><span>✕</span> No inventory</li>
+                <li class="garage-feature-dim"><span>✕</span> No WhatsApp automation</li>
+              </ul>
+            </div>
+            <div style="margin-top:16px">
+              <button type="button" class="td-btn" id="btnSelectLite" onclick="handlePlanSelection('lite')">Select Lite Plan</button>
+            </div>
+          </div>
+
+          <!-- Premium Plan -->
+          <div class="garage-plan-card" id="cardPlanPremium">
+            <div>
+              <div id="tagCurrentPremium" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
+              <h3 class="garage-plan-title">Premium</h3>
+              <div class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price">Rs 3,299</div>
+              <div class="garage-plan-period">per 6 months (excluding GST)</div>
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <ul class="garage-plan-features">
+                <li><span>👥</span> 6 staff</li>
+                <li><span>💬</span> WhatsApp bill &amp; reminder automation</li>
+                <li><span>🏷️</span> Invoice logo branding</li>
+                <li><span>📊</span> Reports &amp; customer feedback link</li>
+                <li><span>📸</span> Job-card photos &amp; estimate approvals</li>
+                <li class="garage-feature-dim"><span>✕</span> No inventory</li>
+              </ul>
+            </div>
+            <div style="margin-top:16px">
+              <button type="button" class="td-btn" id="btnSelectPremium" onclick="handlePlanSelection('premium')">Select Premium Plan</button>
+            </div>
+          </div>
+
+          <!-- Ultra Plan -->
+          <div class="garage-plan-card" id="cardPlanUltra">
+            <div>
+              <div id="tagCurrentUltra" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
+              <h3 class="garage-plan-title">Ultra</h3>
+              <div class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price">Rs 9,999</div>
+              <div class="garage-plan-period">per 6 months (excluding GST)</div>
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <ul class="garage-plan-features">
+                <li><span>👥</span> Staff count <span class="garage-pending-tag">PENDING (proposed 15)</span></li>
+                <li><span>⚙️</span> Parts &amp; inventory tracking</li>
+                <li><span>📧</span> Garage email alias (name@torqdesk.in)</li>
+                <li><span>🌐</span> Public garage web page</li>
+                <li><span>🏢</span> Multi-branch &amp; full invoice branding</li>
+                <li><span>📥</span> Advanced reports &amp; CSV data export</li>
+              </ul>
+            </div>
+            <div style="margin-top:16px">
+              <button type="button" class="td-btn" id="btnSelectUltra" onclick="handlePlanSelection('ultra')">Select Ultra Plan</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="garage-plan-footer-note">
+          Prices exclude GST. GST is added at checkout. <span class="garage-pending-tag">PENDING</span>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <!-- Standard Action Modal -->
+  <div class="gd-modal" id="gdModal" hidden>
+    <div class="gd-modal-backdrop" data-gd-close></div>
+    <section class="gd-modal-card" role="dialog" aria-modal="true">
+      <button class="gd-modal-close" type="button" data-gd-close>×</button>
+      <span class="td-kicker">WORKSHOP FORM</span>
+      <h2 id="modalTitle">Add record</h2>
+      <p id="modalSubtitle">Use sample information in this preview workspace.</p>
+      <form id="workspaceForm">
+        <div id="modalFields" class="gd-form-grid"></div>
+        <div class="gd-modal-actions">
+          <button type="button" class="td-btn secondary" data-gd-close>Cancel</button>
+          <button class="td-btn" type="submit" id="modalSubmitBtn">Save record</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- Printable Invoice Preview Modal -->
+  <div class="garage-printable-modal" id="garagePrintModal" hidden>
+    <div class="garage-printable-card" id="garagePrintCard">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:16px;margin-bottom:20px">
+        <div>
+          <h2 style="margin:0;color:#0f172a;font-size:24px">Torq Desk Workshop</h2>
+          <p style="margin:4px 0 0;color:#64748b;font-size:13px" id="printWorkshopLocation">Tax Invoice / Bill of Supply</p>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:800;color:#0f172a" id="printInvoiceId">INV-101</div>
+          <div style="font-size:12px;color:#64748b" id="printInvoiceDate">Date: 2026-10-18</div>
+        </div>
+      </div>
+      <div id="printInvoiceDetails"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px">
+        <button type="button" class="td-btn secondary" onclick="document.getElementById('garagePrintModal').hidden=true">Close</button>
+        <button type="button" class="td-btn" onclick="window.print()">Print Document</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="gd-toast" id="gdToast" role="status" aria-live="polite" hidden></div>
+</main>
+<!-- TD_SHARED_FOOTER -->
+<script src="js/public-site.js"></script>
+<script src="js/garage-workspace.js?v=2026.10.18-v1-garage-redesign"></script>
+</body>
+</html>
