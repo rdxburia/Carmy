@@ -141,21 +141,19 @@ test("admin route denies an authenticated non-admin before reading tickets or wr
 function createAdminRouteDb(events) {
   return {
     prepare(sql) {
-      return {
-        bind() {
-          return {
-            async first() { return null; },
-            async run() { return { success: true }; },
-            async all() {
-              if (sql.includes("FROM support_tickets")) {
-                events.push("tickets-read");
-                return { results: [{ id: "TD-TEST", subject: "test ticket" }] };
-              }
-              return { results: [] };
-            },
-          };
+      const statement = {
+        bind() { return statement; },
+        async first() { return null; },
+        async run() { return { success: true }; },
+        async all() {
+          if (sql.includes("FROM support_tickets")) {
+            events.push("tickets-read");
+            return { results: [{ id: "TD-TEST", subject: "test ticket" }] };
+          }
+          return { results: [] };
         },
       };
+      return statement;
     },
   };
 }
