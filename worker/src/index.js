@@ -162,7 +162,19 @@ export default {
       if (parts[0] === "admin") {
         const authorizationFailure = await requireSuperAdmin(user, env, origin);
         if (authorizationFailure) return authorizationFailure;
-        if (parts[1] === "tickets") return ticketApi(request, env, origin, user, userToken, parts, url);
+        if (parts[1] === "tickets") {
+          const action = request.method === "GET"
+            ? (parts.length === 2 ? "admin.ticket_workflow.list" : "admin.ticket_workflow.detail")
+            : "admin.ticket_workflow.mutate";
+          const metadata = {
+            ticket_id: parts.length > 2 ? parts[2] : null,
+            method: request.method,
+            status: url.searchParams.get("status") || null,
+          };
+          const auditFailure = await recordSuperAdminAudit(user, env, origin, action, metadata);
+          if (auditFailure) return auditFailure;
+          return ticketApi(request, env, origin, user, userToken, parts, url);
+        }
         if (request.method === "GET" && parts.length === 2 && parts[1] === "me") {
           return json({ ok: true, data: { id: user.id, email: user.email || null, role: "super_admin" } }, 200, origin);
         }
