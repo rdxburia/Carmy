@@ -11,19 +11,36 @@ ALTER TABLE support_tickets ADD COLUMN closed_at INTEGER;
 ALTER TABLE support_tickets ADD COLUMN reopen_until INTEGER;
 ALTER TABLE support_tickets ADD COLUMN show_agent_name INTEGER NOT NULL DEFAULT 0;
 
--- Backfill only NULL statuses; never overwrite an existing status.
+-- Normalize known legacy status values into the workflow vocabulary.
+-- The legacy schema uses NOT NULL DEFAULT 'open', so a NULL-only backfill would
+-- leave existing tickets in statuses that the new transition engine cannot handle.
 UPDATE support_tickets
-SET status = CASE
-  WHEN lower(COALESCE(status, '')) IN ('solved','resolved') THEN 'solved'
-  WHEN lower(COALESCE(status, '')) = 'closed' THEN 'closed'
-  WHEN lower(COALESCE(status, '')) IN ('assigned','in_progress','working') THEN 'working'
-  ELSE 'pending'
+SET status = CASE lower(status)
+  WHEN 'open' THEN 'pending'
+  WHEN 'new' THEN 'pending'
+  WHEN 'pending' THEN 'pending'
+  WHEN 'assigned' THEN 'assigned'
+  WHEN 'in_progress' THEN 'working'
+  WHEN 'working' THEN 'working'
+  WHEN 'need_info' THEN 'need_info'
+  WHEN 'solved' THEN 'solved'
+  WHEN 'resolved' THEN 'solved'
+  WHEN 'closed' THEN 'closed'
+  ELSE status
 END
-WHERE status IS NULL;
+WHERE lower(status) IN ('open','new','pending','assigned','in_progress','working','need_info','solved','resolved','closed');
 
--- Existing values are preserved; defaults are for new records.
-UPDATE support_tickets SET priority = 'normal'
-WHERE priority IS NULL OR lower(priority) NOT IN ('low','normal','high','urgent');
+-- The legacy schema stores title-cased priorities (Normal/Urgent); the workflow
+-- API expects lowercase values. Normalize valid values and use normal for unknowns.
+UPDATE support_tickets
+SET priority = CASE lower(COALESCE(priority, ''))
+  WHEN 'low' THEN 'low'
+  WHEN 'normal' THEN 'normal'
+  WHEN 'high' THEN 'high'
+  WHEN 'urgent' THEN 'urgent'
+  ELSE 'normal'
+END
+WHERE priority IS NULL OR lower(priority) NOT IN ('low','normal','high','urgent') OR priority <> lower(priority);
 
 CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
 CREATE INDEX IF NOT EXISTS idx_support_tickets_assignee ON support_tickets(assignee_id);
