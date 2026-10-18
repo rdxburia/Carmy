@@ -295,3 +295,33 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | `fix/chola-chassis-stray-space` | 0 | 443 | behind | none returned | **stale (zero unique commits)** |
 | `fix/ci-idle-session-regression` | 1 | 53 | diverged | js/app.js, tests/customer-portal-regression.test.mjs, worker/src/index.js | **risky / regression and Worker changes** |
 | `fix/cloudflare-preview-build` | 0 | 563 | behind | none returned | **stale (zero unique commits)** |
+
+
+## Full branch comparison table — chunk 3/6 (24 branches)
+
+| Branch | Ahead | Behind | Status | Changed files returned | Classification |
+|---|---:|---:|---|---|---|
+| `fix/customer-dashboard-auth-load-resilience` | 0 | 74 | behind | none returned | **stale (zero unique commits)** |
+| `fix/customer-session-persistence-and-dashboard` | 0 | 55 | behind | none returned | **stale (zero unique commits)** |
+| `fix/daily-backup-and-public-shell` | 0 | 78 | behind | none returned | **stale (zero unique commits)** |
+| `fix/dashboard-drawer-state` | 0 | 536 | behind | none returned | **stale (zero unique commits)** |
+| `fix/dashboard-footer-links` | 1 | 271 | diverged | index.html | **stale + needs review** |
+| `fix/dashboard-header-actions` | 3 | 561 | diverged | css/premium.css, index.html, js/app.js | **stale + needs review** |
+| `fix/dashboard-report-print-dialog` | 1 | 395 | diverged | index.html, js/app.js | **stale + needs review** |
+| `fix/document-classifier-report-print` | 0 | 504 | behind | none returned | **stale (zero unique commits)** |
+| `fix/document-messages-english` | 0 | 456 | behind | none returned | **stale (zero unique commits)** |
+| `fix/document-ui-reactive-state` | 1 | 562 | diverged | js/app.js | **stale + needs review** |
+| `fix/duplicate-registration-guard` | 0 | 46 | behind | none returned | **stale (zero unique commits)** |
+| `fix/footer-info-links-real-pages` | 0 | 325 | behind | none returned | **stale (zero unique commits)** |
+| `fix/footer-real-page-links` | 2 | 272 | diverged | css/premium.css, index.html | **stale + needs review** |
+| `fix/foreign-key-indexes` | 1 | 519 | diverged | supabase/security_hardening.sql | **risky + stale / database security SQL** |
+| `fix/form-29-30-pdf-ownership-transfer` | 0 | 20 | behind | none returned | **stale (zero unique commits)** |
+| `fix/garage-actions-and-owner-entry` | 5 | 86 | diverged | garage-onboarding.html, js/garage-onboarding.js, supabase/workshop_onboarding_migration.sql, worker/src/workshop-onboarding.js | **risky / workshop SQL and Worker** |
+| `fix/garage-actions-and-remove-demo-labels` | 10 | 113 | diverged | garage-login.html, garage-portal.html, js/garage-demo-login.js, js/garage-demo-portal.js, sw.js | **stale + needs review** |
+| `fix/garage-demo-cache-refresh` | 0 | 116 | behind | none returned | **stale (zero unique commits)** |
+| `fix/garage-demo-form-actions` | 3 | 115 | diverged | garage-portal.html, js/garage-demo-portal.js, sw.js | **stale + needs review** |
+| `fix/garage-demo-interactions` | 0 | 120 | behind | none returned | **stale (zero unique commits)** |
+| `fix/garage-live-cache-and-actions` | 2 | 119 | diverged | garage-portal.html, js/garage-demo-portal.js | **stale + needs review** |
+| `fix/global-info-links-functional` | 0 | 335 | behind | none returned | **stale (zero unique commits)** |
+| `fix/help-nav-cache-visual-polish` | 0 | 40 | behind | none returned | **stale (zero unique commits)** |
+| `fix/help-support-production-and-dashboard-polish` | 0 | 46 | behind | none returned | **stale (zero unique commits)** |
