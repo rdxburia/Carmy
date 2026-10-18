@@ -137,3 +137,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - PR #162 diff contained only `AGENT.md`, `PROGRESS.md`, and `docs/audit-branches.md`; it was merged at `2908e7b763b505366c18df8bae1ebdedd54ff0a9`.
 - PR #163 changes only `wrangler.staging.toml`; config already contains the verified UUID. Policy run `39156681624` passed; Pages run `39156681657` was still in progress at last check. Do not merge until all required checks are green.
 - Supabase settings/secrets unchanged; staging E2E remains stopped pending dedicated staging project. No production ticket content read; no DB writes or Worker deployment.
+
+
+## 2026-10-19 — Branch audit chunk 2/6
+- Appended 24 additional main-vs-branch comparison rows to `docs/audit-branches.md` (branches 25–48 of the 142-branch inventory). Security-sensitive, SQL, Worker, auth, or config diffs are classified risky; no branch is approved for merge by classification alone.
+- Staging D1 UUID correction remains `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, verified against Cloudflare inventory. Supabase secrets untouched; no staging E2E/deploy or production mutation.

@@ -265,3 +265,33 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | `feat/mandatory-production-fixes` | 0 | 42 | behind | none returned | **stale (zero unique commits; name alone not evidence)** |
 | `feat/modern-report-preparation-ui` | 2 | 380 | diverged | index.html, js/app.js | **stale + needs review** |
 | `feat/multipage-policy-extraction` | 36 | 39 | diverged | .github/workflows/step0b-verification.yml, AGENTS.md, PROGRESS.md, index.html, js/app.js, js/document-extraction.js, js/garage-workspace.js, js/password-change.js, scripts/test-garage-workspace.mjs, supabase/ws_001_core.sql, tests/document-extraction-quality.test.cjs, tests/password-change.test.mjs | **risky / auth-SQL-workflow review** |
+
+
+## Full branch comparison table — chunk 2/6 (24 branches)
+
+| Branch | Ahead | Behind | Status | Changed files returned | Classification |
+|---|---:|---:|---|---|---|
+| `feat/owner-garage-auth-entrypoints` | 0 | 140 | behind | none returned | **stale (zero unique commits)** |
+| `feat/phase-bc-docvault-footer-homepage` | 0 | 50 | behind | none returned | **stale (zero unique commits)** |
+| `feat/super-admin-backend-auth` | 15 | 17 | diverged | .github/workflows/super-admin-pr-checks.yml, docs/super-admin-backend-auth.md, package.json, supabase/migrations/20261017160000_create_super_admin_registry.sql, tests/super-admin-auth.test.mjs, tests/support-tickets-worker.test.mjs, worker/src/index.js, worker/src/super-admin.js, worker/src/support-tickets.js | **risky / auth-SQL-Worker workflow review** |
+| `feat/super-admin-frontend-integration` | 6 | 15 | diverged | css/styles.css, index.html, js/app.js, tests/customer-portal-regression.test.mjs | **needs review (frontend diverged)** |
+| `feat/super-admin-frontend-screens` | 1 | 11 | diverged | PROGRESS.md, css/styles.css, index.html, js/app.js, tests/customer-portal-regression.test.mjs | **needs review (frontend/docs diverged)** |
+| `feat/support-ticket-workflow-backend` | 3 | 7 | diverged | worker/migrations/0007_support_ticket_workflow.sql, worker/src/index.js, worker/src/ticket-workflow.js | **risky / migration and Worker routes** |
+| `feat/ticket-frontend` | 1 | 1 | diverged | css/styles.css, js/app.js, tests/customer-portal-regression.test.mjs | **needs review / hold for backend staging** |
+| `feat/torqdesk-phase1-public-site` | 0 | 236 | behind | none returned | **stale (zero unique commits)** |
+| `feat/workshop-m0-foundations` | 0 | 154 | behind | none returned | **stale (zero unique commits)** |
+| `feature/firebase-default-dual-auth` | 10 | 96 | diverged | index.html, js/app.js, js/config.js, tests/workshop-m0-contract.test.mjs | **risky / authentication branch stale** |
+| `feature/motordesk-about-terms-contact` | 0 | 346 | behind | none returned | **stale (zero unique commits)** |
+| `feature/motordesk-real-info-pages` | 4 | 330 | diverged | about.html, contact.html, index.html, terms.html | **stale + needs review** |
+| `feature/rc-insurance-auto-extraction` | 12 | 516 | diverged | css/premium.css, index.html, js/app.js, js/document-extraction.js, supabase/rc_insurance_extraction_lifecycle.sql, worker/src/index.js, worker/src/insurance.js, worker/src/vehicles.js | **risky + stale / document extraction and SQL** |
+| `fix/a4-report-clean-header-footer` | 5 | 382 | diverged | index.html, js/app.js | **stale + needs review** |
+| `fix/account-security-collapsible-ui` | 0 | 23 | behind | none returned | **stale (zero unique commits)** |
+| `fix/admin-logout-and-invite-reality` | 17 | 8 | diverged | index.html, js/app.js, package.json, supabase/ws_001_core.sql, sw.js, tests/admin-invite-session.test.mjs, tests/customer-portal-regression.test.mjs, tests/idle-session-auth.test.mjs, tests/workshop-m0-contract.test.mjs, worker/migrations/0005_revoked_sessions.sql, worker/migrations/0006_admin_team_invites.sql, worker/src/admin-invites.js, worker/src/auth.js, worker/src/index.js, wrangler.toml | **risky / auth, migrations, Worker and config** |
+| `fix/api-cors-health-hardening` | 2 | 518 | diverged | worker/src/index.js, worker/src/response.js | **risky + stale / Worker routing** |
+| `fix/api-diagnostic-auth-fetch` | 1 | 569 | diverged | api-test.html | **stale + needs review** |
+| `fix/api-rate-limiting` | 3 | 517 | diverged | worker/src/index.js, wrangler.toml | **risky + stale / infra config** |
+| `fix/cache-webhook-runtime-error` | 0 | 566 | behind | none returned | **stale (zero unique commits)** |
+| `fix/car-edit-modal-background` | 1 | 560 | diverged | css/styles.css | **stale + needs review** |
+| `fix/chola-chassis-stray-space` | 0 | 443 | behind | none returned | **stale (zero unique commits)** |
+| `fix/ci-idle-session-regression` | 1 | 53 | diverged | js/app.js, tests/customer-portal-regression.test.mjs, worker/src/index.js | **risky / regression and Worker changes** |
+| `fix/cloudflare-preview-build` | 0 | 563 | behind | none returned | **stale (zero unique commits)** |

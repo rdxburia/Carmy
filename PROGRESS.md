@@ -356,3 +356,10 @@ The user was given an Antigravity prompt to:
 - Verified from Cloudflare D1 inventory: staging DB `carmy-ticket-workflow-staging` = `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; production DB `carmy-cache` = `57c85007-1cf7-470f-bb4d-3b28cbb555b7`. Corrected earlier UUID transcription error by appending this note; history preserved.
 - Added first 24 branch comparison rows to `docs/audit-branches.md` in one commit with synchronized append-only updates to `AGENT.md` and `PROGRESS.md`.
 - PR #162 merged; PR #163 remains open while required checks are pending. No staging deploy, Supabase secret change, migration, ticket test, production read/write, branch deletion, or force-push.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 2/6
+- Added branches 25–48 (24 rows) with ahead/behind, GitHub compare status, changed file names returned, and classification. This was committed together with append-only updates to `AGENT.md` and `PROGRESS.md`.
+- No branches merged/deleted/force-pushed; no production ticket contents read; no D1 writes or Worker deployment.
