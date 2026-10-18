@@ -399,3 +399,13 @@ The user was given an Antigravity prompt to:
 - Appended all 154 pull requests returned by GitHub's `state=all` REST collection (pages 1–2) to `docs/audit-branches.md`. The inventory includes PR state, head/base branch, changed-file count, creation date, and link; full changed-file lists for every PR remain unverified unless separately inspected.
 - Completed six branch-comparison chunks covering 142 remote branches. This commit updates both `AGENT.md` and `PROGRESS.md` append-only.
 - Production ticket content not read; production migration/deploy not performed; staging Supabase/E2E remain STOP.
+
+
+---
+
+## 2026-10-19 — Staging D1 isolation deployment and audit inventory correction
+- PR #163 merged after green Worker build and policy checks. Deployed staging-only Worker settings; active version 16 `45e2bdb5-ca58-481c-b3f6-00515eca978e`, deployment `9369670c-639d-4b8a-8b54-2a6f01e81d67`, 100% traffic. Cloudflare GET settings verified DB binding `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`.
+- Staging config no longer defines production `SUPABASE_URL`; the secret binding itself was inherited unchanged. No secret values read or changed. No E2E/ticket mutation.
+- Read-only staging D1 counts: 4 support_tickets, 2 ticket_events, 0 ticket_reads, 0 audit_log. Workflow schema exists; `d1_migrations` ledger table is absent, so migration ledger verification is unverified. Migration 0007 was not rerun.
+- PR #164 merged; appended a correction to `docs/audit-branches.md` for PR #164, created after the original 154-record inventory snapshot. Correct staging UUID also appended as a correction without removing old history.
+- Production ticket content not read. No production migration or Worker deployment. Dedicated staging Supabase and authenticated E2E remain STOP until user provisions the project.
