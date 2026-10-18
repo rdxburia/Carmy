@@ -1,1 +1,2 @@
+// Staging-only config: do not merge this branch into production main.
 window.APP_CONFIG={SUPABASE_URL:"https://vejccahjrlwhaniajgez.supabase.co",SUPABASE_KEY:"sb_publishable_al-c7CwwZW3PMhF2Wa4V8w_VF7N3_iy",WORKER_API_URL:"https://carmy-api-staging.mr-rny-buria.workers.dev"};
