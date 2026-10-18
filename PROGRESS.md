@@ -247,3 +247,37 @@ The user was given an Antigravity prompt to:
 - Verified on `main` that both `AGENT.md` and `PROGRESS.md` exist and contain the appended session history.
 - The earlier statement that the documentation PR was still pending is retained as historical context; this newer entry supersedes it.
 - This follow-up corrects documentation status only; no application code or backend infrastructure changed.
+
+
+## 2026-10-18 — Localhost preview server fix and complete Garage frontend live deployment preparation
+- **User Prompt 1:** "fix localhost" ("this is not showing on localhost fix it even in gitcode view")
+- **User Prompt 2:** "TORQ DESK — DEPLOY ALL FRONTEND CHANGES LIVE: Antigravity has now completed additional frontend work, including the Garage frontend. I want all completed frontend changes deployed to the live website. Backend work will be handled later."
+- **Context & Diagnosis:**
+  - User noted that newly built features were not showing on localhost or in GitHub's repository code view.
+  - Inspection revealed that previous PR #156 merged to `main` was solely a cache/build version token bump (`1c131aa`), while all substantive Garage frontend code (5-step onboarding wizard, plans view, billing & invoice calculations, feature locks, and expired states) remained isolated on `feat/garage-frontend-redesign`.
+  - Localhost preview failed because `sw.js` was hardcoded to `BASE = '/Carmy/'`, which caused `cache.addAll()` to fail with 404 on `http://localhost:8080/`, completely halting PWA installation, and requests were intercepted by the service worker without a local backend proxy.
+- **Frontend Changes Implemented:**
+  1. **Branch Rebase:** Rebased `feat/garage-frontend-redesign` onto latest `origin/main` (`4e1037f`), cleanly resolving the conflict in `sw.js` while maintaining cache v14.
+  2. **Local Preview Server:** Implemented `scripts/local-preview-server.cjs` supporting root `/` and `/Carmy/` paths, injecting header/footer partials on the fly, and proxying `/api/*` requests to the Worker to eliminate CORS errors on localhost.
+  3. **npm Scripts:** Added `"start"`, `"dev"`, and `"serve"` to `package.json` pointing to `node scripts/local-preview-server.cjs`.
+  4. **Service Worker Localhost Compatibility:** Updated `sw.js` to detect `isLocal` (`localhost` or `127.0.0.1`), setting `BASE = '/'` on localhost to resolve `cache.addAll()` 404 crashes and bypassing fetch cache during development.
+  5. **Direct Entry Links:** Updated `index.html` (workshop hero buttons) and `partials/public-header.html` (Get Started dropdown) to link directly to `garage-onboarding.html` and `garage-login.html`.
+  6. **Test Suite Compatibility:** Updated cache version regex in `tests/customer-portal-regression.test.mjs` and `tests/workshop-m0-contract.test.mjs` to validate `torq-desk-shell-v14` (introduced in PR #156).
+- **Verification Evidence:**
+  - Automated tests: 148 / 148 tests passed via `node --test tests/*.test.mjs`.
+  - Full test suite: 128 / 128 tests passed via `cmd /c npm test`.
+  - Headless Chromium (Playwright): 0 page errors, 0 failed network requests, 0 console warnings on `http://localhost:8080/` and `http://localhost:8080/garage-onboarding.html`.
+- **Files Modified/Created:**
+  - `package.json`
+  - `sw.js`
+  - `scripts/local-preview-server.cjs`
+  - `index.html`
+  - `partials/public-header.html`
+  - `tests/customer-portal-regression.test.mjs`
+  - `tests/workshop-m0-contract.test.mjs`
+  - `AGENT.md`
+  - `PROGRESS.md`
+- **Scope Invariants Preserved:**
+  - Zero backend/Worker/migration edits.
+  - Zero modifications to production D1 or Supabase auth/RLS.
+  - Vehicle owner dashboard, document vault, Form 29/30, and session guard preserved intact.
