@@ -177,6 +177,41 @@ export default {
         return error("Route not found.", 404, origin, "NOT_FOUND");
       }
 
+      if (request.method === "POST" && parts[0] === "session" && parts[1] === "revoke" && parts.length === 2) {
+        const claims = (() => {
+          try {
+            const payload = userToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+            return JSON.parse(atob(payload + "=".repeat((4 - payload.length % 4) % 4)));
+          } catch { return {}; }
+        })();
+        const sessionId = String(claims.session_id || "");
+        const tokenExpiry = Number(claims.exp || 0);
+        const now = Math.floor(Date.now() / 1000);
+        if (!sessionId || !tokenExpiry || tokenExpiry <= now) {
+          return error("A valid current session could not be identified for sign-out.", 401, origin, "SESSION_IDENTITY_MISSING");
+        }
+        try {
+          await env.DB.prepare(
+            "INSERT INTO revoked_sessions (session_id, user_id, revoked_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET user_id = excluded.user_id, revoked_at = excluded.revoked_at, expires_at = excluded.expires_at"
+          ).bind(sessionId, user.id, now, tokenExpiry).run();
+        } catch (dbErr) {
+          console.error("Could not persist session revocation", dbErr?.message || dbErr);
+          return error("Session sign-out could not be confirmed. Please retry.", 503, origin, "SESSION_REVOKE_UNAVAILABLE");
+        }
+        let globalSessionsRevoked = false;
+        try {
+          const providerResponse = await fetch(`${env.SUPABASE_URL}/auth/v1/logout?scope=global`, {
+            method: "POST",
+            headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${userToken}` },
+          });
+          globalSessionsRevoked = providerResponse.ok;
+          if (!providerResponse.ok) console.warn("Supabase global sign-out rejected", providerResponse.status);
+        } catch (providerErr) {
+          console.error("Supabase global sign-out request failed", providerErr?.message || providerErr);
+        }
+        return json({ ok: true, current_session_revoked: true, global_sessions_revoked: globalSessionsRevoked }, 200, origin);
+      }
+
       if (request.method === "POST" && parts[0] === "session" && parts[1] === "heartbeat" && parts.length === 2) {
         // Authentication above checks D1 last_seen before this route can refresh it.
         const claims = (() => { try { const p = userToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(atob(p + "=".repeat((4 - p.length % 4) % 4))); } catch { return {}; } })();
