@@ -326,3 +326,25 @@ The user was given an Antigravity prompt to:
 - **Backend Restrictions Maintained:**
   - Zero backend/Worker/migration edits.
   - No changes to Cloudflare Workers, production D1, database schemas, Supabase auth/RLS, or secrets.
+
+
+---
+
+## 2026-10-19 — Autonomous backend rollout audit: Phase 0–1
+- **User instruction summary:** Verify access first, audit branches/PRs and CI read-only, record findings in `docs/audit-branches.md`, preserve both logs append-only, isolate staging, and do not touch production until the explicit `APPROVE PRODUCTION` message after Phase 4.
+- **Access check:** GitHub repo/file/branch/PR APIs responded; Cloudflare authenticated identity and Worker settings responded; Supabase project and branch inventory responded. Local Antigravity workspace access is unverified.
+- **Branch audit:** enumerated 142 remote branches and queried main-vs-branch comparisons. The complete per-branch metrics and all-time PR pagination are not fully serialized/verified in the report; the audit artifact explicitly records this limitation and does not claim exhaustive completion.
+- **Saved artifact:** `docs/audit-branches.md` on branch `audit/phase0-phase1-2026-10-19`, commit `644fb7b4a8a5cca5d74833ad68cddc8a42c7bb16`.
+- **CI re-verification:** [39116991832](https://github.com/rdxburia/Carmy/actions/runs/39116991832) SUCCESS; [39116991799](https://github.com/rdxburia/Carmy/actions/runs/39116991799) SUCCESS; [39116991766](https://github.com/rdxburia/Carmy/actions/runs/39116991766) SUCCESS.
+- **PR evidence:** PR #155 is merged/closed; PR #161 remains open/unmerged. No merge performed.
+- **Critical staging finding:** live `carmy-api-staging` Worker DB binding points at production D1 UUID `57c85007-1cf7-470f-bb4d-3b28cbb555b7`, not staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. No mutation tests or deploy were run.
+- **Staging Supabase STOP:** accessible inventory showed only the existing `Carmy` project and no dedicated staging project/credentials; its listed development branch status is `MIGRATIONS_FAILED`. Stop before staging Worker deploy or authenticated E2E; do not reuse production secrets.
+- **Safety:** production ticket content not read; no D1 mutation, migration 0007, production Worker deploy, branch deletion, or force-push.
+- **Next action:** finish/serialize full branch and PR delta inventory; staging config PR may be prepared, but no staging deploy/E2E until a dedicated staging Supabase project and safe credentials are available. Production stays HOLD until Phase 4 report and explicit `APPROVE PRODUCTION`.
+
+
+## 2026-10-19 — Audit PR and explicit Phase 2 stop
+- Opened PR #162: https://github.com/rdxburia/Carmy/pull/162. PR metadata was rechecked as open/unmerged; combined commit status returned no statuses at check time, so CI is pending/unverified.
+- Supabase inventory recheck still shows only project `Carmy`; no dedicated staging project/safe credentials were available. The listed development branch status is `MIGRATIONS_FAILED`.
+- Reached the user's explicit Phase 2 STOP condition. No staging config mutation, Worker deploy, or authenticated ticket E2E was attempted; live staging Worker remains bound to production D1 and must not be used for mutation tests.
+- Production ticket contents were not read; production migration/deploy and all D1 writes remain untouched. Resume only after dedicated staging Supabase is provisioned and safe staging credentials are available.

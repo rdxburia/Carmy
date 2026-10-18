@@ -109,3 +109,23 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - **Deferred Backend State:**
   - Worker production deployment and migrations (`0007_support_ticket_workflow.sql`, `ws_001_core.sql`) remain untouched.
   - Zero backend, Worker, D1, or database changes applied.
+
+
+## 2026-10-19 — Autonomous backend rollout audit (Phase 0–1) and staging isolation blocker
+- **User scope:** autonomously execute Torq Desk/Carmy rollout; first verify GitHub, Cloudflare, Supabase, and repo access; audit remote branches/PRs and ticket CI; keep all work append-only; never read production ticket content; never run staging mutations until live staging D1 binding is verified; never expose secrets; do not run migration 0007 twice; no production migration/Worker deployment before explicit `APPROVE PRODUCTION`.
+- **Access evidence:** GitHub repository/file/branch/PR endpoints worked; Cloudflare authenticated identity and Worker settings endpoint worked; Supabase project/branch inventory worked. Local Antigravity workspace/unpushed changes remain unverified.
+- **Branch inventory:** 142 remote branches enumerated. Main-vs-branch comparison API was queried for the branch inventory. The complete per-branch metrics were not serialized in the audit artifact; do not call this exhaustive. Full all-time PR inventory is also unverified because the search endpoint returned only its first 100 results and the older-date partition did not return reliable coverage.
+- **Audit artifact:** `docs/audit-branches.md`, commit `644fb7b4a8a5cca5d74833ad68cddc8a42c7bb16` on branch `audit/phase0-phase1-2026-10-19`. Includes branch-name inventory, high-risk comparison evidence, CI results, migration source review, and explicit unverified items.
+- **Verified ticket CI:** run 39116991832 (tests + Worker build) SUCCESS; 39116991799 (policy extraction) SUCCESS; 39116991766 (idle-session regression) SUCCESS.
+- **PR state correction:** PR #155 is merged/closed at `341ddf1876ba686a89eb8f12424b459461e0694f`; its body has stale text claiming open/unmerged. PR #161 is open and unmerged; do not merge before staging validation.
+- **Critical live isolation issue:** Cloudflare GET settings for `carmy-api-staging` returned `DB` database ID `57c85007-1cf7-470f-bb4d-3b28cbb555b7` (production), not staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. No staging mutations or Worker deploy were performed.
+- **Supabase blocker:** only project `Carmy` was visible; no dedicated staging project/safe staging credentials were found. Its listed development branch reports `MIGRATIONS_FAILED`. Never use production Supabase credentials in staging. Stop before staging Worker deploy/authenticated E2E.
+- **Production safety:** no production ticket contents queried; no production migration, Worker deploy, ticket mutation, branch deletion, or force-push performed. Migration 0007 source review confirms non-idempotent ALTER ADD COLUMN statements and status/priority data normalization; production migration remains HOLD.
+- **Next:** finish a reliable, serialized branch/PR inventory; prepare staging-only config PR without deploying until dedicated staging Supabase exists; verify live binding before synthetic-only staging tests; keep production held pending Phase 4 and explicit approval.
+
+
+## 2026-10-19 — Audit report PR opened; staging STOP confirmed
+- Opened PR #162: https://github.com/rdxburia/Carmy/pull/162 (audit docs + append-only logs). Current metadata reports state open and merged=false; no combined status checks were returned at the time checked, so CI is **pending/unverified**, not green.
+- Rechecked Supabase project inventory: only the existing `Carmy` project is visible; no dedicated staging Supabase project or safe staging credentials are available. Its development branch reports `MIGRATIONS_FAILED`.
+- **STOP POINT reached:** no staging Worker config change/deploy or authenticated E2E test will be attempted without a dedicated staging Supabase project/credentials. Live staging Worker still points to production D1, so staging mutations remain prohibited.
+- Next requires provisioning a dedicated staging Supabase project/credentials (without copying production secrets), then resuming Phase 2. Production remains untouched and held.
