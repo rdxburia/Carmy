@@ -1,1 +1,1 @@
-window.APP_CONFIG={SUPABASE_URL:"https://hlrmuvzmaegnbgzvvfsn.supabase.co",SUPABASE_KEY:"sb_publishable_UxbDw0SkyCxXVrnEwmGDJQ_ec-mbl6q",WORKER_API_URL:"https://carmy-api.mr-rny-buria.workers.dev"};
+window.APP_CONFIG={SUPABASE_URL:"https://vejccahjrlwhaniajgez.supabase.co",SUPABASE_KEY:"sb_publishable_al-c7CwwZW3PMhF2Wa4V8w_VF7N3_iy",WORKER_API_URL:"https://carmy-api-staging.mr-rny-buria.workers.dev"};
