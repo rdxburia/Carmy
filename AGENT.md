@@ -122,3 +122,10 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - **Supabase blocker:** only project `Carmy` was visible; no dedicated staging project/safe staging credentials were found. Its listed development branch reports `MIGRATIONS_FAILED`. Never use production Supabase credentials in staging. Stop before staging Worker deploy/authenticated E2E.
 - **Production safety:** no production ticket contents queried; no production migration, Worker deploy, ticket mutation, branch deletion, or force-push performed. Migration 0007 source review confirms non-idempotent ALTER ADD COLUMN statements and status/priority data normalization; production migration remains HOLD.
 - **Next:** finish a reliable, serialized branch/PR inventory; prepare staging-only config PR without deploying until dedicated staging Supabase exists; verify live binding before synthetic-only staging tests; keep production held pending Phase 4 and explicit approval.
+
+
+## 2026-10-19 — Audit report PR opened; staging STOP confirmed
+- Opened PR #162: https://github.com/rdxburia/Carmy/pull/162 (audit docs + append-only logs). Current metadata reports state open and merged=false; no combined status checks were returned at the time checked, so CI is **pending/unverified**, not green.
+- Rechecked Supabase project inventory: only the existing `Carmy` project is visible; no dedicated staging Supabase project or safe staging credentials are available. Its development branch reports `MIGRATIONS_FAILED`.
+- **STOP POINT reached:** no staging Worker config change/deploy or authenticated E2E test will be attempted without a dedicated staging Supabase project/credentials. Live staging Worker still points to production D1, so staging mutations remain prohibited.
+- Next requires provisioning a dedicated staging Supabase project/credentials (without copying production secrets), then resuming Phase 2. Production remains untouched and held.
