@@ -93,7 +93,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   target_org uuid;
 begin
