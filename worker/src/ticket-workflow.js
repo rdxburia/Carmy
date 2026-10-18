@@ -66,8 +66,16 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
     if(!ticket.chat_enabled || Number(ticket.chat_enabled_until||0)<=nowSec() || ticket.status==="closed")return fail("Replies are currently disabled for this ticket.",403,origin,"CHAT_DISABLED");
     const body=await request.json().catch(()=>null), message=String(body?.message||"").trim();
     if(!message||message.length>4000)return fail("Message must contain 1–4000 characters.",400,origin,"INVALID_MESSAGE");
-    await event(env,{ticketId,actorId:user.id,actorType:"user",type:"message",message});
-    await env.DB.prepare("UPDATE support_tickets SET updated_at=? WHERE id=? AND user_id=?").bind(nowSec(),ticketId,user.id).run();
+    if(typeof env.DB.batch!=="function")return fail("Atomic ticket replies are unavailable.",503,origin,"TICKET_UPDATE_UNAVAILABLE");
+    try {
+      await env.DB.batch([
+        ...eventBatchStatements(env,{ticketId,actorId:user.id,actorType:"user",type:"message",message,now:nowSec()}),
+        env.DB.prepare("UPDATE support_tickets SET updated_at=? WHERE id=? AND user_id=?").bind(nowSec(),ticketId,user.id),
+      ]);
+    } catch(err) {
+      console.error("Atomic customer ticket reply failed",err?.message||err);
+      return fail("Your reply could not be saved. Please retry.",503,origin,"TICKET_UPDATE_UNAVAILABLE");
+    }
     return json({ok:true},201,origin);
   }
   if(parts[0]==="admin" && parts[1]==="tickets") {
