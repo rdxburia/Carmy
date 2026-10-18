@@ -355,3 +355,33 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | `fix/native-vehicle-report-print` | 0 | 431 | behind | none returned | **stale (zero unique commits)** |
 | `fix/password-change-isolated-verification` | 8 | 9 | diverged | index.html, js/app.js, js/password-change.js, package.json, sw.js, tests/password-change.test.mjs, tests/workshop-m0-contract.test.mjs | **risky / password and session-sensitive** |
 | `fix/password-toggle-clean-rebase` | 0 | 343 | behind | none returned | **stale (zero unique commits)** |
+
+
+## Full branch comparison table — chunk 5/6 (24 branches)
+
+| Branch | Ahead | Behind | Status | Changed files returned | Classification |
+|---|---:|---:|---|---|---|
+| `fix/password-toggle-grid-alignment` | 0 | 350 | behind | none returned | **stale (zero unique commits)** |
+| `fix/password-toggle-proper-input-anchor` | 3 | 349 | diverged | css/premium.css, index.html | **stale + needs review** |
+| `fix/performance-rls-hardening` | 1 | 520 | diverged | supabase/security_hardening.sql | **risky + stale / database security SQL** |
+| `fix/print-wait-screen-clean-footer` | 0 | 389 | behind | none returned | **stale (zero unique commits)** |
+| `fix/publish-torqdesk-info-pages` | 1 | 270 | diverged | .github/workflows/pages.yml | **risky + stale / Pages workflow** |
+| `fix/puc-route-syntax` | 1 | 513 | diverged | worker/src/index.js | **risky + stale / Worker routing** |
+| `fix/rc-insurance-puc-extraction-live-bugs` | 33 | 514 | diverged | css/premium.css, index.html, js/app.js, js/document-extraction.js, supabase/puc_extraction_lifecycle.sql, worker/src/index.js, worker/src/insurance.js, worker/src/puc.js | **risky + stale / extraction and SQL** |
+| `fix/refresh-print-tab-assets` | 1 | 392 | diverged | index.html | **stale + needs review** |
+| `fix/remove-demo-copy-from-workshop-pages` | 2 | 112 | diverged | for-workshops.html, partials/public-header.html | **stale + needs review** |
+| `fix/remove-drawer-info-links-clean` | 0 | 331 | behind | none returned | **stale (zero unique commits)** |
+| `fix/rename-garage-workspace-assets` | 0 | 97 | behind | none returned | **stale (zero unique commits)** |
+| `fix/report-print-in-separate-window` | 0 | 393 | behind | none returned | **stale (zero unique commits)** |
+| `fix/report-print-pagination` | 0 | 449 | behind | none returned | **stale (zero unique commits)** |
+| `fix/resolve-print-css-conflict` | 0 | 386 | behind | none returned | **stale (zero unique commits)** |
+| `fix/restore-service-log-auto-description` | 3 | 378 | diverged | index.html, js/app.js | **stale + needs review** |
+| `fix/security-idle-timeout-ws-a` | 0 | 416 | behind | none returned | **stale (zero unique commits)** |
+| `fix/shared-public-shell-nav-glossary` | 0 | 205 | behind | none returned | **stale (zero unique commits)** |
+| `fix/sitewide-inter-font` | 16 | 114 | diverged | 404.html, about.html, contact.html, css/public-site.css, css/tokens.css, faq.html, features.html, for-workshops.html, garage-login.html, garage-portal.html, how-it-works.html, index.html, offline.html, pricing.html, privacy.html, terms.html | **stale + needs review / broad frontend** |
+| `fix/sitewide-readable-type` | 0 | 179 | behind | none returned | **stale (zero unique commits)** |
+| `fix/step0b-password-and-sql-main` | 5 | 8 | diverged | index.html, js/app.js, js/password-change.js, sw.js, tests/password-change.test.mjs | **risky / password and session-sensitive** |
+| `fix/super-admin-grants-least-privilege` | 1 | 16 | diverged | supabase/migrations/20261017170000_tighten_super_admin_registry_grants.sql | **risky / database grants** |
+| `fix/super-admin-persistent-mode` | 2 | 12 | diverged | js/app.js, tests/customer-portal-regression.test.mjs | **needs review / admin UI** |
+| `fix/super-admin-stale-service-worker-cache` | 2 | 14 | diverged | index.html, sw.js | **needs review / service-worker cache** |
+| `fix/super-admin-workspace-and-ticket-errors` | 5 | 13 | diverged | css/styles.css, js/app.js, tests/customer-portal-regression.test.mjs, tests/workshop-m0-contract.test.mjs | **needs review / admin and ticket UI** |
