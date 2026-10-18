@@ -189,3 +189,52 @@ Step 0 foundation completed and merged. Proceeded to Super Admin Frontend Implem
 - **Regression Test Suite:**
   - `node --test tests/*.test.mjs` ran with **120 tests passed, 0 failed, 0 skipped**.
   - `tests/customer-portal-regression.test.mjs` ran with **74 tests passed, 0 failed** (including 5 new tests covering admin shell isolation, 12 screen transitions, 5-tab mobile nav, ticket 500/503 diagnostic card, and token reveal/wipe flow).
+
+
+---
+
+## 2026-10-18 — Session Continuation & Documentation Preservation
+
+### User's standing instruction
+- From now on, record every meaningful command and every prompt supplied for Torq Desk/Carmy in both `PROGRESS.md` and `AGENT.md`.
+- Preserve all existing historical content. Never delete, replace, truncate, or silently rewrite old entries. Append dated entries; corrections must be added as new notes that identify what is corrected and why.
+- Keep both files synchronized: `PROGRESS.md` is the chronological activity/evidence log; `AGENT.md` is the persistent agent operating guide plus a compact append-only prompt/command history.
+
+### Current priority: frontend-only live deployment
+- Repository: https://github.com/rdxburia/Carmy
+- Live site: https://rdxburia.github.io/Carmy/
+- User reports Antigravity has completed additional frontend work, including the Garage frontend.
+- Goal: publish all actual completed frontend changes and verify the live website. Backend work is explicitly deferred.
+- **Current evidence status:** Antigravity's local changes and the new Garage frontend have not yet been independently inspected or verified live. Do not claim deployment is complete until the actual changed files, deployed commit, successful workflow, and live UI are verified.
+- Required workflow: inspect local Git status and diffs; compare with latest `main`; preserve uncommitted work; run available build/lint/tests; commit actual UI changes to a branch; open PR; merge only when checks pass; verify GitHub Pages and changed pages including Garage.
+- Do not make a cache-version-only commit as a substitute for shipping the actual UI.
+
+### Strict scope and safety constraints
+- Frontend-only for this deployment. Do not change/deploy Cloudflare Workers, production D1, database migrations, authentication backend, secrets, API infrastructure, DNS, or production configuration.
+- Known earlier backend state: PR #155 ticket workflow merged at `341ddf1876ba686a89eb8f12424b459461e0694f`; production Worker was rolled back to version 232; production D1 migration 0007 was not applied.
+- PR #156 was only a cache/build token bump (v13→v14 and service worker cache `torq-desk-shell-v13`→`torq-desk-shell-v14`), merged at `1c131aaa768f7fb4b9b70a574707826e94bde6a1`. GitHub Actions run https://github.com/rdxburia/Carmy/actions/runs/39142465249 succeeded, but that did **not** prove Antigravity's actual UI changes were live.
+- GitHub Pages deploys on push to `main`; PR validation alone does not deploy.
+- Preserve working dashboard, authentication/session, document extraction, Form 29/30 flows, responsive/mobile behavior, navigation, footer/support behavior, and other existing features. Avoid unnecessary dashboard redesign.
+- Never say a task is done without evidence. Clearly separate local changes, committed changes, merged changes, workflow success, and live-site verification.
+
+### Prompt supplied on 2026-10-18: deploy all frontend changes
+The user was given an Antigravity prompt to:
+1. Inspect local project/Git status and identify all undeployed UI changes, including Garage.
+2. Compare local changes against latest `main`, preserve all work, and avoid resets/overwrites.
+3. Run build/lint/tests and review the diff.
+4. Commit actual frontend changes on a branch, open PR, pass checks, merge when safe, and trigger Pages deployment.
+5. Keep backend, Worker, production D1, migrations, secrets, APIs, and production config untouched.
+6. Verify the deployed commit, workflow, live assets, Garage page, other changed pages, desktop/mobile layouts, navigation, console errors, and broken assets.
+7. Report files, commit SHA, PR URL, tests, workflow URL/status, live verification, and backend dependencies. If local project access is unavailable, state the blocker rather than guessing.
+
+### Documentation integrity
+- Existing content above this entry is historical and must remain intact.
+- `AGENT.md` did not exist at the repository root when checked on 2026-10-18; create it as a new persistent agent guide. Do not overwrite any other file or rename `AGENTS.md` without checking first.
+
+
+## 2026-10-18 — Documentation update execution record
+- User explicitly reinforced: “ab se har cmd and prompt proper progess md & agent md me save karna bina old data remove ya delete kiye ab tak sara save kr lo agent md and progres md me”.
+- Attempted to update `PROGRESS.md` directly on `main`; GitHub rejected direct write because repository rules require a pull request. No direct-main change was made.
+- Created branch `docs/preserve-project-history-2026-10-18` from `main`.
+- Appended this session's status to `PROGRESS.md` while retaining its previous content, and created previously absent root `AGENT.md` with session-start instructions, append-only documentation rules, current frontend-only deployment scope, known deployment evidence, and backend restrictions.
+- This documentation work is on the branch and is **not merged into main yet**. PR is the next step; do not describe it as merged/saved on main until confirmed.
