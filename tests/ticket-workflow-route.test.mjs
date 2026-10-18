@@ -51,6 +51,40 @@ const origin = "https://app.test";
 const user = { id: "user-1", email: "user@example.com" };
 const url = new URL("https://worker.test/api/tickets/T-1");
 
+test("ticket workflow: customer can create a ticket atomically", async () => {
+  const { env, calls } = mockEnv();
+  const request = new Request("https://worker.test/api/tickets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category: "Account & Security", subject: "Cannot sign in", message: "Please help me sign in.", priority: "normal" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["tickets"], new URL(request.url));
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(body.ok, true);
+  assert.match(body.data.id, /^TD-[A-F0-9]{8}$/);
+  assert.equal(body.data.status, "pending");
+  const batch = calls.find((call) => call.method === "batch");
+  assert.ok(batch);
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("INSERT INTO support_tickets")));
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("INSERT INTO ticket_events")));
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("INSERT INTO audit_log")));
+});
+
+test("ticket workflow: invalid customer ticket payload is rejected before writes", async () => {
+  const { env, calls } = mockEnv();
+  const request = new Request("https://worker.test/api/tickets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category: "made up", subject: "Help", message: "Body" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["tickets"], new URL(request.url));
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error.code, "INVALID_CATEGORY");
+  assert.equal(calls.some((call) => call.method === "batch"), false);
+});
+
 test("ticket workflow: customer detail resolves /api/tickets/:id", async () => {
   const { env, calls } = mockEnv({
     ticket: { id: "T-1", user_id: "user-1", subject: "Help", status: "working", priority: "normal", chat_enabled: 0 },
