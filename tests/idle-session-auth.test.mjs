@@ -12,7 +12,7 @@ test("forged X-Carmy-Last-Activity cannot keep an expired D1 session alive", asy
   const calls = [];
   const env = {
     SUPABASE_URL:"https://example.supabase.co", SUPABASE_SECRET_KEY:"secret",
-    DB:{prepare(sql){return {bind(...args){return {first:async()=>({session_id:"sess-1",user_id:"u1",last_seen:Math.floor(Date.now()/1000)-121}),run:async()=>{calls.push({sql,args});return {success:true}}}}}}},
+    DB:{prepare(sql){return {bind(...args){return {first:async()=>sql.includes("FROM revoked_sessions")?null:({session_id:"sess-1",user_id:"u1",last_seen:Math.floor(Date.now()/1000)-121}),run:async()=>{calls.push({sql,args});return {success:true}}}}}}},
   };
   globalThis.fetch = async (url,init) => {
     if (String(url).endsWith("/auth/v1/user")) return new Response(JSON.stringify({id:"u1"}),{status:200});
@@ -31,7 +31,7 @@ test("active session D1 write uses Worker server time, not client header", async
   let writeArgs=null;
   const env={
     SUPABASE_URL:"https://example.supabase.co",SUPABASE_SECRET_KEY:"secret",
-    DB:{prepare(sql){return {bind(...args){return {first:async()=>({session_id:"sess-2",user_id:"u1",last_seen:now-20}),run:async()=>{writeArgs=args;return {success:true}}}}}}},
+    DB:{prepare(sql){return {bind(...args){return {first:async()=>sql.includes("FROM revoked_sessions")?null:({session_id:"sess-2",user_id:"u1",last_seen:now-20}),run:async()=>{writeArgs=args;return {success:true}}}}}}},
   };
   globalThis.fetch=async()=>new Response(JSON.stringify({id:"u1"}),{status:200});
   const request=new Request("https://worker.example/api/vehicles",{headers:{Authorization:"Bearer "+token,"X-Carmy-Last-Activity":"1"}});

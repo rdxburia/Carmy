@@ -14,6 +14,7 @@ import { handleCacheWebhook } from "./cache-webhook.js";
 import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
 import { createSupportTicket, listUserSupportTickets, adminListSupportTickets } from "./support-tickets.js";
 import { listFormTemplates, getFormTemplate, validateTransferPayload } from "./templates.js";
+import { createAdminInvite } from "./admin-invites.js";
 
 const RATE_LIMIT_RETRY_AFTER = "60";
 
@@ -158,6 +159,14 @@ export default {
       if (parts[0] === "admin") {
         const authorizationFailure = await requireSuperAdmin(user, env, origin);
         if (authorizationFailure) return authorizationFailure;
+        if (request.method === "GET" && parts.length === 2 && parts[1] === "me") {
+          return json({ ok: true, data: { id: user.id, email: user.email || null, role: "super_admin" } }, 200, origin);
+        }
+        if (request.method === "POST" && parts.length === 2 && parts[1] === "team-invites") {
+          const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.team_invite.request", {});
+          if (auditFailure) return auditFailure;
+          return createAdminInvite(request, env, origin, user);
+        }
         if (request.method === "GET" && parts.length === 2 && parts[1] === "support-tickets") {
           const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.support_tickets.list", {
             status: url.searchParams.get("status") || null,
@@ -166,6 +175,41 @@ export default {
           return adminListSupportTickets(request, env, origin);
         }
         return error("Route not found.", 404, origin, "NOT_FOUND");
+      }
+
+      if (request.method === "POST" && parts[0] === "session" && parts[1] === "revoke" && parts.length === 2) {
+        const claims = (() => {
+          try {
+            const payload = userToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+            return JSON.parse(atob(payload + "=".repeat((4 - payload.length % 4) % 4)));
+          } catch { return {}; }
+        })();
+        const sessionId = String(claims.session_id || "");
+        const tokenExpiry = Number(claims.exp || 0);
+        const now = Math.floor(Date.now() / 1000);
+        if (!sessionId || !tokenExpiry || tokenExpiry <= now) {
+          return error("A valid current session could not be identified for sign-out.", 401, origin, "SESSION_IDENTITY_MISSING");
+        }
+        try {
+          await env.DB.prepare(
+            "INSERT INTO revoked_sessions (session_id, user_id, revoked_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET user_id = excluded.user_id, revoked_at = excluded.revoked_at, expires_at = excluded.expires_at"
+          ).bind(sessionId, user.id, now, tokenExpiry).run();
+        } catch (dbErr) {
+          console.error("Could not persist session revocation", dbErr?.message || dbErr);
+          return error("Session sign-out could not be confirmed. Please retry.", 503, origin, "SESSION_REVOKE_UNAVAILABLE");
+        }
+        let globalSessionsRevoked = false;
+        try {
+          const providerResponse = await fetch(`${env.SUPABASE_URL}/auth/v1/logout?scope=global`, {
+            method: "POST",
+            headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${userToken}` },
+          });
+          globalSessionsRevoked = providerResponse.ok;
+          if (!providerResponse.ok) console.warn("Supabase global sign-out rejected", providerResponse.status);
+        } catch (providerErr) {
+          console.error("Supabase global sign-out request failed", providerErr?.message || providerErr);
+        }
+        return json({ ok: true, current_session_revoked: true, global_sessions_revoked: globalSessionsRevoked }, 200, origin);
       }
 
       if (request.method === "POST" && parts[0] === "session" && parts[1] === "heartbeat" && parts.length === 2) {

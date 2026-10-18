@@ -5,6 +5,7 @@ workers_dev = true
 
 [vars]
 SUPABASE_URL = "https://hlrmuvzmaegnbgzvvfsn.supabase.co"
+ADMIN_INVITE_REDIRECT_URL = "https://rdxburia.github.io/Carmy/?admin_invite=1"
 ALLOWED_ORIGIN = "https://rdxburia.github.io"
 R2_S3_ENDPOINT = "https://1bdda74ff7f93e7d176660d0e329b5ce.r2.cloudflarestorage.com"
 
