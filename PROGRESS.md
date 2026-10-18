@@ -238,3 +238,12 @@ The user was given an Antigravity prompt to:
 - Created branch `docs/preserve-project-history-2026-10-18` from `main`.
 - Appended this session's status to `PROGRESS.md` while retaining its previous content, and created previously absent root `AGENT.md` with session-start instructions, append-only documentation rules, current frontend-only deployment scope, known deployment evidence, and backend restrictions.
 - This documentation work is on the branch and is **not merged into main yet**. PR is the next step; do not describe it as merged/saved on main until confirmed.
+
+
+## 2026-10-18 — Correction: documentation PR merged
+- Correction to the immediately preceding documentation execution record: PR #157 was successfully merged after that entry was written.
+- PR: https://github.com/rdxburia/Carmy/pull/157
+- Merge commit: `afbdb3697a8d64cc604647c2562709ddb1aeeb90`.
+- Verified on `main` that both `AGENT.md` and `PROGRESS.md` exist and contain the appended session history.
+- The earlier statement that the documentation PR was still pending is retained as historical context; this newer entry supersedes it.
+- This follow-up corrects documentation status only; no application code or backend infrastructure changed.
