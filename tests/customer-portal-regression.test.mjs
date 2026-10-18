@@ -1264,9 +1264,9 @@ test("Client Production: Support ticket failure preserves user entered inputs an
   assert.equal(h.eval("document.getElementById('ticketSubmitBtn').textContent"), "RETRY SUBMISSION", "Button must prompt RETRY SUBMISSION");
 });
 
-test("Client Production: Service Worker v11 retirement purges older torq-desk-shell caches", () => {
+test("Client Production: Service Worker v12 retirement purges older torq-desk-shell caches", () => {
   const swCode = fs.readFileSync(path.join(root, "sw.js"), "utf8");
-  assert.match(swCode, /CACHE_NAME\s*=\s*[\'"]torq-desk-shell-v11[\'"]/, "Must use torq-desk-shell-v11");
+  assert.match(swCode, /CACHE_NAME\s*=\s*[\'"]torq-desk-shell-v12[\'"]/, "Must use torq-desk-shell-v12");
   assert.match(swCode, /k\.startsWith\(['"]torq-desk-shell-['"]\)\s*&&\s*k!==CACHE_NAME/, "Must delete all older torq-desk-shell caches");
 });
 
