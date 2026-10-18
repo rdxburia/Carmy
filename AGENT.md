@@ -53,3 +53,10 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Direct write to `main` was rejected by repository rules requiring a PR; work was moved to branch `docs/preserve-project-history-2026-10-18`.
 - `PROGRESS.md` has the chronological update and the full summarized Antigravity deployment prompt; existing prior progress content was retained.
 - This branch's documentation changes are pending PR and merge. Always verify repository write results and PR state before saying the changes are merged.
+
+
+## 2026-10-18 — Correction: documentation PR merged
+- PR #157 successfully merged: https://github.com/rdxburia/Carmy/pull/157
+- Merge commit: `afbdb3697a8d64cc604647c2562709ddb1aeeb90`.
+- Verified both documentation files exist on `main`.
+- This new entry supersedes the earlier note that the docs PR was pending. Old note remains unchanged to preserve history.
