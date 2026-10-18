@@ -22,6 +22,14 @@ async function event(env,{ticketId,actorId,actorType,type,visibility="public",me
     .bind(actorId,ticketId,type,JSON.stringify({visibility,...metadata}),nowSec()).run();
   return result;
 }
+function eventBatchStatements(env,{ticketId,actorId,actorType,type,visibility="public",message=null,metadata={},now}) {
+  return [
+    env.DB.prepare("INSERT INTO ticket_events (ticket_id,actor_user_id,actor_type,event_type,visibility,message,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)")
+      .bind(ticketId,actorId,actorType,type,visibility,message,JSON.stringify(metadata),now),
+    env.DB.prepare("INSERT INTO audit_log (actor_user_id,ticket_id,action,metadata_json,created_at) VALUES (?,?,?,?,?)")
+      .bind(actorId,ticketId,type,JSON.stringify({visibility,...metadata}),now),
+  ];
+}
 export async function ticketApi(request,env,origin,user,userToken,parts,url) {
   const method=request.method;
   // /api/tickets/:id and /api/admin/tickets/:id use different segment offsets.
@@ -71,43 +79,69 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
     }
     if(ticketId && parts.length===3 && method==="PATCH") {
       const body=await request.json().catch(()=>null);
+      if(!body || typeof body!=="object" || Array.isArray(body))return fail("A JSON object is required.",400,origin,"INVALID_REQUEST");
       const ticket=await env.DB.prepare("SELECT * FROM support_tickets WHERE id=?").bind(ticketId).first();
       if(!ticket)return fail("Ticket not found.",404,origin,"NOT_FOUND");
-      const now=nowSec(), changes=[];
-      if(body?.status!==undefined) {
+      const now=nowSec(), changes=[], events=[];
+      const hasStatus=Object.prototype.hasOwnProperty.call(body,"status");
+      const hasAssignee=Object.prototype.hasOwnProperty.call(body,"assignee_id");
+      if(hasStatus && hasAssignee)return fail("Update status and assignment separately.",400,origin,"CONFLICTING_CHANGES");
+      if(hasStatus) {
         const next=String(body.status);
         if(!STATUSES.has(next)||!TRANSITIONS[ticket.status]?.has(next))return fail("Invalid ticket status transition.",409,origin,"INVALID_TRANSITION");
         if(ticket.status==="closed" && next==="working" && Number(ticket.reopen_until||0)<now)return fail("Ticket reopen window has expired.",409,origin,"INVALID_TRANSITION");
         changes.push(["status",next]);
-        await event(env,{ticketId,actorId:user.id,actorType:"admin",type:"status_changed",metadata:{from:ticket.status,to:next}});
-        if(next==="closed") { changes.push(["closed_at",now],["reopen_until",now+7*86400],["chat_enabled",0],["chat_enabled_until",null]); }
+        events.push({type:"status_changed",metadata:{from:ticket.status,to:next}});
+        if(next==="closed")changes.push(["closed_at",now],["reopen_until",now+7*86400],["chat_enabled",0],["chat_enabled_until",null]);
       }
-      if(body?.priority!==undefined) {
+      if(Object.prototype.hasOwnProperty.call(body,"priority")) {
         const priority=String(body.priority).toLowerCase();
         if(!PRIORITIES.has(priority))return fail("Invalid priority.",400,origin,"INVALID_PRIORITY");
         changes.push(["priority",priority]);
       }
-      if(body?.assignee_id!==undefined) {
-        const assignee=body.assignee_id?String(body.assignee_id):null;
+      if(hasAssignee) {
+        const assignee=body.assignee_id ? String(body.assignee_id) : null;
+        // The current UI supports "Assign to Me" and Unassigned only. Do not trust
+        // arbitrary client-supplied IDs as eligible support-team members.
+        if(assignee && assignee!==user.id)return fail("You can only assign a ticket to your own verified account.",403,origin,"ASSIGNEE_NOT_ALLOWED");
+        if(!["pending","assigned"].includes(ticket.status))return fail("Assignment can only change while a ticket is pending or assigned.",409,origin,"INVALID_TRANSITION");
         changes.push(["assignee_id",assignee],["status",assignee?"assigned":"pending"]);
-        await event(env,{ticketId,actorId:user.id,actorType:"admin",type:"assignment_changed",metadata:{assignee_id:assignee}});
+        events.push({type:"assignment_changed",metadata:{assignee_id:assignee}});
       }
-      if(body?.chat_enabled!==undefined) {
-        const enabled=Boolean(body.chat_enabled);
+      if(Object.prototype.hasOwnProperty.call(body,"chat_enabled")) {
+        if(typeof body.chat_enabled!=="boolean")return fail("chat_enabled must be a boolean.",400,origin,"INVALID_REQUEST");
+        const enabled=body.chat_enabled && ticket.status!=="closed";
         changes.push(["chat_enabled",enabled?1:0],["chat_enabled_until",enabled?now+48*3600:null]);
-        await event(env,{ticketId,actorId:user.id,actorType:"admin",type:"chat_toggled",metadata:{enabled,until:enabled?now+48*3600:null}});
+        events.push({type:"chat_toggled",metadata:{enabled,until:enabled?now+48*3600:null}});
       }
-      if(body?.show_agent_name!==undefined)changes.push(["show_agent_name",body.show_agent_name?1:0]);
-      if(body?.message!==undefined) {
-        const message=String(body.message).trim();
+      if(Object.prototype.hasOwnProperty.call(body,"show_agent_name")) {
+        if(typeof body.show_agent_name!=="boolean")return fail("show_agent_name must be a boolean.",400,origin,"INVALID_REQUEST");
+        changes.push(["show_agent_name",body.show_agent_name?1:0]);
+      }
+      if(Object.prototype.hasOwnProperty.call(body,"message")) {
+        if(typeof body.message!=="string")return fail("Message must be text.",400,origin,"INVALID_MESSAGE");
+        const message=body.message.trim();
         if(!message||message.length>4000)return fail("Message must contain 1–4000 characters.",400,origin,"INVALID_MESSAGE");
-        await event(env,{ticketId,actorId:user.id,actorType:"admin",type:body.internal?"internal_note":"message",visibility:body.internal?"internal":"public",message});
+        if(body.internal!==undefined && typeof body.internal!=="boolean")return fail("internal must be a boolean.",400,origin,"INVALID_REQUEST");
+        events.push({type:body.internal?"internal_note":"message",visibility:body.internal?"internal":"public",message});
+      } else if(body.internal!==undefined) {
+        return fail("internal can only be used with a message.",400,origin,"INVALID_REQUEST");
       }
-      const fields=[...new Set(changes.map(([k])=>k))];
+      if(!changes.length && !events.length)return fail("No ticket changes were provided.",400,origin,"EMPTY_UPDATE");
+      if(typeof env.DB.batch!=="function")return fail("Atomic ticket updates are unavailable.",503,origin,"TICKET_UPDATE_UNAVAILABLE");
+      const statements=[];
+      const fields=[...new Set(changes.map(([key])=>key))];
       if(fields.length) {
-        const values=fields.map(k=>changes.filter(([name])=>name===k).at(-1)[1]);
-        const sql="UPDATE support_tickets SET "+fields.map(k=>k+"=?").join(",")+",updated_at=? WHERE id=?";
-        await env.DB.prepare(sql).bind(...values,now,ticketId).run();
+        const values=fields.map(key=>changes.filter(([name])=>name===key).at(-1)[1]);
+        const sql="UPDATE support_tickets SET "+fields.map(key=>key+"=?").join(",")+",updated_at=? WHERE id=?";
+        statements.push(env.DB.prepare(sql).bind(...values,now,ticketId));
+      }
+      for(const item of events)statements.push(...eventBatchStatements(env,{ticketId,actorId:user.id,actorType:"admin",...item,now}));
+      try {
+        await env.DB.batch(statements);
+      } catch(err) {
+        console.error("Atomic ticket update failed",err?.message||err);
+        return fail("Ticket update could not be saved. No changes were confirmed.",503,origin,"TICKET_UPDATE_UNAVAILABLE");
       }
       return json({ok:true},200,origin);
     }
