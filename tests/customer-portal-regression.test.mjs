@@ -2426,3 +2426,137 @@ test("Super Admin Integration: API authorization stays server-enforced when admi
   assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
   assert.ok(h.elements.get("adminContent").innerHTML.includes("API rejected this account (403)"));
 });
+
+test("Super Admin Workspace: Dedicated shell isolates admin from customer navigation", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async () => ({ ok: true, data: [] });
+  `);
+
+  await h.eval("nav('admin')");
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), true, "Admin body mode must be active");
+  const content = h.elements.get("adminContent").innerHTML;
+  assert.ok(content.includes("admin-workspace-shell"), "Admin workspace shell must be rendered");
+  assert.ok(content.includes("admin-topbar"), "Admin topbar must be rendered");
+  assert.ok(content.includes("admin-sidebar-shell"), "Admin desktop sidebar must be rendered");
+  assert.ok(content.includes("admin-mobile-nav"), "Admin mobile nav must be rendered");
+
+  // Switch to regular user and verify td-admin-mode is cleared
+  h.eval(`
+    user = { id: 'regular-user', email: 'user@example.com' };
+  `);
+  await h.eval("nav('dashboard')");
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), false, "Regular user must not have admin mode");
+});
+
+test("Super Admin Workspace: Multi-screen navigation switches across all 12 administrative screens", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async () => ({ ok: true, data: [] });
+  `);
+
+  await h.eval("nav('admin')");
+
+  const screens = [
+    { id: 'home', text: 'Workspace Overview &amp; Health' },
+    { id: 'users', text: 'User Directory &amp; Entitlements' },
+    { id: 'tokens', text: 'Activation Tokens &amp; Plan Grants' },
+    { id: 'plans', text: 'Plans, Pricing &amp; Feature Limits' },
+    { id: 'upgrades', text: 'Customer Upgrade Queue &amp; Leads' },
+    { id: 'tickets', text: 'Support Ticket Triage' },
+    { id: 'garages', text: 'Garage Network &amp; Workshop Partners' },
+    { id: 'team', text: 'Team &amp; Access Control' },
+    { id: 'audit', text: 'Cryptographic Security &amp; Audit Log' },
+    { id: 'content', text: 'Public Content &amp; Site Policy Editor' },
+    { id: 'settings', text: 'Platform Settings &amp; Administrative Security' },
+    { id: 'reports', text: 'Platform Analytics &amp; Compliance Exports' }
+  ];
+
+  for (const s of screens) {
+    h.eval(`switchAdminScreen('${s.id}')`);
+    assert.equal(h.eval("currentAdminScreen"), s.id, `Active admin screen must be ${s.id}`);
+    const html = h.elements.get("adminContent").innerHTML;
+    assert.ok(html.includes(s.text), `Screen ${s.id} must render text: ${s.text}`);
+  }
+});
+
+test("Super Admin Workspace: Mobile navigation renders exactly 5 tabs and slide-up More drawer", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async () => ({ ok: true, data: [] });
+  `);
+
+  await h.eval("nav('admin')");
+  const html = h.elements.get("adminContent").innerHTML;
+
+  // Verify the 5 required tabs exist in mobile nav: Home, Users, Support, Plans, More
+  assert.ok(html.includes("<span>Home</span>"), "Mobile nav must have Home tab");
+  assert.ok(html.includes("<span>Users</span>"), "Mobile nav must have Users tab");
+  assert.ok(html.includes("<span>Support</span>"), "Mobile nav must have Support tab");
+  assert.ok(html.includes("<span>Plans</span>"), "Mobile nav must have Plans tab");
+  assert.ok(html.includes("<span>More</span>"), "Mobile nav must have More tab");
+
+  // Verify opening and closing the More sheet
+  h.eval("openAdminMoreSheet()");
+  assert.equal(h.eval("document.getElementById('adminMoreSheet').hidden"), false, "More sheet must be visible when opened");
+
+  h.eval("closeAdminMoreSheet()");
+  assert.equal(h.eval("document.getElementById('adminMoreSheet').hidden"), true, "More sheet must be hidden when closed");
+});
+
+test("Super Admin Workspace: Support ticket 500/503 failure renders actionable diagnostic recovery card", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async (path) => {
+      if (path.includes('/api/admin/support-tickets')) {
+        const err = new Error('503 D1 table support_tickets does not exist');
+        err.status = 503;
+        err.code = 'SERVICE_UNAVAILABLE';
+        throw err;
+      }
+      return { ok: true, data: [] };
+    };
+  `);
+
+  await h.eval("nav('admin')");
+  h.eval("switchAdminScreen('tickets')");
+  await h.eval("loadAdminTickets()");
+
+  const html = h.elements.get("adminContent").innerHTML;
+  assert.ok(html.includes("Admin Service Temporarily Unavailable"), "Must show diagnostic headline");
+  assert.ok(html.includes("503 D1 table support_tickets does not exist"), "Must show safe error message");
+  assert.ok(html.includes("GET /api/admin/support-tickets"), "Must show target endpoint for backend diagnostics");
+  assert.ok(html.includes("Retry Connection"), "Must show Retry Connection button");
+});
+
+test("Super Admin Workspace: Token generator creates one-time reveal modal and clears secret on close", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    workerGet = async () => ({ ok: true, data: [] });
+  `);
+
+  await h.eval("nav('admin')");
+  h.eval("generateAdminToken()");
+
+  assert.ok(h.eval("adminRevealedToken") !== null, "Token secret must be temporarily held in memory");
+  assert.match(h.eval("adminRevealedToken"), /^TD-PLUS-[A-Z0-9]{4}-[A-Z0-9]{4}$/, "Generated token must follow format TD-PLUS-XXXX-XXXX");
+
+  h.eval("closeTokenRevealModal()");
+  assert.equal(h.eval("adminRevealedToken"), null, "Token secret must be wiped from memory upon closing the modal");
+});
+

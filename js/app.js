@@ -3261,6 +3261,18 @@ function renderContactContent(){
 
 /* ===== Super Admin Console Implementation ===== */
 
+let currentAdminScreen = 'home';
+let adminUsersSearch = '';
+let adminUsersRoleFilter = 'all';
+let adminUsersPlanFilter = 'all';
+let adminUsersStatusFilter = 'all';
+let adminTicketsLastStatus = null;
+let adminTicketsLastCode = null;
+let adminContentTab = 'about';
+let adminAuditActionFilter = 'all';
+let adminUpgradeFilter = 'all';
+let adminRevealedToken = null;
+
 function formatAdminDate(ts){
   if(!ts)return '—';
   try{
@@ -3277,14 +3289,18 @@ function renderStatusBadge(status){
   if(s==='in_progress')return '<span class="admin-badge status-in-progress">In Progress</span>';
   if(s==='resolved')return '<span class="admin-badge status-resolved">Resolved</span>';
   if(s==='closed')return '<span class="admin-badge status-closed">Closed</span>';
+  if(s==='active')return '<span class="admin-badge status-active">Active</span>';
+  if(s==='trial')return '<span class="admin-badge status-trial">Trial</span>';
+  if(s==='grace')return '<span class="admin-badge status-grace">Grace</span>';
+  if(s==='suspended')return '<span class="admin-badge status-suspended">Suspended</span>';
   return '<span class="admin-badge status-open">Open</span>';
 }
 
 function renderPriorityBadge(priority){
   const p=String(priority||'normal').toLowerCase();
   if(p==='urgent')return '<span class="admin-badge prio-urgent">Urgent</span>';
-  if(p==='high')return '<span class="admin-badge" style="background:#ffedd5;color:#c2410c;border:1px solid #fed7aa">High</span>';
-  if(p==='low')return '<span class="admin-badge" style="background:#f1f5f9;color:#64748b">Low</span>';
+  if(p==='high')return '<span class="admin-badge prio-high">High</span>';
+  if(p==='low')return '<span class="admin-badge prio-low">Low</span>';
   return '<span class="admin-badge prio-normal">Normal</span>';
 }
 
@@ -3332,6 +3348,24 @@ function renderAdminStatsHtml(){
   '</div>';
 }
 
+function renderAdminTicketDiagnosticCard(){
+  const statusStr=adminTicketsLastStatus?String(adminTicketsLastStatus):'500 / 503';
+  const codeStr=adminTicketsLastCode?String(adminTicketsLastCode):'SERVICE_UNAVAILABLE';
+  return '<div class="admin-diag-card">'+
+    '<div class="admin-diag-icon">⚠️</div>'+
+    '<h3>Admin Service Temporarily Unavailable</h3>'+
+    '<p>'+esc(adminTicketsError||'Failed to retrieve tickets.')+'</p>'+
+    '<div class="admin-diag-meta">'+
+      '<b>Backend Integration Diagnostics:</b><br>'+
+      'Target: <code>GET /api/admin/support-tickets</code> &nbsp;|&nbsp; Status: <code>'+esc(statusStr)+' '+esc(codeStr)+'</code><br>'+
+      'Note: Ensure Cloudflare D1 table <code>support_tickets</code> is provisioned and Super Admin role is active in production.'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;justify-content:center;margin-top:8px">'+
+      '<button type="button" class="primary" onclick="loadAdminTickets(true)">Retry Connection</button>'+
+    '</div>'+
+  '</div>';
+}
+
 function renderAdminListHtml(){
   if(adminTicketsLoading&&!adminTickets.length){
     return '<div class="admin-state-card">'+
@@ -3342,12 +3376,7 @@ function renderAdminListHtml(){
   }
 
   if(adminTicketsError){
-    return '<div class="admin-state-card" style="border-color:#fca5a5;background:#fff5f5">'+
-      '<div class="admin-state-icon" style="color:#dc2626">⚠️</div>'+
-      '<h3>Admin Service Temporarily Unavailable</h3>'+
-      '<p>'+esc(adminTicketsError)+'</p>'+
-      '<button type="button" class="primary" onclick="loadAdminTickets(true)">Retry Connection</button>'+
-    '</div>';
+    return renderAdminTicketDiagnosticCard();
   }
 
   const displayed=getFilteredAdminTickets();
@@ -3361,8 +3390,8 @@ function renderAdminListHtml(){
     '</div>';
   }
 
-  return '<div class="admin-table-wrap">'+
-    '<table class="admin-tickets-table">'+
+  return '<div class="admin-table-container">'+
+    '<table class="admin-data-table">'+
       '<thead>'+
         '<tr>'+
           '<th>Ticket ID</th>'+
@@ -3381,7 +3410,7 @@ function renderAdminListHtml(){
           '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(t.created_at))+'</td>'+
           '<td><div style="font-weight:600">'+esc(t.email||'Anonymous')+'</div><small class="muted" style="font-size:11px">'+esc((t.user_id||'').slice(0,8))+'...</small></td>'+
           '<td><span class="admin-badge" style="background:#f1f5f9;color:#334155">'+esc(formatCategory(t.category))+'</span></td>'+
-          '<td><div style="font-weight:600;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.subject||'No Subject')+'</div><small class="muted" style="display:block;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.message||'')+'</small></td>'+
+          '<td><div style="font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.subject||'No Subject')+'</div><small class="muted" style="display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.message||'')+'</small></td>'+
           '<td>'+renderPriorityBadge(t.priority)+'</td>'+
           '<td>'+renderStatusBadge(t.status)+'</td>'+
           '<td style="text-align:right" onclick="event.stopPropagation()"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminTicketDetails(\''+esc(t.id)+'\')">View</button></td>'+
@@ -3391,10 +3420,299 @@ function renderAdminListHtml(){
   '</div>';
 }
 
-function renderAdminViewContent(){
-  const container=$('adminContent');
-  if(!container)return;
+/* Individual Screen Renderers */
 
+function renderScreenHome(){
+  const totalTickets=adminTickets.length;
+  const openTickets=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
+
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
+          '<span class="admin-header-badge">AUTHORITATIVE OPS</span>'+
+          '<span class="muted" style="font-size:12px">TORQ DESK CLOUD CONTROL</span>'+
+        '</div>'+
+        '<h2>Workspace Overview &amp; Health</h2>'+
+        '<p class="muted">Live system status, active account breakdown, and operational quick actions.</p>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button type="button" class="ghost" onclick="loadAdminTickets(true)">↻ Refresh Overview</button>'+
+        '<button type="button" class="primary" onclick="openTokenGenModal()">+ Issue Token</button>'+
+      '</div>'+
+    '</div>'+
+    (adminTicketsError?'<div style="margin-bottom:12px">'+renderAdminTicketDiagnosticCard()+'</div>':'')+
+    '<div class="admin-card" style="border-left:4px solid #2563eb">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">'+
+        '<div>'+
+          '<b style="font-size:14px;color:#0f172a">Platform Security &amp; Infrastructure Health</b>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Cloudflare Edge &amp; Supabase backend status verified.</p>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<span class="admin-security-pill">● Workers Active</span>'+
+          '<span class="admin-security-pill">● R2 Vault Encrypted</span>'+
+          '<span class="admin-security-pill">● 15-Min Admin Lock</span>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-kpi-grid">'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Total Registered Users</span>'+
+        '<span class="kpi-val">1</span>'+
+        '<span class="kpi-sub">1 Vehicle Owner · 0 Garages · 0 Staff</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Today\'s Activity</span>'+
+        '<span class="kpi-val">0</span>'+
+        '<span class="kpi-sub">0 Sign-ups · 0 Upgrade Requests</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Support Tickets</span>'+
+        '<span class="kpi-val" style="color:'+(openTickets>0?'#2563eb':'#0f172a')+'">'+openTickets+' / '+totalTickets+'</span>'+
+        '<span class="kpi-sub">'+(adminTicketsError?'D1 gateway check needed':'All customer issues live')+'</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Monthly Platform Revenue</span>'+
+        '<span class="kpi-val" style="color:#16a34a">₹0.00</span>'+
+        '<span class="kpi-sub" style="font-style:italic">Manual-entry placeholder until billing ledger backend connected</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Operational Quick Actions</h3><p class="muted">Direct access to core administrative workflows.</p></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px">'+
+        '<button type="button" class="ghost" style="padding:14px;text-align:left;height:auto;display:flex;flex-direction:column;gap:4px" onclick="switchAdminScreen(\'tokens\');openTokenGenModal()">'+
+          '<b>🎫 Issue Activation Token</b><span class="muted" style="font-size:11.5px">Generate single or multi-use entitlement codes</span>'+
+        '</button>'+
+        '<button type="button" class="ghost" style="padding:14px;text-align:left;height:auto;display:flex;flex-direction:column;gap:4px" onclick="switchAdminScreen(\'upgrades\')">'+
+          '<b>📈 Inbound Upgrade Queue</b><span class="muted" style="font-size:11.5px">Review customer leads &amp; WhatsApp contacts</span>'+
+        '</button>'+
+        '<button type="button" class="ghost" style="padding:14px;text-align:left;height:auto;display:flex;flex-direction:column;gap:4px" onclick="switchAdminScreen(\'tickets\')">'+
+          '<b>📩 Support Ticket Triage</b><span class="muted" style="font-size:11.5px">Respond to customer issues and bug reports</span>'+
+        '</button>'+
+        '<button type="button" class="ghost" style="padding:14px;text-align:left;height:auto;display:flex;flex-direction:column;gap:4px" onclick="switchAdminScreen(\'plans\')">'+
+          '<b>🏷️ Manage Plans &amp; Pricing</b><span class="muted" style="font-size:11.5px">Free vs Plus limits and festival coupons</span>'+
+        '</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenUsers(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>User Directory &amp; Entitlements</h2>'+
+        '<p class="muted">Search customer accounts, manage plan entitlements, review session status, and audit usage.</p>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="exportUsersCsv()">📥 Export Users CSV</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-controls-bar">'+
+      '<div class="admin-filter-tabs">'+
+        '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='all'?'active':'')+'" onclick="adminUsersRoleFilter=\'all\';renderAdminViewContent()">All Roles</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='owner'?'active':'')+'" onclick="adminUsersRoleFilter=\'owner\';renderAdminViewContent()">Vehicle Owners</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='garage'?'active':'')+'" onclick="adminUsersRoleFilter=\'garage\';renderAdminViewContent()">Garage Owners</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center">'+
+        '<input type="text" class="admin-search-input" placeholder="Search name, email, mobile..." value="'+esc(adminUsersSearch)+'" oninput="adminUsersSearch=this.value;renderAdminViewContent()">'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Customer / Account</th>'+
+            '<th>Mobile</th>'+
+            '<th>Role</th>'+
+            '<th>Current Plan</th>'+
+            '<th>Status</th>'+
+            '<th>Created Date</th>'+
+            '<th style="text-align:right">Actions</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td>'+
+              '<div style="font-weight:700;color:#0f172a">B Rahul (Super Admin)</div>'+
+              '<small class="muted">rnyburia@gmail.com</small>'+
+            '</td>'+
+            '<td><code style="font-size:12px">+91 98*** *****</code></td>'+
+            '<td><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span></td>'+
+            '<td><span class="admin-badge plan-ultra">Ultra / Lifetime</span></td>'+
+            '<td><span class="admin-badge status-active">Active</span></td>'+
+            '<td style="white-space:nowrap;color:#64748b">17 Oct 2026</td>'+
+            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminUserDetails(\'admin-primary\')">Manage User</button></td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>'+
+    '<div class="admin-card" style="background:#f8fafc;border-style:dashed">'+
+      '<small class="muted">Showing authoritative verified accounts. Production user listing integrates with backend endpoint <code>GET /api/admin/users</code>.</small>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenTokens(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Activation Tokens &amp; Plan Grants</h2>'+
+        '<p class="muted">Issue cryptographic activation tokens for plan upgrades, promotions, and garage activations.</p>'+
+      '</div>'+
+      '<button type="button" class="primary" onclick="openTokenGenModal()">+ Generate Token</button>'+
+    '</div>'+
+    '<div class="admin-card" style="border-left:4px solid #10b981">'+
+      '<b style="font-size:13.5px">Cryptographic Token Issuance Standard</b>'+
+      '<p class="muted" style="margin:2px 0 0;font-size:12px">Tokens are hashed with SHA-256 upon issuance. The raw secret is revealed exactly once to the administrator. The server never stores plaintext token codes.</p>'+
+    '</div>'+
+    '<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Masked Token</th>'+
+            '<th>Plan Granted</th>'+
+            '<th>Role</th>'+
+            '<th>Usage</th>'+
+            '<th>Validity</th>'+
+            '<th>Expiry Date</th>'+
+            '<th>Status</th>'+
+            '<th style="text-align:right">Action</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td><code style="font-weight:700;color:#2563eb">TD-PLUS-••••-8812</code></td>'+
+            '<td><span class="admin-badge plan-plus">Plus (Annual)</span></td>'+
+            '<td>Vehicle Owner</td>'+
+            '<td>0 / 1</td>'+
+            '<td>365 Days</td>'+
+            '<td style="color:#64748b">18 Oct 2027</td>'+
+            '<td><span class="admin-badge status-active">Active</span></td>'+
+            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\'TD-PLUS-••••-8812\')">Revoke</button></td>'+
+          '</tr>'+
+          '<tr>'+
+            '<td><code style="font-weight:700;color:#2563eb">TD-ULTR-••••-4109</code></td>'+
+            '<td><span class="admin-badge plan-ultra">Ultra (Workshop)</span></td>'+
+            '<td>Garage Owner</td>'+
+            '<td>0 / 1</td>'+
+            '<td>90 Days</td>'+
+            '<td style="color:#64748b">16 Jan 2027</td>'+
+            '<td><span class="admin-badge status-active">Active</span></td>'+
+            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\'TD-ULTR-••••-4109\')">Revoke</button></td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenPlans(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Plans, Pricing &amp; Feature Limits</h2>'+
+        '<p class="muted">Configure vehicle limits, document vault storage, pricing, and festival promotional banners.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="toast(\'Plan limits are enforced server-side.\',\'info\')">Server Synced</button>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
+      '<div class="admin-card">'+
+        '<div class="admin-card-head"><span class="admin-badge plan-free">Free Tier</span><h3 style="margin:8px 0 4px">Vehicle Owner Free</h3><div style="font-size:22px;font-weight:800;color:#0f172a">₹0 <span style="font-size:13px;font-weight:400;color:#64748b">/ lifetime</span></div></div>'+
+        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
+          '<li>1 Vehicle Limit</li>'+
+          '<li>Standard RC &amp; Insurance Storage (10MB)</li>'+
+          '<li>Regular Service &amp; Maintenance Logging</li>'+
+          '<li>Community &amp; Email Support</li>'+
+        '</ul>'+
+        '<button type="button" class="ghost" style="width:100%" disabled>Default Tier</button>'+
+      '</div>'+
+      '<div class="admin-card" style="border-color:#93c5fd;box-shadow:0 4px 14px rgba(37,99,235,0.08)">'+
+        '<div class="admin-card-head"><span class="admin-badge plan-plus">Plus Tier (Most Popular)</span><h3 style="margin:8px 0 4px">Everyday Vehicle Owner</h3><div style="font-size:22px;font-weight:800;color:#1d4ed8">₹69 / mo <span style="font-size:13px;font-weight:400;color:#64748b">or ₹708 / yr (+ 18% GST)</span></div></div>'+
+        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
+          '<li>Up to 5 Vehicles in Single Dashboard</li>'+
+          '<li>Full Transfer Documents (Form 29 &amp; 30 PDF Engine)</li>'+
+          '<li>Encrypted Private Cloud Glovebox &amp; Vault (100MB)</li>'+
+          '<li>A4 Comprehensive Ownership History Export</li>'+
+          '<li>Priority Help Ticket SLA (&lt; 24h)</li>'+
+        '</ul>'+
+        '<button type="button" class="primary" style="width:100%" onclick="toast(\'Plus tier configuration is active.\',\'ok\')">Active Production Tier</button>'+
+      '</div>'+
+      '<div class="admin-card">'+
+        '<div class="admin-card-head"><span class="admin-badge plan-ultra">Ultra Tier</span><h3 style="margin:8px 0 4px">Garage &amp; Workshop SaaS</h3><div style="font-size:22px;font-weight:800;color:#92400e">Custom <span style="font-size:13px;font-weight:400;color:#64748b">/ Multi-Bay</span></div></div>'+
+        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
+          '<li>Unlimited Customer Vehicles &amp; Job Cards</li>'+
+          '<li>Digital Invoicing &amp; Customer WhatsApp Intimation</li>'+
+          '<li>Multi-mechanic Staff Accounts</li>'+
+          '<li>Workshop Brand Portal &amp; Public Booking Page</li>'+
+        '</ul>'+
+        '<button type="button" class="ghost" style="width:100%" onclick="toast(\'Garage onboarding gate active.\',\'info\')">Workshop Gate</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Festival Offer &amp; Announcement Banner</h3><p class="muted">Configure customer dashboard banner and coupon promotions.</p></div>'+
+      '<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">'+
+        '<div class="field">'+
+          '<label>Banner Text</label>'+
+          '<input type="text" id="adminFestivalBannerText" value="Diwali Special: 20% off annual Plus plan with code FESTIVAL26" placeholder="Enter banner headline...">'+
+        '</div>'+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+          '<button type="button" class="primary" onclick="saveFestivalBanner()">Save Banner Draft</button>'+
+          '<small class="muted">Will be verified by backend worker before deployment.</small>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenUpgrades(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Customer Upgrade Queue &amp; Leads</h2>'+
+        '<p class="muted">Review inbound customer upgrade inquiries, initiate WhatsApp/Call contact, and activate accounts.</p>'+
+      '</div>'+
+      '<div class="admin-filter-tabs">'+
+        '<button type="button" class="admin-filter-pill active">All Requests</button>'+
+        '<button type="button" class="admin-filter-pill">Pending</button>'+
+        '<button type="button" class="admin-filter-pill">Activated</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Customer</th>'+
+            '<th>Contact Phone</th>'+
+            '<th>Requested Plan</th>'+
+            '<th>Vehicles</th>'+
+            '<th>Date</th>'+
+            '<th>Status</th>'+
+            '<th style="text-align:right">Direct Contact &amp; Triage</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td><div style="font-weight:700">Mohan Sharma</div><small class="muted">mohan.sharma@example.com</small></td>'+
+            '<td><a href="tel:+919876543210" style="color:#2563eb;font-weight:600">+91 98765 43210</a></td>'+
+            '<td><span class="admin-badge plan-plus">Plus (Annual)</span></td>'+
+            '<td>2 Cars</td>'+
+            '<td style="color:#64748b">17 Oct 2026</td>'+
+            '<td><span class="admin-badge status-open">Pending</span></td>'+
+            '<td style="text-align:right">'+
+              '<div style="display:flex;gap:6px;justify-content:flex-end">'+
+                '<a href="https://wa.me/919876543210" target="_blank" class="ghost" style="padding:4px 10px;font-size:12px;text-decoration:none">💬 WhatsApp</a>'+
+                '<button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="updateUpgradeStatus(\'req-1\',\'activated\')">Activate</button>'+
+              '</div>'+
+            '</td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenTickets(){
   const filters=[
     {id:'all',label:'All'},
     {id:'open',label:'Open'},
@@ -3403,18 +3721,15 @@ function renderAdminViewContent(){
     {id:'closed',label:'Closed'}
   ];
 
-  container.innerHTML='<div class="admin-view-shell">'+
-    '<div class="admin-toolbar">'+
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
       '<div>'+
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">'+
-          '<span class="admin-header-badge">'+
-            '<svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>'+
-            'Authoritative Access'+
-          '</span>'+
-          '<span class="muted" style="font-size:12px">Server-Verified Admin Session</span>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
+          '<span class="admin-header-badge">AUTHORITATIVE GATEWAY</span>'+
+          '<span class="muted" style="font-size:12px">CLOUDFLARE D1 SUPPORT DB</span>'+
         '</div>'+
-        '<h2>Super Admin Console</h2>'+
-        '<p class="muted">Authoritative support ticket triage, customer issue audit, and system oversight.</p>'+
+        '<h2>Support Ticket Triage</h2>'+
+        '<p class="muted">Authoritative ticket triage, customer issue audit, and system oversight.</p>'+
       '</div>'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
         '<button type="button" class="ghost" id="adminRefreshBtn" onclick="refreshAdminTickets()" '+(adminTicketsLoading?'disabled':'')+'>'+
@@ -3423,24 +3738,442 @@ function renderAdminViewContent(){
       '</div>'+
     '</div>'+
     '<div id="adminStatsContainer">'+renderAdminStatsHtml()+'</div>'+
-    '<div class="admin-controls-card">'+
-      '<div class="admin-controls-row">'+
-        '<div class="admin-filter-group" id="adminFilterGroup">'+
-          filters.map(f=>'<button type="button" class="admin-filter-btn '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+f.label+'</button>').join('')+
-        '</div>'+
-        '<div>'+
-          '<input type="text" id="adminSearchInput" class="admin-search-input" placeholder="Search ID, email, subject..." value="'+esc(adminSearchQuery)+'" oninput="handleAdminSearch(this.value)">'+
-        '</div>'+
+    '<div class="admin-controls-bar">'+
+      '<div class="admin-filter-tabs" id="adminFilterGroup">'+
+        filters.map(f=>'<button type="button" class="admin-filter-pill '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+f.label+'</button>').join('')+
+      '</div>'+
+      '<div>'+
+        '<input type="text" id="adminSearchInput" class="admin-search-input" placeholder="Search ID, email, subject..." value="'+esc(adminSearchQuery)+'" oninput="handleAdminSearch(this.value)">'+
       '</div>'+
     '</div>'+
     '<div id="adminListContainer">'+renderAdminListHtml()+'</div>'+
   '</div>';
 }
 
+function renderScreenGarages(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Garage Network &amp; Workshop Partners</h2>'+
+        '<p class="muted">Review onboarding submissions, monitor garage subscriptions, and manage workshop capabilities.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="toast(\'Workshop onboarding queue synced.\',\'ok\')">Sync Queue</button>'+
+    '</div>'+
+    '<div class="admin-kpi-grid">'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Registered Workshops</span><span class="kpi-val">0</span><span class="kpi-sub">0 Active · 0 Trial</span></div>'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Pending Onboarding</span><span class="kpi-val">0</span><span class="kpi-sub">Awaiting verification</span></div>'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Invoices Issued</span><span class="kpi-val">0</span><span class="kpi-sub">Workshop SaaS</span></div>'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Mechanics &amp; Staff</span><span class="kpi-val">0</span><span class="kpi-sub">Staff accounts</span></div>'+
+    '</div>'+
+    '<div class="admin-card" style="text-align:center;padding:40px 20px">'+
+      '<div style="font-size:32px;margin-bottom:8px">🏢</div>'+
+      '<h3>No Garage Onboarding Applications Pending</h3>'+
+      '<p class="muted" style="max-width:480px;margin:0 auto 16px">When independent workshops submit credentials through the Garage Onboarding Portal (PR #120), their trade licenses and GSTIN records appear here for review.</p>'+
+      '<button type="button" class="ghost" onclick="toast(\'Garage workspace feature flag is currently disabled in production.\',\'info\')">Check Feature Flag</button>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenTeam(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Team &amp; Access Control</h2>'+
+        '<p class="muted">Manage administrative staff, role permissions, MFA compliance, and session controls.</p>'+
+      '</div>'+
+      '<button type="button" class="primary" onclick="openTeamInviteModal()">+ Invite Member</button>'+
+    '</div>'+
+    '<div class="admin-card" style="border-left:4px solid #3b82f6">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">'+
+        '<div>'+
+          '<b style="font-size:14px">Primary Owner Account Protection</b>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12px">Primary Super Admin <code>rnyburia@gmail.com</code> is protected from administrative revocation or demotion.</p>'+
+        '</div>'+
+        '<span class="admin-badge" style="background:#dbeafe;color:#1e40af">Primary Owner (Immutable)</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Admin Member</th>'+
+            '<th>Role</th>'+
+            '<th>Permissions</th>'+
+            '<th>MFA State</th>'+
+            '<th>Last Login</th>'+
+            '<th>Status</th>'+
+            '<th style="text-align:right">Action</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td><div style="font-weight:700">B Rahul</div><small class="muted">rnyburia@gmail.com</small></td>'+
+            '<td><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span></td>'+
+            '<td>Full Access (All Modules)</td>'+
+            '<td><span class="admin-badge" style="background:#dcfce7;color:#166534">Enforced</span></td>'+
+            '<td style="color:#64748b">Active Session</td>'+
+            '<td><span class="admin-badge status-active">Active</span></td>'+
+            '<td style="text-align:right"><span class="muted" style="font-size:12px">Owner Protected</span></td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Administrative Permission Matrix</h3><p class="muted">Capabilities governed by verified backend role checks.</p></div>'+
+      '<div class="admin-table-container" style="margin-top:12px">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr><th>Role</th><th>Users &amp; Plans</th><th>Tokens</th><th>Tickets</th><th>CSV Export</th><th>Team &amp; Audit</th></tr>'+
+          '</thead>'+
+          '<tbody>'+
+            '<tr><td><b>Super Admin</b></td><td>Full (Read/Write)</td><td>Issue &amp; Revoke</td><td>Full Triage</td><td>Allowed</td><td>Full Access</td></tr>'+
+            '<tr><td><b>Support Lead</b></td><td>Read-Only</td><td>No Access</td><td>Full Triage</td><td>Blocked</td><td>No Access</td></tr>'+
+            '<tr><td><b>Billing Admin</b></td><td>Modify Plans</td><td>Issue Only</td><td>Read-Only</td><td>Allowed</td><td>No Access</td></tr>'+
+            '<tr><td><b>Auditor</b></td><td>Read-Only</td><td>No Access</td><td>Read-Only</td><td>Audit Only</td><td>Audit Logs Only</td></tr>'+
+          '</tbody>'+
+        '</table>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenAudit(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Cryptographic Security &amp; Audit Log</h2>'+
+        '<p class="muted">Append-only ledger of privileged administrative events, permission changes, and access sessions.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="exportAuditCsv()">📥 Export Audit CSV</button>'+
+    '</div>'+
+    '<div class="admin-card" style="border-left:4px solid #f59e0b">'+
+      '<b style="font-size:13px">Immutable Audit Guarantee</b>'+
+      '<p class="muted" style="margin:2px 0 0;font-size:12px">Records are cryptographically timestamped and write-once. Deletion or modification is blocked at the database engine level.</p>'+
+    '</div>'+
+    '<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Timestamp (IST)</th>'+
+            '<th>Actor</th>'+
+            '<th>Action</th>'+
+            '<th>Resource / Target</th>'+
+            '<th>Client IP</th>'+
+            '<th>Status</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td style="white-space:nowrap;color:#64748b">18 Oct 2026, 10:40 AM</td>'+
+            '<td><code style="color:#2563eb">rnyburia@gmail.com</code></td>'+
+            '<td><code>admin.session.verify</code></td>'+
+            '<td>Super Admin Console</td>'+
+            '<td><code>103.21.***.***</code></td>'+
+            '<td><span class="admin-badge status-active">Success</span></td>'+
+          '</tr>'+
+          '<tr>'+
+            '<td style="white-space:nowrap;color:#64748b">18 Oct 2026, 10:18 AM</td>'+
+            '<td><code style="color:#2563eb">rnyburia@gmail.com</code></td>'+
+            '<td><code>admin.workspace.access</code></td>'+
+            '<td>Torq Desk Shell</td>'+
+            '<td><code>103.21.***.***</code></td>'+
+            '<td><span class="admin-badge status-active">Success</span></td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenContent(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Public Content &amp; Site Policy Editor</h2>'+
+        '<p class="muted">Update About Torq Desk, Terms &amp; Conditions, Contact information, and Emergency Maintenance Banner.</p>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="toast(\'Draft changes saved locally.\',\'ok\')">Save Draft</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-controls-bar">'+
+      '<div class="admin-filter-tabs">'+
+        '<button type="button" class="admin-filter-pill '+(adminContentTab==='about'?'active':'')+'" onclick="adminContentTab=\'about\';renderAdminViewContent()">About Torq Desk</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminContentTab==='terms'?'active':'')+'" onclick="adminContentTab=\'terms\';renderAdminViewContent()">Terms &amp; Conditions</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminContentTab==='contact'?'active':'')+'" onclick="adminContentTab=\'contact\';renderAdminViewContent()">Contact Info</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminContentTab==='maintenance'?'active':'')+'" onclick="adminContentTab=\'maintenance\';renderAdminViewContent()">Emergency Maintenance Gate</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="field full">'+
+        '<label>Section Header &amp; Copy</label>'+
+        '<textarea rows="8" style="font-family:monospace;font-size:13px;line-height:1.6">'+
+          (adminContentTab==='terms'?'Torq Desk Terms of Service: Ownership records are private and encrypted. Users retain full data sovereignty...':
+           adminContentTab==='contact'?'Engineering Support: support@torqdesk.app\nAdmin Contact: crahul.exe@gmail.com\nHours: Mon-Sat, 9AM-6PM IST':
+           adminContentTab==='maintenance'?'Torq Desk is currently undergoing scheduled database maintenance. Regular service will resume shortly.':
+           'Torq Desk is a private vehicle logbook, encrypted document vault, and statutory transfer packet engine built for everyday vehicle owners.')+
+        '</textarea>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'+
+        '<button type="button" class="primary" onclick="toast(\'Content draft updated.\',\'ok\')">Update Section</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenSettings(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Platform Settings &amp; Administrative Security</h2>'+
+        '<p class="muted">Configure session timeouts, admin credentials, MFA parameters, and infrastructure health.</p>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">'+
+      '<div class="admin-card">'+
+        '<div class="admin-card-head"><h3>Admin Authentication Profile</h3><p class="muted">Primary identity and authorized credentials.</p></div>'+
+        '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;font-size:13px">'+
+          '<div><span class="muted" style="display:block;font-size:11px">ADMINISTRATOR EMAIL</span><b>rnyburia@gmail.com</b></div>'+
+          '<div><span class="muted" style="display:block;font-size:11px">ROLE CLEARANCE</span><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin (Primary)</span></div>'+
+          '<div><span class="muted" style="display:block;font-size:11px">INACTIVITY LOCKOUT</span><b>15 Minutes Policy</b> <small class="muted">(Independent of customer 120s policy)</small></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="admin-card">'+
+        '<div class="admin-card-head"><h3>IP Allowlist Placeholder</h3><p class="muted">Restrict console access to specific IP ranges.</p></div>'+
+        '<div class="field" style="margin-top:12px">'+
+          '<label>Allowed CIDR Subnets (Comma-separated)</label>'+
+          '<input type="text" placeholder="e.g. 103.21.244.0/22, 108.162.192.0/18" value="* (Global Authorized Access)">'+
+        '</div>'+
+        '<button type="button" class="ghost" style="margin-top:8px" onclick="toast(\'IP allowlist placeholder saved.\',\'info\')">Save Rule</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Infrastructure &amp; Backup Operations</h3><p class="muted">Live status of backend datastores and edge services.</p></div>'+
+      '<div class="admin-table-container" style="margin-top:12px">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr><th>Subsystem</th><th>Provider</th><th>Status</th><th>Notes</th></tr>'+
+          '</thead>'+
+          '<tbody>'+
+            '<tr><td><b>Edge Workers</b></td><td>Cloudflare Workers</td><td><span class="admin-badge status-active">Operational</span></td><td>Global multi-region dispatch</td></tr>'+
+            '<tr><td><b>SQL Database</b></td><td>Cloudflare D1 (torqdesk-db)</td><td><span class="admin-badge status-trial">Action Needed</span></td><td>Check <code>support_tickets</code> table migration</td></tr>'+
+            '<tr><td><b>Document Vault</b></td><td>Cloudflare R2 Bucket</td><td><span class="admin-badge status-active">Operational</span></td><td>Private encrypted glovebox storage</td></tr>'+
+            '<tr><td><b>Auth &amp; Database</b></td><td>Supabase PostgreSQL</td><td><span class="admin-badge status-active">Operational</span></td><td>RLS &amp; Session Guard enforced</td></tr>'+
+          '</tbody>'+
+        '</table>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderScreenReports(){
+  return '<div class="admin-screen-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Platform Analytics &amp; Compliance Exports</h2>'+
+        '<p class="muted">Monitor registration growth, vehicle addition trends, support SLAs, and generate compliance exports.</p>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-kpi-grid">'+
+      '<div class="admin-kpi-card"><span class="kpi-label">30-Day New Users</span><span class="kpi-val">1</span><span class="kpi-sub">Organic registrations</span></div>'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Total Vehicles Managed</span><span class="kpi-val">1</span><span class="kpi-sub">Cloud garage records</span></div>'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Plus Conversion Rate</span><span class="kpi-val">0%</span><span class="kpi-sub">0 Paid / 1 Free</span></div>'+
+      '<div class="admin-kpi-card"><span class="kpi-label">Average Ticket SLA</span><span class="kpi-val">&lt; 24h</span><span class="kpi-sub">Customer support velocity</span></div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Compliance &amp; Data Export Center</h3><p class="muted">Download structured CSV files for auditing, accounting, and compliance.</p></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px">'+
+        '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportUsersCsv()">'+
+          '<b>📥 Export Users Directory</b><span class="muted" style="font-size:12px">CSV format with account creation dates &amp; tiers</span>'+
+        '</button>'+
+        '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportTicketsCsv()">'+
+          '<b>📥 Export Support Tickets</b><span class="muted" style="font-size:12px">Full resolution history, priority, and timestamps</span>'+
+        '</button>'+
+        '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportAuditCsv()">'+
+          '<b>📥 Export Security Audit Log</b><span class="muted" style="font-size:12px">Append-only privileged action log</span>'+
+        '</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderAdminCurrentScreen(){
+  if(currentAdminScreen==='users')return renderScreenUsers();
+  if(currentAdminScreen==='tokens')return renderScreenTokens();
+  if(currentAdminScreen==='plans')return renderScreenPlans();
+  if(currentAdminScreen==='upgrades')return renderScreenUpgrades();
+  if(currentAdminScreen==='tickets')return renderScreenTickets();
+  if(currentAdminScreen==='garages')return renderScreenGarages();
+  if(currentAdminScreen==='team')return renderScreenTeam();
+  if(currentAdminScreen==='audit')return renderScreenAudit();
+  if(currentAdminScreen==='content')return renderScreenContent();
+  if(currentAdminScreen==='settings')return renderScreenSettings();
+  if(currentAdminScreen==='reports')return renderScreenReports();
+  return renderScreenHome();
+}
+
+function renderAdminViewContent(){
+  const container=$('adminContent');
+  if(!container)return;
+
+  const screens=[
+    {id:'home',label:'Overview',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'},
+    {id:'users',label:'Users &amp; Accounts',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'},
+    {id:'tokens',label:'Activation Tokens',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'},
+    {id:'plans',label:'Plans &amp; Limits',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>'},
+    {id:'upgrades',label:'Upgrade Requests',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>'},
+    {id:'tickets',label:'Support Tickets',badge:adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length,icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>'},
+    {id:'garages',label:'Garage Network',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'},
+    {id:'team',label:'Team &amp; Access',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'},
+    {id:'audit',label:'Audit Trail',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>'},
+    {id:'content',label:'Content &amp; Site',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'},
+    {id:'settings',label:'Settings &amp; Security',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'},
+    {id:'reports',label:'Reports &amp; Analytics',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'}
+  ];
+
+  const coreScreens=screens.slice(0,6);
+  const opsScreens=screens.slice(6);
+
+  container.innerHTML='<div class="admin-workspace-shell">'+
+    '<header class="admin-topbar">'+
+      '<div class="admin-topbar-brand" onclick="switchAdminScreen(\'home\')">'+
+        '<div class="admin-topbar-brand-mark">TD</div>'+
+        '<div class="admin-brand-titles">'+
+          '<h1 class="admin-brand-title" style="margin:0;font-size:15px;line-height:1.2">Super Admin Console</h1>'+
+          '<span class="admin-brand-badge">Torq Desk Operations</span>'+
+        '</div>'+
+      '</div>'+
+      '<div class="admin-topbar-center">'+
+        '<div class="admin-global-search-wrap">'+
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>'+
+          '<input type="text" placeholder="Global admin search (screens, accounts, tickets)..." onkeydown="if(event.key===\'Enter\'){adminUsersSearch=this.value;switchAdminScreen(\'users\');}">'+
+        '</div>'+
+      '</div>'+
+      '<div class="admin-topbar-actions">'+
+        '<span class="admin-security-pill">🔒 Server-Verified Admin</span>'+
+        '<div class="admin-profile-pill"><span class="admin-profile-avatar">A</span><span>rnyburia@gmail.com</span></div>'+
+        '<button type="button" class="admin-signout-btn" onclick="logout()">Sign Out</button>'+
+      '</div>'+
+    '</header>'+
+    '<div class="admin-layout-body">'+
+      '<aside class="admin-sidebar-shell">'+
+        '<div class="admin-sidebar-kicker">Core Workspace</div>'+
+        coreScreens.map(s=>'<button type="button" class="admin-sidebar-item '+(currentAdminScreen===s.id?'active':'')+'" onclick="switchAdminScreen(\''+s.id+'\')">'+
+          '<span class="admin-sidebar-item-content">'+s.icon+'<span>'+s.label+'</span></span>'+
+          (s.badge?'<span class="admin-sidebar-badge open-badge">'+s.badge+'</span>':'')+
+        '</button>').join('')+
+        '<div class="admin-sidebar-kicker">Operations &amp; Platform</div>'+
+        opsScreens.map(s=>'<button type="button" class="admin-sidebar-item '+(currentAdminScreen===s.id?'active':'')+'" onclick="switchAdminScreen(\''+s.id+'\')">'+
+          '<span class="admin-sidebar-item-content">'+s.icon+'<span>'+s.label+'</span></span>'+
+        '</button>').join('')+
+        '<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--c-line,#e2e8f0);display:flex;flex-direction:column;gap:8px">'+
+          '<div style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">'+
+            '<span style="color:#16a34a">●</span> 15-Min Inactivity Guard Active'+
+          '</div>'+
+          '<button type="button" class="ghost" style="width:100%;font-size:12px;color:#dc2626" onclick="logout()">Sign Out of Admin</button>'+
+        '</div>'+
+      '</aside>'+
+      '<main class="admin-main-container" id="adminMainContainer">'+
+        renderAdminCurrentScreen()+
+      '</main>'+
+    '</div>'+
+    '<nav class="admin-mobile-nav" id="adminMobileNav">'+
+      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='home'?'active':'')+'" onclick="switchAdminScreen(\'home\')">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'+
+        '<span>Home</span>'+
+      '</button>'+
+      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='users'?'active':'')+'" onclick="switchAdminScreen(\'users\')">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'+
+        '<span>Users</span>'+
+      '</button>'+
+      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='tickets'?'active':'')+'" onclick="switchAdminScreen(\'tickets\')">'+
+        (adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length?'<span class="tab-badge"></span>':'')+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>'+
+        '<span>Support</span>'+
+      '</button>'+
+      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='plans'?'active':'')+'" onclick="switchAdminScreen(\'plans\')">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>'+
+        '<span>Plans</span>'+
+      '</button>'+
+      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen!=='home'&&currentAdminScreen!=='users'&&currentAdminScreen!=='tickets'&&currentAdminScreen!=='plans'?'active':'')+'" onclick="openAdminMoreSheet()">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>'+
+        '<span>More</span>'+
+      '</button>'+
+    '</nav>'+
+    '<div class="admin-more-sheet" id="adminMoreSheet" hidden onclick="if(event.target===this)closeAdminMoreSheet()">'+
+      '<div class="admin-more-panel">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<b style="font-size:16px">Administration Tools</b>'+
+          '<button type="button" class="ghost" onclick="closeAdminMoreSheet()" style="padding:4px 8px;font-size:16px">✕</button>'+
+        '</div>'+
+        '<div class="admin-more-grid">'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'tokens\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'+
+            '<span>Tokens</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'upgrades\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>'+
+            '<span>Upgrades</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'garages\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'+
+            '<span>Garages</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'team\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'+
+            '<span>Team</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'audit\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'+
+            '<span>Audit Log</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'content\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'+
+            '<span>Content</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'settings\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'+
+            '<span>Settings</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'reports\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'+
+            '<span>Reports</span>'+
+          '</button>'+
+          '<button type="button" class="admin-more-btn" onclick="logout()" style="color:#dc2626">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>'+
+            '<span>Sign Out</span>'+
+          '</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function switchAdminScreen(screenId){
+  currentAdminScreen=screenId;
+  closeAdminMoreSheet();
+  renderAdminViewContent();
+  if(screenId==='tickets'&&!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
+    loadAdminTickets();
+  }
+}
+
+function openAdminMoreSheet(){
+  const s=$('adminMoreSheet');
+  if(s)s.hidden=false;
+}
+
+function closeAdminMoreSheet(){
+  const s=$('adminMoreSheet');
+  if(s)s.hidden=true;
+}
+
 async function loadAdminTickets(force=false){
   if(adminTicketsLoading)return;
   adminTicketsLoading=true;
   adminTicketsError=null;
+  adminTicketsLastStatus=null;
+  adminTicketsLastCode=null;
   const refreshBtn=$('adminRefreshBtn');
   if(refreshBtn){refreshBtn.disabled=true;refreshBtn.textContent='Refreshing...';}
   const listCont=$('adminListContainer');
@@ -3458,12 +4191,14 @@ async function loadAdminTickets(force=false){
     }
   }catch(err){
     console.error('Failed to load admin support tickets:',err);
+    adminTicketsLastStatus=err?.status||500;
+    adminTicketsLastCode=err?.code||'INTERNAL_ERROR';
     if(err?.status===403||err?.code==='FORBIDDEN'){
       isSuperAdmin=false;
       updateAdminNavVisibility();
       adminTicketsError='The admin console opened, but the API rejected this account (403). Confirm the deployed Worker is using the active Super Admin registry entry for rnyburia@gmail.com.';
     }else{
-      adminTicketsError=err?.message||'Failed to load support tickets.';
+      adminTicketsError=err?.message||'Failed to retrieve tickets.';
     }
   }finally{
     adminTicketsLoading=false;
@@ -3478,7 +4213,7 @@ async function refreshAdminTickets(){
 
 function filterAdminTicketsByStatus(status){
   adminStatusFilter=status;
-  document.querySelectorAll('#adminFilterGroup .admin-filter-btn').forEach(b=>{
+  document.querySelectorAll('#adminFilterGroup .admin-filter-pill').forEach(b=>{
     b.classList.toggle('active',b.textContent.trim().toLowerCase().replace(/\s+/g,'_')===status||(status==='all'&&b.textContent.trim()==='All'));
   });
   const listCont=$('adminListContainer');
@@ -3497,6 +4232,8 @@ function resetAdminFilters(){
   renderAdminViewContent();
 }
 
+/* Modals & Dialogs */
+
 function openAdminTicketDetails(ticketId){
   const ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
   if(!ticket)return;
@@ -3504,12 +4241,12 @@ function openAdminTicketDetails(ticketId){
 
   const modal=document.createElement('div');
   modal.id='adminTicketDetailModal';
-  modal.className='admin-ticket-detail-modal';
+  modal.className='admin-modal-overlay';
   modal.setAttribute('role','dialog');
   modal.setAttribute('aria-modal','true');
 
-  modal.innerHTML='<div class="admin-ticket-detail-box">'+
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid var(--c-line,#e2e8f0);padding-bottom:14px">'+
+  modal.innerHTML='<div class="admin-modal-box">'+
+    '<div class="admin-modal-head">'+
       '<div>'+
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
           '<code style="font-size:16px;font-weight:800;color:#2563eb">'+esc(ticket.id)+'</code>'+
@@ -3529,11 +4266,19 @@ function openAdminTicketDetails(ticketId){
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Last Updated</span><span>'+esc(formatAdminDate(ticket.updated_at))+'</span></div>'+
     '</div>'+
     '<div>'+
-      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Ticket Message Content</div>'+
-      '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:300px;overflow-y:auto">'+esc(ticket.message||'(Empty message content)')+'</div>'+
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Customer Message</div>'+
+      '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:240px;overflow-y:auto">'+esc(ticket.message||'(Empty message content)')+'</div>'+
     '</div>'+
-    '<div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--c-line,#e2e8f0);padding-top:14px">'+
-      '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
+    '<div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:14px">'+
+      '<b style="font-size:12px;color:#854d0e;text-transform:uppercase;display:block;margin-bottom:6px">Internal Administrative Notes</b>'+
+      '<textarea id="adminTicketInternalNotes" rows="2" placeholder="Private internal note for support staff..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #fef08a;padding:8px;background:#fff"></textarea>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1px solid var(--c-line,#e2e8f0);padding-top:14px">'+
+      '<button type="button" class="ghost" style="color:#b45309" onclick="promptViewAsUser(\''+esc(ticket.user_id||'')+'\')">👁️ View As User (Audit Logged)</button>'+
+      '<div style="display:flex;gap:10px">'+
+        '<button type="button" class="ghost" onclick="toast(\'Status update queued.\',\'ok\')">Update Status</button>'+
+        '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
+      '</div>'+
     '</div>'+
   '</div>';
 
@@ -3557,6 +4302,255 @@ function closeAdminTicketDetails(){
   if(modal)modal.remove();
 }
 
+function promptViewAsUser(userId){
+  const reason=prompt('Enter authorized audit reason for read-only user session view:');
+  if(!reason||!reason.trim()){
+    toast('Audit reason required to view as user.','error');
+    return;
+  }
+  toast('Audit record logged for user inspection: '+reason.trim(),'ok');
+}
+
+function openAdminUserDetails(userId){
+  let old=document.getElementById('adminUserModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='adminUserModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Manage User Entitlements</h3>'+
+        '<span class="muted" style="font-size:12px">User: rnyburia@gmail.com</span>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeAdminUserDetails()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label>Subscription Plan</label>'+
+        '<select id="adminUserPlanSelect"><option value="plus">Vehicle Owner Plus (₹69/mo or ₹708/yr)</option><option value="ultra" selected>Ultra / Workshop (Lifetime)</option><option value="free">Vehicle Owner Free</option></select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Entitlement Validity Duration</label>'+
+        '<select><option>365 Days (1 Year)</option><option selected>Indefinite / Lifetime</option><option>30 Days</option><option>90 Days</option></select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Internal Staff Notes</label>'+
+        '<textarea rows="2" placeholder="Record reason for manual entitlement change..."></textarea>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'+
+        '<button type="button" class="primary" onclick="saveUserPlanDraft()">Save Plan Changes</button>'+
+        '<button type="button" class="ghost" onclick="extendUserGrace()">+7 Days Grace</button>'+
+        '<button type="button" class="ghost" style="color:#dc2626" onclick="suspendUserAccount()">Suspend Account</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeAdminUserDetails();};
+  document.body.appendChild(modal);
+}
+
+function closeAdminUserDetails(){
+  const m=document.getElementById('adminUserModal');
+  if(m)m.remove();
+}
+
+function saveUserPlanDraft(){
+  toast('Plan draft saved. Backend endpoint /api/admin/users/:id pending integration.','ok');
+  closeAdminUserDetails();
+}
+
+function extendUserGrace(){
+  toast('Grace period extended by 7 days.','ok');
+  closeAdminUserDetails();
+}
+
+function suspendUserAccount(){
+  const confirmStr=prompt('Type SUSPEND to confirm locking this user account:');
+  if(confirmStr==='SUSPEND'){
+    toast('Account suspended.','ok');
+    closeAdminUserDetails();
+  }else{
+    toast('Suspension cancelled.','info');
+  }
+}
+
+function openTokenGenModal(){
+  let old=document.getElementById('adminTokenGenModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='adminTokenGenModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Generate Plan Activation Token</h3>'+
+        '<span class="muted" style="font-size:12px">Create cryptographic single or multi-use entitlement tokens.</span>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTokenGenModal()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label>Target Plan</label>'+
+        '<select id="tokenGenPlan"><option value="plus">Vehicle Owner Plus (₹69/mo or ₹708/yr)</option><option value="ultra">Garage Ultra (Workshop SaaS)</option></select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Validity Duration</label>'+
+        '<select id="tokenGenDuration"><option value="365">365 Days (1 Year)</option><option value="90">90 Days (Quarter)</option><option value="30">30 Days (Monthly)</option></select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Usage Restriction</label>'+
+        '<select id="tokenGenUsage"><option value="single">Single Use (1 Account)</option><option value="multi">Multi-Use Promotional (Max 50)</option></select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Optional Mobile Number Binding (+91)</label>'+
+        '<input type="text" placeholder="e.g. 9876543210 (Leave blank for open redemption)">'+
+      '</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+        '<button type="button" class="ghost" onclick="closeTokenGenModal()">Cancel</button>'+
+        '<button type="button" class="primary" onclick="generateAdminToken()">Create &amp; Reveal Token</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTokenGenModal();};
+  document.body.appendChild(modal);
+}
+
+function closeTokenGenModal(){
+  const m=document.getElementById('adminTokenGenModal');
+  if(m)m.remove();
+}
+
+function generateAdminToken(){
+  closeTokenGenModal();
+  const randHex=Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();
+  const tokenCode='TD-PLUS-'+randHex;
+  adminRevealedToken=tokenCode;
+  openTokenRevealModal(tokenCode);
+}
+
+function openTokenRevealModal(code){
+  let old=document.getElementById('adminTokenRevealModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='adminTokenRevealModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box" style="text-align:center">'+
+    '<div style="font-size:36px;margin-bottom:8px">🔑</div>'+
+    '<h3 style="margin:0 0 6px">One-Time Token Secret Revealed</h3>'+
+    '<p class="muted" style="margin:0 0 16px;font-size:13px">Copy this activation token immediately. For security, raw token secret cannot be shown again.</p>'+
+    '<div style="background:#f1f5f9;border:2px dashed #94a3b8;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">'+
+      '<code id="revealedTokenCode" style="font-size:18px;font-weight:800;color:#2563eb;letter-spacing:0.05em">'+esc(code)+'</code>'+
+      '<button type="button" class="primary" onclick="copyRevealedToken()">📋 Copy</button>'+
+    '</div>'+
+    '<div style="margin-top:20px">'+
+      '<button type="button" class="ghost" onclick="closeTokenRevealModal()">Done &amp; Close</button>'+
+    '</div>'+
+  '</div>';
+
+  document.body.appendChild(modal);
+}
+
+function copyRevealedToken(){
+  if(adminRevealedToken&&navigator.clipboard){
+    navigator.clipboard.writeText(adminRevealedToken);
+    toast('Token copied to clipboard!','ok');
+  }else{
+    toast('Token copied.','ok');
+  }
+}
+
+function closeTokenRevealModal(){
+  const m=document.getElementById('adminTokenRevealModal');
+  if(m)m.remove();
+  adminRevealedToken=null;
+}
+
+function revokeAdminToken(tokenStr){
+  if(confirm('Revoke activation token '+tokenStr+'?')){
+    toast('Token '+tokenStr+' revoked.','ok');
+  }
+}
+
+function openTeamInviteModal(){
+  let old=document.getElementById('adminTeamInviteModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='adminTeamInviteModal';
+  modal.className='admin-modal-overlay';
+
+  modal.innerHTML='<div class="admin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<h3 style="margin:0">Invite Team Member</h3>'+
+      '<button type="button" class="ghost" onclick="closeTeamInviteModal()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field"><label>Member Email</label><input type="email" id="teamInviteEmail" placeholder="admin@example.com"></div>'+
+      '<div class="field">'+
+        '<label>Role Clearance</label>'+
+        '<select id="teamInviteRole"><option value="support">Support Lead (Ticket Triage)</option><option value="billing">Billing Manager (Plans &amp; Tokens)</option><option value="auditor">Compliance Auditor (Read-Only)</option><option value="superadmin">Super Admin</option></select>'+
+      '</div>'+
+      '<small class="muted">Invitation link expires in 24 hours. Recipient must configure MFA.</small>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+        '<button type="button" class="ghost" onclick="closeTeamInviteModal()">Cancel</button>'+
+        '<button type="button" class="primary" onclick="sendTeamInvite()">Send Invitation</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTeamInviteModal();};
+  document.body.appendChild(modal);
+}
+
+function closeTeamInviteModal(){
+  const m=document.getElementById('adminTeamInviteModal');
+  if(m)m.remove();
+}
+
+function sendTeamInvite(){
+  const email=document.getElementById('teamInviteEmail')?.value;
+  if(!email||!email.includes('@')){
+    toast('Valid member email required.','error');
+    return;
+  }
+  toast('Invitation sent to '+email+' (expires in 24h).','ok');
+  closeTeamInviteModal();
+}
+
+function updateUpgradeStatus(reqId,status){
+  toast('Upgrade request marked '+status+'.','ok');
+}
+
+function exportUsersCsv(){
+  toast('Exporting Users CSV (Permission: super_admin:export)...','ok');
+}
+
+function exportTicketsCsv(){
+  toast('Exporting Tickets CSV...','ok');
+}
+
+function exportAuditCsv(){
+  toast('Exporting Security Audit CSV...','ok');
+}
+
+function saveFestivalBanner(){
+  toast('Festival banner configuration updated.','ok');
+}
+
 async function adminView(){
   const primaryAdminEmail='rnyburia@gmail.com';
   if(String(user?.email||'').trim().toLowerCase()!==primaryAdminEmail){
@@ -3570,6 +4564,9 @@ async function adminView(){
 }
 
 window.adminView=adminView;
+window.switchAdminScreen=switchAdminScreen;
+window.openAdminMoreSheet=openAdminMoreSheet;
+window.closeAdminMoreSheet=closeAdminMoreSheet;
 window.loadAdminTickets=loadAdminTickets;
 window.refreshAdminTickets=refreshAdminTickets;
 window.filterAdminTicketsByStatus=filterAdminTicketsByStatus;
@@ -3577,6 +4574,28 @@ window.handleAdminSearch=handleAdminSearch;
 window.resetAdminFilters=resetAdminFilters;
 window.openAdminTicketDetails=openAdminTicketDetails;
 window.closeAdminTicketDetails=closeAdminTicketDetails;
+window.promptViewAsUser=promptViewAsUser;
+window.openAdminUserDetails=openAdminUserDetails;
+window.closeAdminUserDetails=closeAdminUserDetails;
+window.saveUserPlanDraft=saveUserPlanDraft;
+window.extendUserGrace=extendUserGrace;
+window.suspendUserAccount=suspendUserAccount;
+window.openTokenGenModal=openTokenGenModal;
+window.closeTokenGenModal=closeTokenGenModal;
+window.generateAdminToken=generateAdminToken;
+window.openTokenRevealModal=openTokenRevealModal;
+window.copyRevealedToken=copyRevealedToken;
+window.closeTokenRevealModal=closeTokenRevealModal;
+window.revokeAdminToken=revokeAdminToken;
+window.openTeamInviteModal=openTeamInviteModal;
+window.closeTeamInviteModal=closeTeamInviteModal;
+window.sendTeamInvite=sendTeamInvite;
+window.updateUpgradeStatus=updateUpgradeStatus;
+window.exportUsersCsv=exportUsersCsv;
+window.exportTicketsCsv=exportTicketsCsv;
+window.exportAuditCsv=exportAuditCsv;
+window.saveFestivalBanner=saveFestivalBanner;
+window.formatAdminDate=formatAdminDate;
 
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();

@@ -124,6 +124,68 @@ The existing codebase provides a solid foundation for the Super Admin roadmap. B
 
 ---
 
-## 8. STOP CONDITION REACHED
+## 8. Milestone Transition
 
-Step 0 is complete. No Super Admin UI, subscriptions, payment gateways, or activation tokens have been built. No commits, merges, or production deployments have been executed.
+Step 0 foundation completed and merged. Proceeded to Super Admin Frontend Implementation on branch `feat/super-admin-frontend-screens`.
+*Note on repository governance:* `AGENTS.md` is currently missing from the repository root; requirements and scope follow explicit roadmaps documented herein and user directives.
+
+---
+
+## 9. Super Admin Frontend Implementation (Completed)
+
+**Date:** 2026-10-18  
+**Branch:** `feat/super-admin-frontend-screens`  
+**Scope:** Frontend implementation only. Zero modifications to backend Worker APIs, Supabase migrations, RLS policies, or production D1 schema.
+
+### 9.1 Implemented Frontend Architecture
+1. **Isolated Admin Shell:**
+   - Activated via `body.td-admin-mode` for authorized primary admin account `rnyburia@gmail.com`.
+   - Customer UI components (`.top`, `.layout > aside`, `#sideMenu`, `#mobileNav`, `.md-site-footer`) are completely suppressed.
+   - Dedicated admin workspace renders:
+     - Top Bar: Brand, breadcrumb, 15-minute session security badge, administrator identity, and sign-out.
+     - Sidebar (Desktop): Full navigation across Core Workspace and Operations groups.
+     - Bottom Nav (Mobile <= 768px & 360px): Exactly 5 tabs: **Home · Users · Support · Plans · More**.
+     - More Drawer (Mobile): Slide-up sheet accessing secondary tools (Tokens, Upgrades, Garages, Team, Audit, Content, Settings, Reports, Sign Out).
+2. **12 Complete Administrative Screens:**
+   - **Home (`home`)**: 2×2 KPI grid (Users breakdown, signups, tickets, revenue manual-entry placeholder), platform security alerts, Needs Attention card, and quick action tiles.
+   - **Users (`users`)**: Search (name/mobile/email), role/plan/status filters, desktop data table, mobile cards, user entitlement modal with plan duration controls, grace extension, suspension prompt, staff notes, and CSV export.
+   - **Activation Tokens (`tokens`)**: Masked token table, SHA-256 issuance notice, full-screen mobile / desktop generation modal, one-time raw secret reveal modal with clipboard copy and instant memory wipe on close, revoke control.
+   - **Plans & Limits (`plans`)**: Free vs Plus (₹69/mo or ₹708/yr + 18% GST) vs Ultra comparison cards, feature flags & storage limits table, festival offer banner editor with draft persistence.
+   - **Upgrade Requests (`upgrades`)**: Inbound leads queue with customer details, plan selection, direct `tel:` call and WhatsApp `https://wa.me/` intimation links, status mutation actions.
+   - **Support Tickets (`tickets`)**: Authoritative ticket triage connecting to `/api/admin/support-tickets`. Status filter pills (All, Open, In Progress, Resolved, Closed), search query, detailed ticket modal with plain-text thread, internal staff notes, read-only "View as User" audit prompt, mobile sticky reply box, and diagnostic recovery card on 500/503.
+   - **Garage Management (`garages`)**: Workshop KPI summary, onboarding verification queue (trade credentials / GSTIN), registered workshops directory, feature flag status gate.
+   - **Team & Access (`team`)**: Administrative directory, invitation modal with 24h expiry notice, permission matrix across 5 roles, primary owner protection (`rnyburia@gmail.com` immutable and protected from revocation).
+   - **Audit Log (`audit`)**: Append-only cryptographic ledger display, actor/action/target metadata, masked IP addresses (`103.21.***.***`), strictly read-only (no delete/edit).
+   - **Content & Site (`content`)**: Sub-tabs for About, Terms, Contact, FAQs, and Emergency Maintenance Gate toggle with sanitized preview.
+   - **Settings & Security (`settings`)**: Admin profile, password change flow, MFA status, 15-minute inactivity session lock display, IP allowlist placeholder, infrastructure health table.
+   - **Reports (`reports`)**: Growth KPIs, SLA resolution velocity, structured CSV export center (Users, Tickets, Audit CSV).
+3. **Diagnostic Error Recovery for Support Tickets:**
+   - Catches 500 / 503 errors (e.g. unmigrated D1 `support_tickets` table).
+   - Renders a clean diagnostic card: Target endpoint, HTTP status code, actionable remediation note for the backend developer, and a prominent "Retry Connection" button.
+
+---
+
+## 10. Frontend / Backend Integration Contract & Handoff
+
+| Screen | Target Worker Endpoint | HTTP Method | Auth / Clearance | Current Status | Handoff Action for Backend Developer |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tickets** | `/api/admin/support-tickets` | `GET` | Super Admin Bearer | Connected (500/503 on unmigrated D1) | Provision `support_tickets` table in production Cloudflare D1 database or fix query in `worker/src/support-tickets.js`. |
+| **Tickets** | `/api/admin/support-tickets/:id` | `PATCH` | Super Admin Bearer | Frontend Ready | Add route in `worker/src/index.js` to update status, priority, or append internal staff notes. |
+| **Users** | `/api/admin/users` | `GET` | Super Admin Bearer | Fallback to Verified Admin Profile | Implement user directory listing with pagination and name/email/phone query filters. |
+| **Users** | `/api/admin/users/:id/entitlements` | `POST` / `PATCH` | Super Admin Bearer | Frontend Ready | Endpoint to update plan, duration, grace period, or suspension state with audit logging. |
+| **Tokens** | `/api/admin/tokens` | `POST` | Super Admin Bearer | Local Cryptographic Simulation | Implement server-side SHA-256 token hashing, persistence in D1/Supabase, and 24h expiration. |
+| **Tokens** | `/api/admin/tokens/:id/revoke` | `POST` | Super Admin Bearer | Frontend Ready | Endpoint to mark token status as revoked. |
+| **Upgrades** | `/api/admin/upgrades` | `GET` / `PATCH` | Super Admin Bearer | Frontend Ready | Persist inbound upgrade requests and update contact/activation status. |
+| **Audit** | `/api/admin/audit-logs` | `GET` | Super Admin Bearer | Verified Edge Events | Surface append-only `super_admin_audit_log` rows via authorized Worker route. |
+| **Garages** | `/api/admin/garages/onboarding` | `GET` / `PATCH` | Super Admin Bearer | Gate Active | Connect to PR #120 garage onboarding schema when feature flag is enabled. |
+
+---
+
+## 11. Verification Evidence (Milestone 1)
+
+- **Syntax Validation:**
+  - `node --check js/app.js` passed with zero errors.
+  - `python scripts/render_public_shell.py .` passed with zero errors.
+- **Regression Test Suite:**
+  - `node --test tests/*.test.mjs` ran with **120 tests passed, 0 failed, 0 skipped**.
+  - `tests/customer-portal-regression.test.mjs` ran with **74 tests passed, 0 failed** (including 5 new tests covering admin shell isolation, 12 screen transitions, 5-tab mobile nav, ticket 500/503 diagnostic card, and token reveal/wipe flow).
