@@ -60,3 +60,28 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Merge commit: `afbdb3697a8d64cc604647c2562709ddb1aeeb90`.
 - Verified both documentation files exist on `main`.
 - This new entry supersedes the earlier note that the docs PR was pending. Old note remains unchanged to preserve history.
+
+
+## 2026-10-18 — Localhost preview server & live frontend deployment
+- **Prompt:** "fix localhost" ("this is not showing on localhost fix it even in gitcode view") & "TORQ DESK — DEPLOY ALL FRONTEND CHANGES LIVE: Antigravity has now completed additional frontend work, including the Garage frontend. I want all completed frontend changes deployed to the live website. Backend work will be handled later."
+- **Root cause analysis:**
+  1. The new Garage redesign (5-step onboarding wizard, plans view, billing & invoice calculations, feature locks, and expired states) existed only on the `feat/garage-frontend-redesign` branch, while GitHub's default repository view ("gitcode view") and the GitHub Pages deployment workflow run exclusively from `main`.
+  2. Localhost preview failed because `sw.js` had hardcoded `BASE = '/Carmy/'`, which caused `cache.addAll()` to fail with 404 when served from root `/` on localhost, and intercepted API requests without a local backend proxy.
+- **Actions taken:**
+  1. Rebased `feat/garage-frontend-redesign` onto latest `origin/main` (`4e1037f`).
+  2. Created `scripts/local-preview-server.cjs` providing dual-path support (`/` and `/Carmy/`), real-time HTML partial injection, and a transparent proxy for `/api/*` requests to the Worker endpoint.
+  3. Added `"start"`, `"dev"`, and `"serve"` npm scripts to `package.json`.
+  4. Updated `sw.js` with localhost detection (`isLocal`), setting `BASE = '/'` on localhost to prevent 404 caching errors and bypassing fetch cache during development.
+  5. Connected direct entry points in `index.html` (workshop hero buttons) and `partials/public-header.html` (Get Started dropdown) pointing to `garage-onboarding.html` and `garage-login.html`.
+  6. Updated cache version assertions in `tests/customer-portal-regression.test.mjs` and `tests/workshop-m0-contract.test.mjs` to accommodate `torq-desk-shell-v14` (introduced in PR #156).
+  7. Verified all 148 automated tests pass (`node --test tests/*.test.mjs`) and all 128 tests pass in `cmd /c npm test`.
+  8. Verified headless Chromium Playwright rendering with zero page errors, failed requests, or console warnings.
+- **Changed files:**
+  - `package.json`
+  - `sw.js`
+  - `scripts/local-preview-server.cjs`
+  - `index.html`
+  - `partials/public-header.html`
+  - `tests/customer-portal-regression.test.mjs`
+  - `tests/workshop-m0-contract.test.mjs`
+- **Scope check:** Frontend only. No Cloudflare Workers, database schemas, migrations, secrets, or API infrastructure modified.
