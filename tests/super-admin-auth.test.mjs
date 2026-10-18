@@ -229,3 +229,63 @@ test("admin route never reads support tickets when audit logging fails", async (
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("ticket workflow admin route audits privileged access before reading tickets", async () => {
+  const originalFetch = globalThis.fetch;
+  const events = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.endsWith("/auth/v1/user")) return Response.json({ id: user.id, email: "admin@example.com" });
+    if (target.includes("/rest/v1/super_admins")) return Response.json([{ user_id: user.id }]);
+    if (target.includes("/rest/v1/super_admin_audit_log")) {
+      assert.equal(init.method, "POST");
+      const audit = JSON.parse(init.body);
+      assert.equal(audit.action, "admin.ticket_workflow.list");
+      events.push("audit-write");
+      return new Response(null, { status: 201 });
+    }
+    throw new Error(`Unexpected fetch in test: ${target}`);
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/tickets", {
+        headers: { Authorization: `Bearer ${makeAdminToken()}` },
+      }),
+      { ...env, DB: createAdminRouteDb(events), ALLOWED_ORIGIN: "https://example.test" }
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(events, ["audit-write", "tickets-read"]);
+    assert.equal((await response.json()).data[0].id, "TD-TEST");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("ticket workflow admin route fails closed before reading tickets if audit is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  const events = [];
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.endsWith("/auth/v1/user")) return Response.json({ id: user.id, email: "admin@example.com" });
+    if (target.includes("/rest/v1/super_admins")) return Response.json([{ user_id: user.id }]);
+    if (target.includes("/rest/v1/super_admin_audit_log")) {
+      events.push("audit-write-failed");
+      return new Response("audit unavailable", { status: 503 });
+    }
+    throw new Error(`Unexpected fetch in test: ${target}`);
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://worker.test/api/admin/tickets", {
+        headers: { Authorization: `Bearer ${makeAdminToken()}` },
+      }),
+      { ...env, DB: createAdminRouteDb(events), ALLOWED_ORIGIN: "https://example.test" }
+    );
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "ADMIN_AUDIT_UNAVAILABLE");
+    assert.deepEqual(events, ["audit-write-failed"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
