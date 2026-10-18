@@ -22,6 +22,34 @@ function normalizeEvent(row) {
 async function ownedTicket(env,id,userId) {
   return env.DB.prepare("SELECT * FROM support_tickets WHERE id = ? AND user_id = ?").bind(id,userId).first();
 }
+
+// Assignees must be active members of the server-managed Super Admin roster.
+// Do not use client-supplied roles, workshop staff, or UI state as authorization.
+async function isActiveTicketAssignee(env,userId) {
+  if (!userId || !env?.SUPABASE_URL || !env?.SUPABASE_SECRET_KEY) {
+    return { allowed: false, unavailable: true };
+  }
+  try {
+    const endpoint = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
+    endpoint.searchParams.set("user_id", `eq.${userId}`);
+    endpoint.searchParams.set("active", "eq.true");
+    endpoint.searchParams.set("select", "user_id");
+    endpoint.searchParams.set("limit", "1");
+    const response = await fetch(endpoint.toString(), {
+      headers: {
+        apikey: env.SUPABASE_SECRET_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
+      },
+    });
+    if (!response.ok) return { allowed: false, unavailable: true };
+    const rows = await response.json();
+    if (!Array.isArray(rows)) return { allowed: false, unavailable: true };
+    return { allowed: rows.some((row) => row?.user_id === userId), unavailable: false };
+  } catch (err) {
+    console.error("Ticket assignee eligibility lookup failed", err?.message || err);
+    return { allowed: false, unavailable: true };
+  }
+}
 function eventBatchStatements(env,{ticketId,actorId,actorType,type,visibility="public",message=null,metadata={},now}) {
   return [
     env.DB.prepare("INSERT INTO ticket_events (ticket_id,actor_user_id,actor_type,event_type,visibility,message,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)")
@@ -111,9 +139,12 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
       }
       if(hasAssignee) {
         const assignee=body.assignee_id ? String(body.assignee_id) : null;
-        // The current UI supports "Assign to Me" and Unassigned only. Do not trust
-        // arbitrary client-supplied IDs as eligible support-team members.
-        if(assignee && assignee!==user.id)return fail("You can only assign a ticket to your own verified account.",403,origin,"ASSIGNEE_NOT_ALLOWED");
+        // Resolve eligibility against the server-managed roster, never client/UI claims.
+        if (assignee) {
+          const eligibility = await isActiveTicketAssignee(env, assignee);
+          if (eligibility.unavailable) return fail("Ticket assignment authorization is temporarily unavailable.",503,origin,"ASSIGNEE_LOOKUP_UNAVAILABLE");
+          if (!eligibility.allowed) return fail("Assignee must be an active Super Admin team member.",403,origin,"ASSIGNEE_NOT_ALLOWED");
+        }
         if(!["pending","assigned"].includes(ticket.status))return fail("Assignment can only change while a ticket is pending or assigned.",409,origin,"INVALID_TRANSITION");
         changes.push(["assignee_id",assignee],["status",assignee?"assigned":"pending"]);
         effectiveStatus=assignee?"assigned":"pending";
