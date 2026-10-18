@@ -77,13 +77,14 @@ test("ticket workflow: customer reply resolves /api/tickets/:id/messages", async
 test("ticket workflow: admin detail resolves /api/admin/tickets/:id", async () => {
   const { env, calls } = mockEnv({
     ticket: { id: "T-1", user_id: "user-1", subject: "Help", status: "pending", priority: "normal" },
-    events: [],
+    events: [{ id: 4, ticket_id: "T-1", actor_type: "admin", event_type: "status_changed", metadata_json: '{"from":"pending","to":"assigned"}', visibility: "public", created_at: 101 }],
   });
   const request = new Request("https://worker.test/api/admin/tickets/T-1");
   const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.data.id, "T-1");
+  assert.deepEqual(body.data.events[0].metadata_json, { from: "pending", to: "assigned" });
   assert.ok(calls.some((call) => call.sql.includes("SELECT * FROM support_tickets WHERE id=?") && call.args[0] === "T-1"));
 });
 
