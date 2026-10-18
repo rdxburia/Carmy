@@ -325,3 +325,33 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | `fix/global-info-links-functional` | 0 | 335 | behind | none returned | **stale (zero unique commits)** |
 | `fix/help-nav-cache-visual-polish` | 0 | 40 | behind | none returned | **stale (zero unique commits)** |
 | `fix/help-support-production-and-dashboard-polish` | 0 | 46 | behind | none returned | **stale (zero unique commits)** |
+
+
+## Full branch comparison table — chunk 4/6 (24 branches)
+
+| Branch | Ahead | Behind | Status | Changed files returned | Classification |
+|---|---:|---:|---|---|---|
+| `fix/info-links-inline-handler-syntax` | 0 | 333 | behind | none returned | **stale (zero unique commits)** |
+| `fix/insurance-dynamic-lifecycle` | 1 | 515 | diverged | worker/src/insurance.js | **risky + stale / Worker behavior** |
+| `fix/insurance-pdf-reading-order` | 0 | 445 | behind | none returned | **stale (zero unique commits)** |
+| `fix/issue-3-documents-report-styles` | 0 | 570 | behind | none returned | **stale (zero unique commits)** |
+| `fix/issue-6-cache-secret-rotation` | 0 | 526 | behind | none returned | **stale (zero unique commits)** |
+| `fix/issue-6-private-cache-trigger` | 0 | 524 | behind | none returned | **stale (zero unique commits)** |
+| `fix/issue-9-logo-behavior` | 0 | 556 | behind | none returned | **stale (zero unique commits)** |
+| `fix/issue-20-a4-report-layout` | 0 | 530 | behind | none returned | **stale (zero unique commits)** |
+| `fix/issue-20-report-dom-nesting` | 0 | 528 | behind | none returned | **stale (zero unique commits)** |
+| `fix/live-super-admin-cache-bust-v12` | 4 | 9 | diverged | index.html, sw.js, tests/customer-portal-regression.test.mjs, tests/workshop-m0-contract.test.mjs | **needs review / service-worker cache** |
+| `fix/login-js-syntax-after-report-ui` | 2 | 379 | diverged | index.html, js/app.js | **stale + needs review** |
+| `fix/motordesk-footer-always-visible-popup` | 3 | 319 | diverged | css/premium.css, index.html | **stale + needs review** |
+| `fix/motordesk-footer-popup-click-mobile` | 2 | 314 | diverged | index.html, js/info-modal.js | **stale + needs review** |
+| `fix/motordesk-info-tabs-and-clicks` | 0 | 340 | behind | none returned | **stale (zero unique commits)** |
+| `fix/motordesk-login-story-car-spacing` | 0 | 352 | behind | none returned | **stale (zero unique commits)** |
+| `fix/motordesk-login-viewport-password-toggle` | 0 | 355 | behind | none returned | **stale (zero unique commits)** |
+| `fix/motordesk-mobile-auth-footer-stability` | 2 | 316 | diverged | css/premium.css, js/app.js | **stale + needs review** |
+| `fix/motordesk-mobile-footer-popup-cleanup` | 2 | 315 | diverged | css/premium.css, index.html | **stale + needs review** |
+| `fix/motordesk-popup-readable` | 1 | 318 | diverged | css/premium.css | **stale + needs review** |
+| `fix/motordesk-popup-readable-content` | 2 | 317 | diverged | css/premium.css, index.html | **stale + needs review** |
+| `fix/multipage-policy-ocr-extraction` | 0 | 26 | behind | none returned | **stale (zero unique commits)** |
+| `fix/native-vehicle-report-print` | 0 | 431 | behind | none returned | **stale (zero unique commits)** |
+| `fix/password-change-isolated-verification` | 8 | 9 | diverged | index.html, js/app.js, js/password-change.js, package.json, sw.js, tests/password-change.test.mjs, tests/workshop-m0-contract.test.mjs | **risky / password and session-sensitive** |
+| `fix/password-toggle-clean-rebase` | 0 | 343 | behind | none returned | **stale (zero unique commits)** |

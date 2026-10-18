@@ -147,3 +147,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Branch audit chunk 3/6
 - Appended 24 additional main-vs-branch rows (branches 49–72 of 142) with exact ahead/behind and changed paths returned by GitHub. SQL/security/Worker changes are classified risky; stale branches are not deleted.
 - Correct staging D1 UUID remains `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. No Supabase secrets changed, no E2E, no D1 writes, and no production ticket content read.
+
+
+## 2026-10-19 — Branch audit chunk 4/6
+- Appended 24 branch comparison rows (branches 73–96 of the 142-branch inventory) with ahead/behind, changed files returned, and triage classification.
+- Authentication/password, Worker, and service-worker changes remain review/risk items. No branch merge/delete/force-push performed. Staging UUID remains verified as `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; Supabase secrets untouched; no database writes or production ticket reads.
