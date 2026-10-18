@@ -14,6 +14,7 @@ import { handleCacheWebhook } from "./cache-webhook.js";
 import { presignUpload, finalizeUpload, presignDownload, deleteR2Document } from "./r2-files.js";
 import { createSupportTicket, listUserSupportTickets, adminListSupportTickets } from "./support-tickets.js";
 import { listFormTemplates, getFormTemplate, validateTransferPayload } from "./templates.js";
+import { createAdminInvite } from "./admin-invites.js";
 
 const RATE_LIMIT_RETRY_AFTER = "60";
 
@@ -158,6 +159,14 @@ export default {
       if (parts[0] === "admin") {
         const authorizationFailure = await requireSuperAdmin(user, env, origin);
         if (authorizationFailure) return authorizationFailure;
+        if (request.method === "GET" && parts.length === 2 && parts[1] === "me") {
+          return json({ ok: true, data: { id: user.id, email: user.email || null, role: "super_admin" } }, 200, origin);
+        }
+        if (request.method === "POST" && parts.length === 2 && parts[1] === "team-invites") {
+          const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.team_invite.request", {});
+          if (auditFailure) return auditFailure;
+          return createAdminInvite(request, env, origin, user);
+        }
         if (request.method === "GET" && parts.length === 2 && parts[1] === "support-tickets") {
           const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.support_tickets.list", {
             status: url.searchParams.get("status") || null,
