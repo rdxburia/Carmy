@@ -589,3 +589,36 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 - A staging-only Cloudflare settings deployment was performed after the PR merge. Active deployment ID: `9369670c-639d-4b8a-8b54-2a6f01e81d67`; active version 16 ID: `45e2bdb5-ca58-481c-b3f6-00515eca978e`, 100% traffic. Live Cloudflare GET settings verified `DB` -> `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. `SUPABASE_URL`, R2, and RATE_LIMITER bindings are absent in the new version; the existing secret binding name remains inherited, but no Supabase URL is configured and no E2E request was sent.
 - Staging D1 read-only verification: `support_tickets` schema includes workflow columns; counts remain 4 tickets, 2 `ticket_events`, 0 `ticket_reads`, 0 `audit_log`. No rows were inserted, updated, or deleted. `d1_migrations` ledger table is absent, so migration ledger evidence is unverified; because the workflow schema is already present, migration 0007 was not re-run.
 - **STOP:** no authenticated E2E, Supabase mutation, or ticket mutation until the user provisions a dedicated staging Supabase project. Production D1/Worker remain untouched; production ticket contents were never read.
+
+
+---
+
+## 2026-10-19 — Autonomous staging run addendum: PRs #165–#167, secret isolation, schema recovery
+
+### PR inventory additions (created after the initial 154-record snapshot)
+| PR | Title | State | Head → base | Changed files | Created |
+|---|---|---|---|---:|---|
+| [#165](https://github.com/rdxburia/Carmy/pull/165) | docs(audit): record staging isolation deployment evidence | merged | `docs/staging-isolation-evidence-2026-10-19` → `main` | 3 | 2026-10-18 |
+| [#166](https://github.com/rdxburia/Carmy/pull/166) | fix(staging): isolate Supabase, R2 and rate limiting resources | merged | `fix/staging-supabase-r2-rate-limit-2026-10-19` → `main` | 1 | 2026-10-18 |
+| [#167](https://github.com/rdxburia/Carmy/pull/167) | fix(db): correct workshop migration dollar quote delimiter | merged | `fix/ws001-dollar-quote-delimiter-2026-10-19` → `main` | 1 | 2026-10-18 |
+
+### Secret and staging resource evidence
+- Cloudflare staging secret inventory initially contained `SUPABASE_SECRET_KEY`; its value was never read. DELETE returned HTTP 200 and a subsequent inventory returned no secret names. The original key's project identity remains unverified, so it was removed.
+- Created Supabase project `carmy-staging` (`vejccahjrlwhaniajgez`, `ap-south-1`, ACTIVE_HEALTHY; reported project cost $0/month). No production rows or users were copied.
+- Created Cloudflare R2 bucket `carmy-staging-files`. Staging rate-limit namespace is `2601019`, distinct from production `2601008`.
+- Staging Supabase schema applications created the production table names in the metadata inventory with 0 rows, plus staging-only `ws_*` tables and Super Admin registry. Exact migration parity is **not verified**: cache webhook/Vault migrations were withheld because a staging-only secret pair is unavailable; two duplicate-contact migration sources from production history were not located in main. The old `Carmy` project's failed migration branch root cause remains unverified; the API returned only its `main` branch marked `MIGRATIONS_FAILED` and recent log query did not expose a matching error.
+- Privileged staging Supabase secret key is unavailable through the connected Supabase tool set. No publishable/anon key was substituted and no privileged key was printed, logged, or committed.
+
+### D1 schema/ledger verification
+- Staging D1 schema matches the migration 0007 workflow objects and aggregate ticket statuses/priorities are already normalized. Created `d1_migrations`, recorded `0007_support_ticket_workflow.sql` without rerunning migration 0007.
+- Counts preserved: 4 `support_tickets`, 2 `ticket_events`, 0 `ticket_reads`, 0 `audit_log`. No ticket content selected, and no existing rows changed.
+- Production D1 backup/ledger remains untouched because staging E2E gate is not satisfied.
+
+### Cloudflare deployment incident and current state
+- PR #166 merged at `ffbb41fb68401df0007311bcaff90399a6ab9ce4`. The Git-integrated build then made Worker version 20 (`4a79a1fd-df66-4896-80fb-6b403f5229e9)) active with root `wrangler.toml` bindings to production D1/R2/rate-limit resources. No requests or writes were made while this version was active.
+- Manually redeployed isolated version 19 (`21d40a41-0d77-49b7-be06-4e80d69d4842)) at 100% traffic, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`. Live version metadata verifies D1 staging UUID `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, R2 `carmy-staging-files`, rate-limit namespace `2601019`, staging Supabase URL, and no secret bindings. Future auto-deploy correctness is unverified until Cloudflare build config selects `wrangler.staging.toml`.
+- PR #167 fixed the first function body's malformed `AS $` delimiter in `supabase/ws_001_core.sql`. WS-A regression run 39159572470, policy run 39159572407, and Pages run 39159572421 succeeded. Corrected migration applied successfully to staging.
+- Staging D1 existing rows remain unchanged. Authenticated ticket E2E remains unrun because privileged staging Supabase key is unavailable. PR #161 remains open/unmerged.
+
+### Production hold
+- Production D1, Worker, and Supabase were not changed. Production ticket contents were never read. No production backup/bookmark/export was performed because staging E2E is not verified; all five production preconditions are not met. Production rollout remains HOLD.
