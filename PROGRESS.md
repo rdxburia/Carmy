@@ -230,3 +230,11 @@ The user was given an Antigravity prompt to:
 ### Documentation integrity
 - Existing content above this entry is historical and must remain intact.
 - `AGENT.md` did not exist at the repository root when checked on 2026-10-18; create it as a new persistent agent guide. Do not overwrite any other file or rename `AGENTS.md` without checking first.
+
+
+## 2026-10-18 — Documentation update execution record
+- User explicitly reinforced: “ab se har cmd and prompt proper progess md & agent md me save karna bina old data remove ya delete kiye ab tak sara save kr lo agent md and progres md me”.
+- Attempted to update `PROGRESS.md` directly on `main`; GitHub rejected direct write because repository rules require a pull request. No direct-main change was made.
+- Created branch `docs/preserve-project-history-2026-10-18` from `main`.
+- Appended this session's status to `PROGRESS.md` while retaining its previous content, and created previously absent root `AGENT.md` with session-start instructions, append-only documentation rules, current frontend-only deployment scope, known deployment evidence, and backend restrictions.
+- This documentation work is on the branch and is **not merged into main yet**. PR is the next step; do not describe it as merged/saved on main until confirmed.
