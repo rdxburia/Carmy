@@ -5,6 +5,8 @@ import { ticketApi } from "../worker/src/ticket-workflow.js";
 function mockEnv({ ticket = {}, events = [] } = {}) {
   const calls = [];
   const env = {
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SECRET_KEY: "test-secret",
     DB: {
       batch(statements) {
         calls.push({ method: "batch", statements });
@@ -126,18 +128,71 @@ test("ticket workflow: admin cannot assign ticket to an arbitrary account", asyn
   assert.equal(calls.some((call) => call.method === "batch"), false);
 });
 
-test("ticket workflow: valid admin update uses one atomic D1 batch", async () => {
+test("ticket workflow: valid active-admin assignment uses one atomic D1 batch", async () => {
   const { env, calls } = mockEnv({
     ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
   });
-  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignee_id: "user-1" }),
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /\/rest\/v1\/super_admins/);
+    return new Response(JSON.stringify([{ user_id: "user-1" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try {
+    const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee_id: "user-1" }),
+    });
+    const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+    assert.equal(response.status, 200);
+    const batch = calls.find((call) => call.method === "batch");
+    assert.ok(batch);
+    assert.equal(batch.statements.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("ticket workflow: rejects inactive/non-admin assignee without writes", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
   });
-  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
-  assert.equal(response.status, 200);
-  const batch = calls.find((call) => call.method === "batch");
-  assert.ok(batch);
-  assert.equal(batch.statements.length, 3);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+  try {
+    const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee_id: "inactive-user" }),
+    });
+    const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.error.code, "ASSIGNEE_NOT_ALLOWED");
+    assert.equal(calls.some((call) => call.method === "batch"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("ticket workflow: fails closed when assignee roster is unavailable", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  try {
+    const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee_id: "user-1" }),
+    });
+    const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+    const body = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(body.error.code, "ASSIGNEE_LOOKUP_UNAVAILABLE");
+    assert.equal(calls.some((call) => call.method === "batch"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
