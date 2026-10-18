@@ -1,0 +1,20 @@
+# Isolated staging Worker config for PR #155 E2E verification.
+# Do not use this config for production deployment.
+name = "carmy-api-staging"
+main = "worker/src/index.js"
+compatibility_date = "2026-10-07"
+workers_dev = true
+
+[vars]
+SUPABASE_URL = "https://hlrmuvzmaegnbgzvvfsn.supabase.co"
+ADMIN_INVITE_REDIRECT_URL = "https://rdxburia.github.io/Carmy/?admin_invite=1"
+ALLOWED_ORIGIN = "https://rdxburia.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "carmy-ticket-workflow-staging"
+database_id = "803810b8-77d0-42bb-bdd6-7e8b1cc4afdb"
+
+# Intentionally no R2 or RATE_LIMITER binding here:
+# staging ticket workflow tests must not write to production carmy-files,
+# and must not share the production IP rate-limit namespace.
