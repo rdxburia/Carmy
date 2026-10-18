@@ -24,7 +24,9 @@ async function event(env,{ticketId,actorId,actorType,type,visibility="public",me
 }
 export async function ticketApi(request,env,origin,user,userToken,parts,url) {
   const method=request.method;
-  const ticketId=parts[2];
+  // /api/tickets/:id and /api/admin/tickets/:id use different segment offsets.
+  // Public routes are ["tickets", id, ...]; admin routes are ["admin", "tickets", id, ...].
+  const ticketId = parts[0] === "admin" ? parts[2] : parts[1];
   if(parts[0]==="tickets" && method==="GET" && parts.length===1) {
     const rows=await env.DB.prepare("SELECT t.id,t.subject,t.status,t.priority,t.created_at,t.updated_at, MAX(e.id) AS last_event_id, MAX(e.created_at) AS last_event_at FROM support_tickets t LEFT JOIN public_ticket_events e ON e.ticket_id=t.id WHERE t.user_id=? GROUP BY t.id ORDER BY t.updated_at DESC").bind(user.id).all();
     const reads=await env.DB.prepare("SELECT ticket_id,last_read_event_id FROM ticket_reads WHERE user_id=?").bind(user.id).all();
@@ -43,7 +45,7 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
     await env.DB.prepare("INSERT INTO ticket_reads(user_id,ticket_id,last_read_event_id,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id,ticket_id) DO UPDATE SET last_read_event_id=excluded.last_read_event_id,updated_at=excluded.updated_at").bind(user.id,ticketId,lastId,nowSec()).run();
     return json({ok:true,data:{id:ticket.id,subject:ticket.subject,status:ticket.status,priority:ticket.priority,chat_enabled:Boolean(ticket.chat_enabled)&&Number(ticket.chat_enabled_until||0)>nowSec()&&ticket.status!=="closed",show_agent_name:Boolean(ticket.show_agent_name),events:events.results||[]}},200,origin);
   }
-  if(parts[0]==="tickets" && ticketId && parts[3]==="messages" && method==="POST") {
+  if(parts[0]==="tickets" && ticketId && parts[2]==="messages" && parts.length===3 && method==="POST") {
     const ticket=await ownedTicket(env,ticketId,user.id);
     if(!ticket)return fail("Ticket not found.",404,origin,"NOT_FOUND");
     if(!ticket.chat_enabled || Number(ticket.chat_enabled_until||0)<=nowSec() || ticket.status==="closed")return fail("Replies are currently disabled for this ticket.",403,origin,"CHAT_DISABLED");
