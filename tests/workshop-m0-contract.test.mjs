@@ -29,7 +29,7 @@ test("owner app uses shared session module without changing 120-second policy",(
  assert.match(app,/window\.CarmySessionGuard\.create/);
  assert.match(index,/js\/session-guard\.js\?v=2026\.10\.[0-9]+-[a-z0-9-]+/);
  assert.match(guard,/lastWrite<5000/);
- assert.match(sw,/torq-desk-shell-v(11|10|[789])/);
+ assert.match(sw,/torq-desk-shell-v(12|11|10|[789])/);
  assert.match(sw,/js\/session-guard\.js/,"session guard must be precached");
  assert.match(guard,/carmy_last_activity/);
  assert.ok(guard.includes("isLogoutRequest=") && guard.includes("logout"),"logout bypass must remain");
