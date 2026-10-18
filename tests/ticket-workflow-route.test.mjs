@@ -14,6 +14,8 @@ function mockEnv({ ticket = {}, events = [] } = {}) {
         return {
           bind(...args) {
             return {
+              sql,
+              args,
               async first() {
                 calls.push({ method: "first", sql, args });
                 if (sql.includes("SELECT * FROM support_tickets WHERE id = ? AND user_id = ?")) {
@@ -70,8 +72,11 @@ test("ticket workflow: customer reply resolves /api/tickets/:id/messages", async
   });
   const response = await ticketApi(request, env, origin, user, "token", ["tickets", "T-1", "messages"], new URL(request.url));
   assert.equal(response.status, 201);
-  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO ticket_events")));
-  assert.ok(calls.some((call) => call.sql.includes("UPDATE support_tickets SET updated_at")));
+  const batch = calls.find((call) => call.method === "batch");
+  assert.ok(batch);
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("INSERT INTO ticket_events")));
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("INSERT INTO audit_log")));
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("UPDATE support_tickets SET updated_at")));
 });
 
 test("ticket workflow: admin detail resolves /api/admin/tickets/:id", async () => {
