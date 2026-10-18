@@ -202,3 +202,48 @@ test("ticket workflow: fails closed when assignee roster is unavailable", async 
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("ticket workflow: customer cannot read another user's ticket", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "someone-else", subject: "Private", status: "working", priority: "normal" },
+  });
+  const response = await ticketApi(new Request(url), env, origin, user, "token", ["tickets", "T-1"], url);
+  const body = await response.json();
+  assert.equal(response.status, 404);
+  assert.equal(body.error.code, "NOT_FOUND");
+  assert.ok(calls.some((call) => call.sql.includes("WHERE id = ? AND user_id = ?")));
+  assert.equal(calls.some((call) => call.sql.includes("FROM public_ticket_events")), false);
+});
+
+test("ticket workflow: customer reply to closed ticket is rejected without writes", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", chat_enabled: 1, chat_enabled_until: Math.floor(Date.now() / 1000) + 3600, status: "closed" },
+  });
+  const request = new Request("https://worker.test/api/tickets/T-1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Please reopen this" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["tickets", "T-1", "messages"], new URL(request.url));
+  const body = await response.json();
+  assert.equal(response.status, 403);
+  assert.equal(body.error.code, "CHAT_DISABLED");
+  assert.equal(calls.some((call) => call.method === "batch"), false);
+});
+
+test("ticket workflow: malformed internal flag is rejected before writes", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
+  });
+  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Note", internal: "yes" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.error.code, "INVALID_REQUEST");
+  assert.equal(calls.some((call) => call.method === "batch"), false);
+});
