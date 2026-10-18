@@ -116,16 +116,22 @@ test("ticket workflow: admin cannot assign ticket to an arbitrary account", asyn
   const { env, calls } = mockEnv({
     ticket: { id: "T-1", user_id: "user-1", status: "pending", priority: "normal", assignee_id: null },
   });
-  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignee_id: "some-other-user" }),
-  });
-  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
-  const body = await response.json();
-  assert.equal(response.status, 403);
-  assert.equal(body.error.code, "ASSIGNEE_NOT_ALLOWED");
-  assert.equal(calls.some((call) => call.method === "batch"), false);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+  try {
+    const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee_id: "some-other-user" }),
+    });
+    const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.error.code, "ASSIGNEE_NOT_ALLOWED");
+    assert.equal(calls.some((call) => call.method === "batch"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("ticket workflow: valid active-admin assignment uses one atomic D1 batch", async () => {
