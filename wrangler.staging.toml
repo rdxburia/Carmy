@@ -1,12 +1,13 @@
 # Isolated staging Worker config for PR #155 E2E verification.
 # Do not use this config for production deployment.
+# Verified against Cloudflare D1 inventory on 2026-10-19: use only the staging database UUID below.
+# Supabase URL is intentionally omitted until a dedicated staging project exists; no secrets are changed here.
 name = "carmy-api-staging"
 main = "worker/src/index.js"
 compatibility_date = "2026-10-07"
 workers_dev = true
 
 [vars]
-SUPABASE_URL = "https://hlrmuvzmaegnbgzvvfsn.supabase.co"
 ADMIN_INVITE_REDIRECT_URL = "https://rdxburia.github.io/Carmy/?admin_invite=1"
 ALLOWED_ORIGIN = "https://rdxburia.github.io"
 
