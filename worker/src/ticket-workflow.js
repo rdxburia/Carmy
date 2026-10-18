@@ -63,6 +63,41 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
   // /api/tickets/:id and /api/admin/tickets/:id use different segment offsets.
   // Public routes are ["tickets", id, ...]; admin routes are ["admin", "tickets", id, ...].
   const ticketId = parts[0] === "admin" ? parts[2] : parts[1];
+  if(parts[0]==="tickets" && method==="POST" && parts.length===1) {
+    const body=await request.json().catch(()=>null);
+    if(!body || typeof body!=="object" || Array.isArray(body))return fail("A JSON object is required.",400,origin,"INVALID_REQUEST");
+    const category=String(body.category||"").trim();
+    const subject=String(body.subject||"").trim();
+    const message=String(body.message||"").trim();
+    const priority=String(body.priority||"normal").trim().toLowerCase();
+    const categories=new Set(["Account & Security","Vehicle Garage & Records","Document Vault & Uploads","Ownership Transfer (Form 29/30)","Feature Request","Other Inquiry"]);
+    if(!categories.has(category))return fail("Invalid ticket category.",400,origin,"INVALID_CATEGORY");
+    if(!subject||subject.length>160)return fail("Subject is required and must be 1–160 characters.",400,origin,"INVALID_SUBJECT");
+    if(!message||message.length>4000)return fail("Message must contain 1–4000 characters.",400,origin,"INVALID_MESSAGE");
+    if(!PRIORITIES.has(priority))return fail("Invalid priority.",400,origin,"INVALID_PRIORITY");
+    const now=nowSec();
+    try {
+      const recent=await env.DB.prepare("SELECT COUNT(*) AS count FROM support_tickets WHERE user_id=? AND created_at>?").bind(user.id,now-600).first();
+      if(Number(recent?.count||0)>=5)return fail("You have submitted 5 tickets recently. Please wait before submitting another.",429,origin,"TICKET_RATE_LIMITED");
+    } catch(err) {
+      console.error("Ticket creation rate check failed",err?.message||err);
+      return fail("Ticket service is temporarily unavailable.",503,origin,"TICKETS_UNAVAILABLE");
+    }
+    if(typeof env.DB.batch!=="function")return fail("Atomic ticket creation is unavailable.",503,origin,"TICKET_UPDATE_UNAVAILABLE");
+    const ticketId="TD-"+crypto.randomUUID().replace(/-/g,"").slice(0,8).toUpperCase();
+    const carId=body.car_id?String(body.car_id).trim():null;
+    if(carId)return fail("Creating tickets linked to a vehicle is not supported on this endpoint yet. Submit without car_id.",400,origin,"UNSUPPORTED_CAR_LINK");
+    try {
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO support_tickets (id,user_id,email,car_id,category,subject,message,priority,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(ticketId,user.id,user.email||"",null,category,subject,message,priority,"pending",now,now),
+        ...eventBatchStatements(env,{ticketId,actorId:user.id,actorType:"user",type:"ticket_created",message,metadata:{category,subject,priority},now}),
+      ]);
+    } catch(err) {
+      console.error("Atomic ticket creation failed",err?.message||err);
+      return fail("Ticket could not be saved. Please retry.",503,origin,"TICKET_CREATE_UNAVAILABLE");
+    }
+    return json({ok:true,data:{id:ticketId,subject,status:"pending",priority,created_at:now}},201,origin);
+  }
   if(parts[0]==="tickets" && method==="GET" && parts.length===1) {
     const rows=await env.DB.prepare("SELECT t.id,t.subject,t.status,t.priority,t.created_at,t.updated_at, MAX(e.id) AS last_event_id, MAX(e.created_at) AS last_event_at FROM support_tickets t LEFT JOIN public_ticket_events e ON e.ticket_id=t.id WHERE t.user_id=? GROUP BY t.id ORDER BY t.updated_at DESC").bind(user.id).all();
     const reads=await env.DB.prepare("SELECT ticket_id,last_read_event_id FROM ticket_reads WHERE user_id=?").bind(user.id).all();
