@@ -46,3 +46,10 @@ Preserve existing dashboard, authentication/session, document extraction, Form 2
 
 ## Append-only log requirement
 After every meaningful project task, append a dated note here and in `PROGRESS.md`. Include request/scope, prompt or command, files, tests/results, commit/PR/deployment links, verification, blockers, and next action. Do not rewrite history to make status appear cleaner.
+
+
+## 2026-10-18 — Latest instruction and documentation write
+- User's exact instruction: “ab se har cmd and prompt proper progess md & agent md me save karna bina old data remove ya delete kiye ab tak sara save kr lo agent md and progres md me”.
+- Direct write to `main` was rejected by repository rules requiring a PR; work was moved to branch `docs/preserve-project-history-2026-10-18`.
+- `PROGRESS.md` has the chronological update and the full summarized Antigravity deployment prompt; existing prior progress content was retained.
+- This branch's documentation changes are pending PR and merge. Always verify repository write results and PR state before saying the changes are merged.
