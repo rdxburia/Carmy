@@ -513,3 +513,12 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - No production D1 migration, production Worker deployment, production Supabase schema change, or production resource modification occurred.
 - Production ticket row contents were never read. The production table metadata was used only for schema/aggregate inventory; no production ticket query was issued.
 - Production conditions 1–5 are not all satisfied: staging E2E has not passed; production backup/bookmark/export and restore point were not created; production baseline/aggregate migration impact was not prepared for rollout; exact deployment mapping for a production release was not approved/verified. Production remains HOLD.
+
+
+---
+
+## 2026-10-19 — PR #168 merge confirmation
+- PR #168 merged at `3e050234079df6157dc718e625be0339584ed3f4`.
+- The staging isolation and production HOLD notes are now on `main`. No additional infrastructure changes in this documentation-only follow-up.
+- Active staging deployment remains version 19, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`; secret inventory empty. Staging E2E is still not run because privileged staging Supabase credentials are unavailable through the connector.
+- No production data read or mutation; no production migration or Worker deployment.
