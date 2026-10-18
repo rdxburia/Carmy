@@ -844,7 +844,7 @@ async function nav(v){
  closeSideMenu();
  const primaryAdminEmail='rnyburia@gmail.com';
  const isPrimaryAdmin=String(user?.email||'').trim().toLowerCase()===primaryAdminEmail;
- document.body.classList.toggle('td-admin-mode',v==='admin'&&isPrimaryAdmin);
+ document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(v==='admin'&&!isPrimaryAdmin){
    toast('Page not found.','error');
@@ -1063,6 +1063,7 @@ async function boot(){
        }
      }else{
        accessToken='';
+       document.body.classList.remove('td-admin-mode');
        startedUserId=null;
        startingUserId=null;
        startupPromise=null;
@@ -1240,6 +1241,7 @@ async function start(u,force=false){
      }else{
        await nav('dashboard');
      }
+     document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
      $('app').classList.remove('hidden');
      window.scrollTo({top:0,left:0,behavior:'auto'});
      let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
