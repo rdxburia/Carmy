@@ -57,6 +57,21 @@ async function enforceIdleSession(request, env, token, user) {
     throw new AuthError("Session identity mismatch.", 401, "SESSION_IDLE_TIMEOUT");
   }
 
+  // A server-side revocation marker takes precedence over an otherwise-valid JWT.
+  // The row is retained until this token's exp so it cannot be silently re-registered.
+  let revoked;
+  try {
+    revoked = await env.DB.prepare(
+      "SELECT session_id FROM revoked_sessions WHERE session_id = ? AND user_id = ? AND expires_at > ?"
+    ).bind(sessionId, user.id, now).first();
+  } catch (err) {
+    console.error("Revoked-session store unavailable", err);
+    throw new AuthError("Session security check is temporarily unavailable. Please try again.", 503, "SESSION_CHECK_UNAVAILABLE");
+  }
+  if (revoked) {
+    throw new AuthError("This session has been signed out. Please sign in again.", 401, "SESSION_REVOKED");
+  }
+
   // Never update an expired row before deciding expiry. Client timestamps are ignored.
   if (row && now - Number(row.last_seen || 0) >= IDLE_SECONDS) {
     try {
