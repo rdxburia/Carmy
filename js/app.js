@@ -3259,6 +3259,39 @@ function renderContactContent(){
   '</div>';
 }
 
+async function logout(){
+  if(window.__carmyAdminSigningOut)return;
+  window.__carmyAdminSigningOut=true;
+  try{
+    let serverRevoked=false;
+    try{
+      const result=await workerPost('/api/session/revoke',{});
+      serverRevoked=Boolean(result?.current_session_revoked);
+      if(!serverRevoked)console.warn('Worker did not confirm current-session revocation');
+    }catch(err){
+      console.error('Worker session revocation failed',{status:err?.status||null,code:err?.code||null});
+    }
+    try{if(db)await db.auth.signOut({scope:'global'});}catch(err){console.error('Supabase global sign-out failed',err?.message||err);}
+    try{
+      for(let i=localStorage.length-1;i>=0;i--){
+        const key=localStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')||key.startsWith('td-admin-')))localStorage.removeItem(key);
+      }
+    }catch(_){}
+    try{
+      for(let i=sessionStorage.length-1;i>=0;i--){
+        const key=sessionStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')||key.startsWith('td-admin-')))sessionStorage.removeItem(key);
+      }
+    }catch(_){}
+    try{clearUserMemory();}catch(err){console.error('Could not clear client memory',err?.message||err);}
+    location.replace('./?signed_out=1');
+  }finally{
+    window.__carmyAdminSigningOut=false;
+  }
+}
+window.logout=logout;
+
 /* ===== Super Admin Console Implementation ===== */
 
 let currentAdminScreen = 'home';
@@ -4502,12 +4535,13 @@ function openTeamInviteModal(){
       '<div class="field"><label>Member Email</label><input type="email" id="teamInviteEmail" placeholder="admin@example.com"></div>'+
       '<div class="field">'+
         '<label>Role Clearance</label>'+
-        '<select id="teamInviteRole"><option value="support">Support Lead (Ticket Triage)</option><option value="billing">Billing Manager (Plans &amp; Tokens)</option><option value="auditor">Compliance Auditor (Read-Only)</option><option value="superadmin">Super Admin</option></select>'+
+        '<select id="teamInviteRole"><option value="support">Support Lead (Ticket Triage)</option><option value="billing">Billing Manager (Plans &amp; Tokens)</option><option value="auditor">Compliance Auditor (Read-Only)</option></select>'+
       '</div>'+
-      '<small class="muted">Invitation link expires in 24 hours. Recipient must configure MFA.</small>'+
+      '<small class="muted">Invite links are single-use. Expiration follows the configured Supabase Auth email-link lifetime.</small>'+
+      '<div id="teamInviteStatus" class="muted" role="status" aria-live="polite" style="display:none;padding:9px 11px;border-radius:8px;white-space:normal"></div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeTeamInviteModal()">Cancel</button>'+
-        '<button type="button" class="primary" onclick="sendTeamInvite()">Send Invitation</button>'+
+        '<button type="button" class="primary" id="teamInviteSubmitBtn" onclick="sendTeamInvite()">Send Invitation</button>'+
       '</div>'+
     '</div>'+
   '</div>';
@@ -4521,14 +4555,30 @@ function closeTeamInviteModal(){
   if(m)m.remove();
 }
 
-function sendTeamInvite(){
-  const email=document.getElementById('teamInviteEmail')?.value;
-  if(!email||!email.includes('@')){
+async function sendTeamInvite(){
+  const email=document.getElementById('teamInviteEmail')?.value.trim().toLowerCase()||'';
+  const role=document.getElementById('teamInviteRole')?.value||'';
+  const status=document.getElementById('teamInviteStatus');
+  const button=document.getElementById('teamInviteSubmitBtn');
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
     toast('Valid member email required.','error');
     return;
   }
-  toast('Invitation sent to '+email+' (expires in 24h).','ok');
-  closeTeamInviteModal();
+  if(status){status.style.display='block';status.style.background='rgba(37,99,235,.08)';status.style.color='#1d4ed8';status.textContent='Submitting invitation to Supabase Auth…';}
+  if(button){button.disabled=true;button.textContent='Sending…';}
+  try{
+    const result=await workerPost('/api/admin/team-invites',{email,role});
+    if(status){status.style.background='rgba(22,163,74,.08)';status.style.color='#166534';status.textContent='Supabase accepted the invitation request. Actual email delivery depends on the configured mail provider. Invite can be resent if the recipient does not receive it.';}
+    toast('Supabase accepted the invitation request for '+email+'.','ok');
+    if(button){button.textContent='Resend Invitation';button.disabled=false;}
+    // Keep the modal open so the admin can deliberately resend after checking delivery.
+  }catch(err){
+    const detail=String(err?.message||'Unknown invitation error');
+    if(status){status.style.background='rgba(220,38,38,.08)';status.style.color='#b91c1c';status.textContent='Invitation failed: '+detail+' Check the email and provider configuration, then select Retry / Resend.';}
+    if(button){button.textContent='Retry / Resend Invitation';button.disabled=false;}
+    toast('Invitation was not confirmed by Supabase. '+detail,'error');
+    console.error('Team invitation request failed', {status:err?.status||null,code:err?.code||null,message:detail});
+  }
 }
 
 function updateUpgradeStatus(reqId,status){
