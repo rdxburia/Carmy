@@ -162,3 +162,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Branch audit chunk 6/6 completed
 - Appended the final 22 comparison rows (branches 121–142). All 142 remote branch names now have a branch table row with ahead/behind, status, returned changed paths, and a triage classification; comparisons that failed/omitted file data remain explicitly unverified/none returned as applicable.
 - Staging D1 UUID verified as `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. Supabase secrets remain untouched; E2E remains STOP. No production ticket content read; no D1 writes, migration, or production Worker deployment.
+
+
+## 2026-10-19 — All-time PR inventory appended
+- Queried GitHub's all-state pull request collection page 1 and page 2 (100 records per page). 154 PR records were returned, including open, merged, and closed-unmerged state, head/base branch, changed-file count, creation date, and URL in `docs/audit-branches.md`.
+- Per-PR full changed-file names remain unverified except for PRs whose patches were separately inspected. The 142-branch ahead/behind table is now complete in six append-only chunks. No branch was deleted/force-pushed; no database writes or Worker deploy.

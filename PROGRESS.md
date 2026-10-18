@@ -391,3 +391,11 @@ The user was given an Antigravity prompt to:
 ## 2026-10-19 — Branch audit chunk 6/6 completed
 - Added final 22 rows (branches 121–142), completing the branch comparison table for all 142 enumerated remote branches. Per-file lists are limited to filenames returned by GitHub compare responses; any unreturned data remains unverified.
 - No branch merges/deletions/force-pushes, no DB mutation, no staging E2E, no production D1 ticket content read, and no production deploy.
+
+
+---
+
+## 2026-10-19 — All-time PR inventory appended
+- Appended all 154 pull requests returned by GitHub's `state=all` REST collection (pages 1–2) to `docs/audit-branches.md`. The inventory includes PR state, head/base branch, changed-file count, creation date, and link; full changed-file lists for every PR remain unverified unless separately inspected.
+- Completed six branch-comparison chunks covering 142 remote branches. This commit updates both `AGENT.md` and `PROGRESS.md` append-only.
+- Production ticket content not read; production migration/deploy not performed; staging Supabase/E2E remain STOP.

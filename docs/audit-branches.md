@@ -413,3 +413,165 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 | `ui/motordesk-global-footer-links` | 0 | 337 | behind | none returned | **stale (zero unique commits)** |
 | `ui/remove-info-links-from-mobile-drawer` | 1 | 334 | diverged | index.html | **stale + needs review** |
 | `ui/restore-motordesk-info-popup` | 0 | 320 | behind | none returned | **stale (zero unique commits)** |
+
+
+## All-time pull request inventory — GitHub REST API
+
+**Coverage:** GitHub `GET /repos/rdxburia/Carmy/pulls?state=all&per_page=100`, pages 1 and 2. Records returned: **154**. This is the complete all-state pull-request collection returned by those pages at audit time; individual changed-file names/patches were not retrieved for every PR, so the per-file PR diff is **unverified unless explicitly inspected elsewhere in this report**. `changed_files` is GitHub's PR metadata count. Classification of PR status: `merged` if `merged_at` is present, `closed unmerged` if closed without merge timestamp, otherwise `open`.
+
+| PR | Title | State | Head → base | Changed-file count | Created |
+|---|---|---|---|---:|---|
+| [#1](https://github.com/rdxburia/Carmy/pull/1) | Root-cause UI layout and startup refactor | merged | `repair/ui-performance-audit` → `main` | unverified | 2026-10-07 |
+| [#4](https://github.com/rdxburia/Carmy/pull/4) | fix: restore Documents and Vehicle Report presentation styles | merged | `fix/issue-3-documents-report-styles` → `main` | unverified | 2026-10-08 |
+| [#5](https://github.com/rdxburia/Carmy/pull/5) | fix: make API diagnostics consistently authenticated | merged | `fix/api-diagnostic-auth-fetch` → `main` | unverified | 2026-10-08 |
+| [#11](https://github.com/rdxburia/Carmy/pull/11) | fix: prevent D1 cache invalidation failures | merged | `fix/cache-webhook-runtime-error` → `main` | unverified | 2026-10-08 |
+| [#12](https://github.com/rdxburia/Carmy/pull/12) | fix: restore Cloudflare Worker Preview builds | merged | `fix/cloudflare-preview-build` → `main` | unverified | 2026-10-08 |
+| [#13](https://github.com/rdxburia/Carmy/pull/13) | fix(ui): refresh documents after upload and delete | merged | `fix/document-ui-reactive-state` → `main` | unverified | 2026-10-08 |
+| [#14](https://github.com/rdxburia/Carmy/pull/14) | fix(dashboard): improve header actions and sign-out | merged | `fix/dashboard-header-actions` → `main` | unverified | 2026-10-08 |
+| [#15](https://github.com/rdxburia/Carmy/pull/15) | fix(ui): restore opaque Car Edit modal surface | merged | `fix/car-edit-modal-background` → `main` | unverified | 2026-10-08 |
+| [#16](https://github.com/rdxburia/Carmy/pull/16) | fix(branding): enforce non-selectable global home logo | merged | `fix/issue-9-logo-behavior` → `main` | unverified | 2026-10-08 |
+| [#18](https://github.com/rdxburia/Carmy/pull/18) | feat(logo): add CarCare Cloud logo concept preview | merged | `feat/issue-17-logo-preview` → `main` | unverified | 2026-10-08 |
+| [#19](https://github.com/rdxburia/Carmy/pull/19) | fix(nav): prevent dashboard navigation drawer from persisting | merged | `fix/dashboard-drawer-state` → `main` | unverified | 2026-10-08 |
+| [#21](https://github.com/rdxburia/Carmy/pull/21) | fix(report): restore broken A4 Vehicle Report layout | merged | `fix/issue-20-a4-report-layout` → `main` | unverified | 2026-10-08 |
+| [#22](https://github.com/rdxburia/Carmy/pull/22) | fix(report): correct broken A4 report DOM nesting | merged | `fix/issue-20-report-dom-nesting` → `main` | unverified | 2026-10-08 |
+| [#23](https://github.com/rdxburia/Carmy/pull/23) | fix(security): rotate cache invalidation webhook secret | merged | `fix/issue-6-cache-secret-rotation` → `main` | unverified | 2026-10-08 |
+| [#24](https://github.com/rdxburia/Carmy/pull/24) | fix(security): isolate cache trigger helper from public RPC | merged | `fix/issue-6-private-cache-trigger` → `main` | unverified | 2026-10-08 |
+| [#25](https://github.com/rdxburia/Carmy/pull/25) | Temporary CarCareCloud branding test | merged | `temp-carcarecloud-logo-test` → `main` | unverified | 2026-10-08 |
+| [#26](https://github.com/rdxburia/Carmy/pull/26) | Temporary branding asset deployment fix | merged | `temp-carcarecloud-logo-test` → `main` | unverified | 2026-10-08 |
+| [#27](https://github.com/rdxburia/Carmy/pull/27) | Fix CarCareCloud logo placement and duplicate text | merged | `fix-logo-placement-duplicate-text` → `main` | unverified | 2026-10-08 |
+| [#28](https://github.com/rdxburia/Carmy/pull/28) | Perf hardening: optimize RLS and remove duplicate index | merged | `fix/performance-rls-hardening` → `main` | unverified | 2026-10-08 |
+| [#29](https://github.com/rdxburia/Carmy/pull/29) | Perf: index foreign-key columns | merged | `fix/foreign-key-indexes` → `main` | unverified | 2026-10-08 |
+| [#30](https://github.com/rdxburia/Carmy/pull/30) | Security: harden API CORS and health endpoint | merged | `fix/api-cors-health-hardening` → `main` | unverified | 2026-10-08 |
+| [#31](https://github.com/rdxburia/Carmy/pull/31) | Security: add Worker API rate limiting | merged | `fix/api-rate-limiting` → `main` | unverified | 2026-10-08 |
+| [#32](https://github.com/rdxburia/Carmy/pull/32) | Add browser RC and insurance extraction with policy lifecycle | merged | `feature/rc-insurance-auto-extraction` → `main` | unverified | 2026-10-09 |
+| [#33](https://github.com/rdxburia/Carmy/pull/33) | Fix dynamic insurance lifecycle status | merged | `fix/insurance-dynamic-lifecycle` → `main` | unverified | 2026-10-09 |
+| [#34](https://github.com/rdxburia/Carmy/pull/34) | Fix live RC insurance PUC extraction bugs | merged | `fix/rc-insurance-puc-extraction-live-bugs` → `main` | unverified | 2026-10-09 |
+| [#35](https://github.com/rdxburia/Carmy/pull/35) | Fix PUC route syntax after extraction merge | closed unmerged | `fix/rc-insurance-puc-extraction-live-bugs` → `main` | unverified | 2026-10-09 |
+| [#36](https://github.com/rdxburia/Carmy/pull/36) | Fix PUC route source syntax | merged | `fix/puc-route-syntax` → `main` | unverified | 2026-10-09 |
+| [#37](https://github.com/rdxburia/Carmy/pull/37) | Fix document classification, whole-document insurance extraction and A4 reports | merged | `fix/document-messages-english` → `main` | unverified | 2026-10-09 |
+| [#38](https://github.com/rdxburia/Carmy/pull/38) | Task 3: Fix A4 report export and verify multi-page insurance extraction | merged | `fix/document-messages-english` → `main` | unverified | 2026-10-09 |
+| [#39](https://github.com/rdxburia/Carmy/pull/39) | Task 3: Fix A4 report export and verify multi-page insurance extraction | closed unmerged | `task3-report-insurance` → `main` | unverified | 2026-10-09 |
+| [#40](https://github.com/rdxburia/Carmy/pull/40) | Task 3: Finalize A4 report printing and review evidence UI | merged | `task3-current-main` → `main` | unverified | 2026-10-09 |
+| [#41](https://github.com/rdxburia/Carmy/pull/41) | Fix vehicle report blank pages and clipped logo | merged | `fix/report-print-pagination` → `main` | unverified | 2026-10-09 |
+| [#42](https://github.com/rdxburia/Carmy/pull/42) | Fix insurance extraction PDF row order and chassis parsing | merged | `fix/insurance-pdf-reading-order` → `main` | unverified | 2026-10-09 |
+| [#43](https://github.com/rdxburia/Carmy/pull/43) | Fix Chola chassis extraction regex whitespace | merged | `fix/chola-chassis-stray-space` → `main` | unverified | 2026-10-09 |
+| [#44](https://github.com/rdxburia/Carmy/pull/44) | Rebuild vehicle report with native A4 printing | merged | `fix/native-vehicle-report-print` → `main` | unverified | 2026-10-09 |
+| [#45](https://github.com/rdxburia/Carmy/pull/45) | RC image blob load + Firefox print cleanup + PUC validation | merged | `fix/native-vehicle-report-print` → `main` | unverified | 2026-10-09 |
+| [#46](https://github.com/rdxburia/Carmy/pull/46) | Fix Chola chassis regex | merged | `fix/chola-chassis-stray-space` → `main` | unverified | 2026-10-09 |
+| [#47](https://github.com/rdxburia/Carmy/pull/47) | [WS-A] Enforce two-minute inactivity logout | merged | `fix/security-idle-timeout-ws-a` → `main` | unverified | 2026-10-12 |
+| [#48](https://github.com/rdxburia/Carmy/pull/48) | [WS-A] Guard direct Supabase requests after idle timeout | merged | `fix/ws-a-server-enforced-idle` → `main` | unverified | 2026-10-12 |
+| [#49](https://github.com/rdxburia/Carmy/pull/49) | [WS-A] Add database-side idle session enforcement | closed unmerged | `fix/ws-a-server-enforced-idle` → `main` | unverified | 2026-10-12 |
+| [#50](https://github.com/rdxburia/Carmy/pull/50) | [WS-A] Add database-side idle session enforcement | merged | `fix/ws-a-server-enforced-idle-v2` → `main` | unverified | 2026-10-12 |
+| [#51](https://github.com/rdxburia/Carmy/pull/51) | [Security] Validate uploaded file signatures before R2 finalization | merged | `security/r2-file-signature-validation` → `main` | unverified | 2026-10-12 |
+| [#52](https://github.com/rdxburia/Carmy/pull/52) | [Security] Add CI for R2 file signature regression tests | merged | `security/r2-signature-validation-ci` → `main` | unverified | 2026-10-12 |
+| [#53](https://github.com/rdxburia/Carmy/pull/53) | [Security] Make WS-A idle timeout server-authoritative | merged | `security/ws-a-server-authoritative-idle-session` → `main` | unverified | 2026-10-12 |
+| [#54](https://github.com/rdxburia/Carmy/pull/54) | Fix dashboard A4 report print entry point | merged | `fix/dashboard-report-print-dialog` → `main` | unverified | 2026-10-12 |
+| [#55](https://github.com/rdxburia/Carmy/pull/55) | Print prepared vehicle reports in a separate tab | merged | `fix/report-print-in-separate-window` → `main` | unverified | 2026-10-12 |
+| [#56](https://github.com/rdxburia/Carmy/pull/56) | Bust cached assets for the separate print tab fix | merged | `fix/refresh-print-tab-assets` → `main` | unverified | 2026-10-12 |
+| [#57](https://github.com/rdxburia/Carmy/pull/57) | Add print preparation screen and clean A4 footer | merged | `fix/print-wait-screen-clean-footer` → `main` | unverified | 2026-10-12 |
+| [#58](https://github.com/rdxburia/Carmy/pull/58) | Clean A4 report headers and add date/page footer | merged | `fix/a4-report-clean-header-footer` → `main` | unverified | 2026-10-12 |
+| [#59](https://github.com/rdxburia/Carmy/pull/59) | Resolve print CSS conflict | merged | `fix/resolve-print-css-conflict` → `main` | unverified | 2026-10-12 |
+| [#60](https://github.com/rdxburia/Carmy/pull/60) | Fix live A4 print preparation progress screen | merged | `fix/xp-print-progress-live` → `main` | unverified | 2026-10-12 |
+| [#61](https://github.com/rdxburia/Carmy/pull/61) | Modernize vehicle report preparation UI | merged | `feat/modern-report-preparation-ui` → `main` | unverified | 2026-10-12 |
+| [#62](https://github.com/rdxburia/Carmy/pull/62) | Fix login blocked by report UI JavaScript syntax error | merged | `fix/login-js-syntax-after-report-ui` → `main` | unverified | 2026-10-12 |
+| [#63](https://github.com/rdxburia/Carmy/pull/63) | Restore auto-generated description in Service Log | merged | `fix/restore-service-log-auto-description` → `main` | unverified | 2026-10-12 |
+| [#64](https://github.com/rdxburia/Carmy/pull/64) | Rebrand CarCareCloud to MotorDesk | merged | `branding/motordesk-rebrand` → `main` | unverified | 2026-10-12 |
+| [#65](https://github.com/rdxburia/Carmy/pull/65) | MotorDesk rebrand and faster vehicle report PDF | merged | `perf/motordesk-report-pdf` → `main` | unverified | 2026-10-12 |
+| [#66](https://github.com/rdxburia/Carmy/pull/66) | Speed up vehicle report PDF preparation | merged | `perf/vehicle-report-page-render` → `main` | unverified | 2026-10-12 |
+| [#67](https://github.com/rdxburia/Carmy/pull/67) | Polish MotorDesk login copy and motion design | merged | `design/motordesk-login-motion-copy` → `main` | unverified | 2026-10-12 |
+| [#68](https://github.com/rdxburia/Carmy/pull/68) | Fix MotorDesk login viewport spacing and password toggle alignment | merged | `fix/motordesk-login-viewport-password-toggle` → `main` | unverified | 2026-10-12 |
+| [#69](https://github.com/rdxburia/Carmy/pull/69) | Separate MotorDesk tagline and car animation; compact login layout | merged | `fix/motordesk-login-story-car-spacing` → `main` | unverified | 2026-10-12 |
+| [#70](https://github.com/rdxburia/Carmy/pull/70) | Fix password Show button alignment in login and signup | merged | `fix/password-toggle-grid-alignment` → `main` | unverified | 2026-10-12 |
+| [#71](https://github.com/rdxburia/Carmy/pull/71) | Add MotorDesk About, Terms & Contact pages | merged | `feature/motordesk-about-terms-contact` → `main` | unverified | 2026-10-12 |
+| [#72](https://github.com/rdxburia/Carmy/pull/72) | Correct password Show button position inside input | closed unmerged | `fix/password-toggle-proper-input-anchor` → `main` | unverified | 2026-10-12 |
+| [#73](https://github.com/rdxburia/Carmy/pull/73) | Fix password Show button alignment without stale conflicts | merged | `fix/password-toggle-clean-rebase` → `main` | unverified | 2026-10-12 |
+| [#74](https://github.com/rdxburia/Carmy/pull/74) | Fix About/Terms/Contact tabs and add MotorDesk copyright | merged | `fix/motordesk-info-tabs-and-clicks` → `main` | unverified | 2026-10-12 |
+| [#75](https://github.com/rdxburia/Carmy/pull/75) | Move MotorDesk links to the full-width website footer | merged | `ui/motordesk-global-footer-links` → `main` | unverified | 2026-10-12 |
+| [#76](https://github.com/rdxburia/Carmy/pull/76) | Fix About, Terms & Contact links across MotorDesk | merged | `fix/global-info-links-functional` → `main` | unverified | 2026-10-12 |
+| [#77](https://github.com/rdxburia/Carmy/pull/77) | Fix broken About, Terms & Contact click handlers | merged | `fix/info-links-inline-handler-syntax` → `main` | unverified | 2026-10-12 |
+| [#78](https://github.com/rdxburia/Carmy/pull/78) | Remove About, Terms and Contact from mobile drawer | closed unmerged | `ui/remove-info-links-from-mobile-drawer` → `main` | unverified | 2026-10-12 |
+| [#79](https://github.com/rdxburia/Carmy/pull/79) | Remove About, Terms and Contact from mobile drawer | merged | `fix/remove-drawer-info-links-clean` → `main` | unverified | 2026-10-12 |
+| [#80](https://github.com/rdxburia/Carmy/pull/80) | Create real About, Terms & Contact pages for MotorDesk | closed unmerged | `feature/motordesk-real-info-pages` → `main` | unverified | 2026-10-12 |
+| [#81](https://github.com/rdxburia/Carmy/pull/81) | Clarify private vehicle records in Terms & Conditions | merged | `content/clarify-private-records-terms` → `main` | unverified | 2026-10-12 |
+| [#82](https://github.com/rdxburia/Carmy/pull/82) | Make footer links open real pages on login and inside the app | merged | `fix/footer-info-links-real-pages` → `main` | unverified | 2026-10-12 |
+| [#83](https://github.com/rdxburia/Carmy/pull/83) | Restore the MotorDesk information popup | merged | `ui/restore-motordesk-info-popup` → `main` | unverified | 2026-10-12 |
+| [#84](https://github.com/rdxburia/Carmy/pull/84) | Fix always-visible MotorDesk footer and popup clicks | merged | `fix/motordesk-footer-always-visible-popup` → `main` | unverified | 2026-10-12 |
+| [#85](https://github.com/rdxburia/Carmy/pull/85) | Fix MotorDesk popup blur and missing text visibility | merged | `fix/motordesk-popup-readable` → `main` | unverified | 2026-10-12 |
+| [#86](https://github.com/rdxburia/Carmy/pull/86) | Fix MotorDesk info popup readability | merged | `fix/motordesk-popup-readable-content` → `main` | unverified | 2026-10-12 |
+| [#87](https://github.com/rdxburia/Carmy/pull/87) | Stabilize MotorDesk mobile login and footer | merged | `fix/motordesk-mobile-auth-footer-stability` → `main` | unverified | 2026-10-12 |
+| [#88](https://github.com/rdxburia/Carmy/pull/88) | Fix mobile footer jumping and MotorDesk info popups | merged | `fix/motordesk-mobile-footer-popup-cleanup` → `main` | unverified | 2026-10-12 |
+| [#89](https://github.com/rdxburia/Carmy/pull/89) | Make footer info popups open reliably on mobile | merged | `fix/motordesk-footer-popup-click-mobile` → `main` | unverified | 2026-10-12 |
+| [#90](https://github.com/rdxburia/Carmy/pull/90) | Apply Torq Desk branding across website | merged | `branding/torqdesk-identity` → `main` | unverified | 2026-10-13 |
+| [#91](https://github.com/rdxburia/Carmy/pull/91) | Create Torq Desk blue-car themed landing and brand assets | merged | `design/torqdesk-blue-car-landing` → `main` | unverified | 2026-10-13 |
+| [#92](https://github.com/rdxburia/Carmy/pull/92) | Build Torq Desk marketing homepage and fix loading branding | merged | `design/torqdesk-marketing-home-loading-brand` → `main` | unverified | 2026-10-13 |
+| [#93](https://github.com/rdxburia/Carmy/pull/93) | Remove remaining legacy tagline from Torq Desk popup | merged | `fix/torqdesk-tagline-popup` → `main` | unverified | 2026-10-13 |
+| [#94](https://github.com/rdxburia/Carmy/pull/94) | Remove old Torq Desk login page and fix dashboard startup flow | merged | `fix/torqdesk-auth-modal-dashboard-qa` → `main` | unverified | 2026-10-13 |
+| [#95](https://github.com/rdxburia/Carmy/pull/95) | Unify Torq Desk dashboard with the blue homepage design | merged | `design/torqdesk-unified-blue-ui` → `main` | unverified | 2026-10-13 |
+| [#96](https://github.com/rdxburia/Carmy/pull/96) | Fix Torq Desk footer links with direct information pages | merged | `fix/footer-real-page-links` → `main` | unverified | 2026-10-13 |
+| [#97](https://github.com/rdxburia/Carmy/pull/97) | Fix dashboard footer links to open information pages | merged | `fix/dashboard-footer-links` → `main` | unverified | 2026-10-13 |
+| [#98](https://github.com/rdxburia/Carmy/pull/98) | Fix GitHub Pages publishing for About, Terms and Contact | merged | `fix/publish-torqdesk-info-pages` → `main` | unverified | 2026-10-13 |
+| [#99](https://github.com/rdxburia/Carmy/pull/99) | Fix Torq Desk logo wordmark spacing | merged | `fix/torqdesk-logo-wordmark-spacing` → `main` | unverified | 2026-10-13 |
+| [#100](https://github.com/rdxburia/Carmy/pull/100) | Phase 1: Torq Desk public site, pricing foundations and PWA shell | merged | `feat/torqdesk-phase1-public-site` → `main` | unverified | 2026-10-13 |
+| [#101](https://github.com/rdxburia/Carmy/pull/101) | Deliverable 1: shared public shell, navigation and glossary cleanup | merged | `fix/shared-public-shell-nav-glossary` → `main` | unverified | 2026-10-13 |
+| [#102](https://github.com/rdxburia/Carmy/pull/102) | Deliverable 2: homepage audience switch, SVG icons and truthful previews | closed unmerged | `feat/home-first-screen-audience-switch` → `main` | unverified | 2026-10-13 |
+| [#103](https://github.com/rdxburia/Carmy/pull/103) | Deliverable 2: homepage audience switch and visual checks (clean base) | merged | `feat/home-first-screen-audience-switch-clean` → `main` | unverified | 2026-10-13 |
+| [#104](https://github.com/rdxburia/Carmy/pull/104) | Feat/home first screen audience switch v2 | merged | `feat/home-first-screen-audience-switch-v2` → `main` | unverified | 2026-10-13 |
+| [#105](https://github.com/rdxburia/Carmy/pull/105) | Improve readability across Torq Desk website | merged | `fix/sitewide-readable-type` → `main` | unverified | 2026-10-13 |
+| [#106](https://github.com/rdxburia/Carmy/pull/106) | M0: workshop foundations, additive schema and shared session guard | merged | `feat/workshop-m0-foundations` → `main` | unverified | 2026-10-13 |
+| [#107](https://github.com/rdxburia/Carmy/pull/107) | Add vehicle owner and garage sign-in/account options | merged | `feat/owner-garage-auth-entrypoints` → `main` | unverified | 2026-10-13 |
+| [#108](https://github.com/rdxburia/Carmy/pull/108) | Add frontend-only garage demo portal and default admin login | merged | `feat/garage-demo-portal` → `main` | unverified | 2026-10-13 |
+| [#109](https://github.com/rdxburia/Carmy/pull/109) | Activate interactive workshop features in garage demo mode | merged | `feat/full-workshop-demo-features` → `main` | unverified | 2026-10-13 |
+| [#110](https://github.com/rdxburia/Carmy/pull/110) | Fix garage demo actions and signed-in account label | merged | `fix/garage-demo-interactions` → `main` | unverified | 2026-10-13 |
+| [#111](https://github.com/rdxburia/Carmy/pull/111) | Fix live garage dashboard cache and overview actions | merged | `fix/garage-live-cache-and-actions` → `main` | unverified | 2026-10-13 |
+| [#112](https://github.com/rdxburia/Carmy/pull/112) | Fix stale cache for Torq Desk workshop demo | merged | `fix/garage-demo-cache-refresh` → `main` | unverified | 2026-10-13 |
+| [#113](https://github.com/rdxburia/Carmy/pull/113) | Fix all workshop demo add-action forms | merged | `fix/garage-demo-form-actions` → `main` | unverified | 2026-10-13 |
+| [#114](https://github.com/rdxburia/Carmy/pull/114) | Unify Torq Desk typography across login and garage | merged | `fix/sitewide-inter-font` → `main` | unverified | 2026-10-13 |
+| [#115](https://github.com/rdxburia/Carmy/pull/115) | Add Firebase-first sign-in with legacy Supabase compatibility | closed unmerged | `feature/firebase-default-dual-auth` → `main` | unverified | 2026-10-13 |
+| [#116](https://github.com/rdxburia/Carmy/pull/116) | Remove garage demo labels and refresh broken workspace actions | merged | `fix/garage-actions-and-remove-demo-labels` → `main` | unverified | 2026-10-13 |
+| [#117](https://github.com/rdxburia/Carmy/pull/117) | Remove demo wording from workshop entry points | merged | `fix/remove-demo-copy-from-workshop-pages` → `main` | unverified | 2026-10-13 |
+| [#118](https://github.com/rdxburia/Carmy/pull/118) | Rename garage assets and test every workspace action | merged | `fix/rename-garage-workspace-assets` → `main` | unverified | 2026-10-13 |
+| [#119](https://github.com/rdxburia/Carmy/pull/119) | Add real garage onboarding with Supabase persistence | merged | `fix/garage-actions-and-owner-entry` → `main` | unverified | 2026-10-13 |
+| [#120](https://github.com/rdxburia/Carmy/pull/120) | Upgrade garage onboarding to four-step partner wizard | closed unmerged | `fix/garage-actions-and-owner-entry` → `main` | unverified | 2026-10-13 |
+| [#121](https://github.com/rdxburia/Carmy/pull/121) | Fix public shell validation and harden R2 backup | merged | `fix/daily-backup-and-public-shell` → `main` | unverified | 2026-10-14 |
+| [#122](https://github.com/rdxburia/Carmy/pull/122) | Keep customer login active during dashboard API failures | merged | `fix/customer-dashboard-auth-load-resilience` → `main` | unverified | 2026-10-15 |
+| [#123](https://github.com/rdxburia/Carmy/pull/123) | Fix customer session persistence and dashboard loading | merged | `fix/customer-session-persistence-and-dashboard` → `main` | unverified | 2026-10-15 |
+| [#124](https://github.com/rdxburia/Carmy/pull/124) | Fix/customer session persistence and dashboard | merged | `fix/customer-session-persistence-and-dashboard` → `main` | unverified | 2026-10-15 |
+| [#125](https://github.com/rdxburia/Carmy/pull/125) | Fix/customer session persistence and dashboard | merged | `fix/customer-session-persistence-and-dashboard` → `main` | unverified | 2026-10-15 |
+| [#126](https://github.com/rdxburia/Carmy/pull/126) | fix(mobile-dashboard): fix side drawer layout, 100dvh responsiveness, and bottom button clipping | merged | `fix/customer-session-persistence-and-dashboard` → `main` | unverified | 2026-10-15 |
+| [#127](https://github.com/rdxburia/Carmy/pull/127) | fix(ui): redesign homepage to match dashboard, fix doc vault card ove… | merged | `fix/customer-session-persistence-and-dashboard` → `main` | unverified | 2026-10-15 |
+| [#128](https://github.com/rdxburia/Carmy/pull/128) | Fix/customer session persistence and dashboard | merged | `fix/customer-session-persistence-and-dashboard` → `main` | unverified | 2026-10-16 |
+| [#129](https://github.com/rdxburia/Carmy/pull/129) | fix(ci): resolve idle-session regression test failures | merged | `fix/ci-idle-session-regression` → `main` | unverified | 2026-10-16 |
+| [#130](https://github.com/rdxburia/Carmy/pull/130) | fix(portal): prevent blank dashboard and tolerate missing heartbeat migration | merged | `fix/ci-idle-session-regression` → `main` | unverified | 2026-10-16 |
+| [#131](https://github.com/rdxburia/Carmy/pull/131) | feat(portal): improve Document Vault, footer clearance, and homepage audience switch | merged | `feat/phase-bc-docvault-footer-homepage` → `main` | unverified | 2026-10-16 |
+| [#132](https://github.com/rdxburia/Carmy/pull/132) | fix(portal): resolve vehicle loading race condition and complete dashboard UX repairs | merged | `feat/fix-data-loading-and-dashboard-ux` → `main` | unverified | 2026-10-16 |
+| [#133](https://github.com/rdxburia/Carmy/pull/133) | fix(help-support): remove dashboard footer, persist support tickets to D1, and polish mobile nav | merged | `fix/help-support-production-and-dashboard-polish` → `main` | unverified | 2026-10-16 |
+| [#134](https://github.com/rdxburia/Carmy/pull/134) | Prevent duplicate email and mobile registrations | merged | `fix/duplicate-registration-guard` → `main` | unverified | 2026-10-16 |
+| [#135](https://github.com/rdxburia/Carmy/pull/135) | Fix vehicle loading retries and mobile Document Vault overflow | merged | `feat/mandatory-production-fixes` → `main` | unverified | 2026-10-16 |
+| [#136](https://github.com/rdxburia/Carmy/pull/136) | Fix Help navigation fallback and stale asset cache | merged | `fix/help-nav-cache-visual-polish` → `main` | unverified | 2026-10-16 |
+| [#137](https://github.com/rdxburia/Carmy/pull/137) | Step 0b: verification and password-change hardening | closed unmerged | `chore/step0-project-governance` → `main` | unverified | 2026-10-16 |
+| [#138](https://github.com/rdxburia/Carmy/pull/138) | Improve multi-page policy extraction and OCR fallback | merged | `feat/multipage-policy-extraction` → `chore/step0-project-governance` | unverified | 2026-10-17 |
+| [#139](https://github.com/rdxburia/Carmy/pull/139) | Improve multi-page insurance PDF extraction and OCR fallback | merged | `fix/multipage-policy-ocr-extraction` → `main` | unverified | 2026-10-17 |
+| [#140](https://github.com/rdxburia/Carmy/pull/140) | Improve multi-page insurance PDF extraction and OCR fallback | merged | `fix/multipage-policy-ocr-extraction` → `main` | unverified | 2026-10-17 |
+| [#141](https://github.com/rdxburia/Carmy/pull/141) | fix(account-security): collapsible owner profile and change password forms | merged | `fix/account-security-collapsible-ui` → `main` | unverified | 2026-10-17 |
+| [#142](https://github.com/rdxburia/Carmy/pull/142) | Fix transfer documents, registration resilience, and garage workspace syntax | merged | `fix/form-29-30-pdf-ownership-transfer` → `main` | unverified | 2026-10-17 |
+| [#143](https://github.com/rdxburia/Carmy/pull/143) | chore(release): bump build tag to 2026.10.17-v10-transfer-security an… | merged | `chore/bump-build-v10-transfer-security` → `main` | unverified | 2026-10-17 |
+| [#144](https://github.com/rdxburia/Carmy/pull/144) | Add server-side Super Admin authorization foundation | merged | `feat/super-admin-backend-auth` → `main` | unverified | 2026-10-17 |
+| [#145](https://github.com/rdxburia/Carmy/pull/145) | Tighten Super Admin database grants | merged | `fix/super-admin-grants-least-privilege` → `main` | unverified | 2026-10-17 |
+| [#146](https://github.com/rdxburia/Carmy/pull/146) | feat(admin): Super Admin frontend integration and backend role verification | merged | `feat/super-admin-frontend-integration` → `main` | unverified | 2026-10-17 |
+| [#147](https://github.com/rdxburia/Carmy/pull/147) | fix(admin): invalidate stale service-worker cache | merged | `fix/super-admin-stale-service-worker-cache` → `main` | unverified | 2026-10-17 |
+| [#148](https://github.com/rdxburia/Carmy/pull/148) | Fix Super Admin workspace layout and isolate customer navigation | merged | `fix/super-admin-workspace-and-ticket-errors` → `main` | unverified | 2026-10-17 |
+| [#149](https://github.com/rdxburia/Carmy/pull/149) | Fix persistent Super Admin workspace mode | merged | `fix/super-admin-persistent-mode` → `main` | unverified | 2026-10-18 |
+| [#150](https://github.com/rdxburia/Carmy/pull/150) | Harden support ticket failure handling | merged | `fix/support-tickets-fail-closed` → `main` | unverified | 2026-10-18 |
+| [#151](https://github.com/rdxburia/Carmy/pull/151) | Complete Super Admin workspace frontend | merged | `feat/super-admin-frontend-screens` → `main` | unverified | 2026-10-18 |
+| [#152](https://github.com/rdxburia/Carmy/pull/152) | Fix live Super Admin UI by retiring stale PWA cache | merged | `fix/live-super-admin-cache-bust-v12` → `main` | unverified | 2026-10-18 |
+| [#153](https://github.com/rdxburia/Carmy/pull/153) | Harden Change Password without replacing the active session | closed unmerged | `fix/password-change-isolated-verification` → `main` | unverified | 2026-10-18 |
+| [#154](https://github.com/rdxburia/Carmy/pull/154) | Fix admin sign-out and real team invitation flow | merged | `fix/admin-logout-and-invite-reality` → `main` | unverified | 2026-10-18 |
+| [#155](https://github.com/rdxburia/Carmy/pull/155) | fix(tickets): correct workflow route parsing and add regression tests | merged | `fix/ticket-workflow-route-dispatch` → `main` | unverified | 2026-10-18 |
+| [#156](https://github.com/rdxburia/Carmy/pull/156) | chore(deploy): publish frontend build v14 | merged | `chore/publish-frontend-v14` → `main` | unverified | 2026-10-18 |
+| [#157](https://github.com/rdxburia/Carmy/pull/157) | docs: preserve Torq Desk progress and agent instructions | merged | `docs/preserve-project-history-2026-10-18` → `main` | unverified | 2026-10-18 |
+| [#158](https://github.com/rdxburia/Carmy/pull/158) | docs: record verified merge status | merged | `docs/correct-merge-status-2026-10-18` → `main` | unverified | 2026-10-18 |
+| [#159](https://github.com/rdxburia/Carmy/pull/159) | feat(garage): deploy workshop redesign and localhost preview | merged | `feat/garage-frontend-redesign` → `main` | unverified | 2026-10-18 |
+| [#160](https://github.com/rdxburia/Carmy/pull/160) | docs: record verified deployment and local branch audit | merged | `docs/sync-frontend-deployment-verification-2026-10-18` → `main` | unverified | 2026-10-18 |
+| [#161](https://github.com/rdxburia/Carmy/pull/161) | feat(support): implement customer and admin support ticket workflows | open | `feat/ticket-frontend` → `main` | unverified | 2026-10-18 |
+| [#162](https://github.com/rdxburia/Carmy/pull/162) | docs(audit): record branch and staging isolation findings | merged | `audit/phase0-phase1-2026-10-19` → `main` | unverified | 2026-10-18 |
+| [#163](https://github.com/rdxburia/Carmy/pull/163) | fix(staging): pin isolated Worker config to verified staging D1 | open | `fix/staging-d1-binding-2026-10-19` → `main` | unverified | 2026-10-18 |
