@@ -1,5 +1,6 @@
 # Isolated staging Worker config for PR #155 E2E verification.
 # Do not use this config for production deployment.
+# Verified against Cloudflare D1 inventory on 2026-10-19: use only the staging database UUID below.
 name = "carmy-api-staging"
 main = "worker/src/index.js"
 compatibility_date = "2026-10-07"
