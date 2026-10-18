@@ -129,3 +129,11 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Rechecked Supabase project inventory: only the existing `Carmy` project is visible; no dedicated staging Supabase project or safe staging credentials are available. Its development branch reports `MIGRATIONS_FAILED`.
 - **STOP POINT reached:** no staging Worker config change/deploy or authenticated E2E test will be attempted without a dedicated staging Supabase project/credentials. Live staging Worker still points to production D1, so staging mutations remain prohibited.
 - Next requires provisioning a dedicated staging Supabase project/credentials (without copying production secrets), then resuming Phase 2. Production remains untouched and held.
+
+
+## 2026-10-19 — Verified staging D1 UUID correction and branch audit chunk 1/6
+- Cloudflare D1 inventory confirms `carmy-ticket-workflow-staging` UUID is `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; production `carmy-cache` is `57c85007-1cf7-470f-bb4d-3b28cbb555b7`. Earlier differing staging UUID spelling was a documentation typo; this entry supersedes it.
+- Appended 24 branch comparison rows to `docs/audit-branches.md` on `audit/complete-branch-pr-inventory-2026-10-19`; each row includes ahead/behind, status, returned changed paths, and triage classification.
+- PR #162 diff contained only `AGENT.md`, `PROGRESS.md`, and `docs/audit-branches.md`; it was merged at `2908e7b763b505366c18df8bae1ebdedd54ff0a9`.
+- PR #163 changes only `wrangler.staging.toml`; config already contains the verified UUID. Policy run `39156681624` passed; Pages run `39156681657` was still in progress at last check. Do not merge until all required checks are green.
+- Supabase settings/secrets unchanged; staging E2E remains stopped pending dedicated staging project. No production ticket content read; no DB writes or Worker deployment.

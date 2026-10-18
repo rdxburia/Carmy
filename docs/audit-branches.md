@@ -233,3 +233,35 @@ File: `worker/migrations/0007_support_ticket_workflow.sql`
 2. The live staging Worker binding must be changed to staging D1 and re-read from Cloudflare before any mutation test.
 3. **STOP before staging Worker deploy/E2E:** no dedicated staging Supabase project or safe staging credentials were found. Do not point staging at the production Supabase project and never copy production secrets.
 4. Production D1 migration and production Worker deploy remain **HOLD** until the explicit user message `APPROVE PRODUCTION` after the Phase 4 report.
+
+
+## Full branch comparison table — chunk 1/6 (24 branches)
+
+Compared each branch to `main` using GitHub compare API. Classifications are triage only, not merge approvals. File names are the exact paths returned by GitHub. Branches with zero unique commits are classified stale, not safe to delete.
+
+| Branch | Ahead | Behind | Status | Changed files returned | Classification |
+|---|---:|---:|---|---|---|
+| `backup-before-carcarecloud-logo-test-20261008` | 0 | 523 | behind | none returned | **stale (zero unique commits)** |
+| `branding/motordesk-rebrand` | 0 | 363 | behind | none returned | **stale (zero unique commits)** |
+| `branding/torqdesk-identity` | 14 | 295 | diverged | about.html, assets/carcarecloud-icon.svg, contact.html, css/premium.css, favicon.svg, icons/apple-touch-icon-180.svg, icons/icon-192.svg, icons/icon-512.svg, index.html, terms.html | **stale + needs review (large divergence)** |
+| `chore/bump-build-v10-transfer-security` | 0 | 18 | behind | none returned | **stale (zero unique commits)** |
+| `chore/publish-frontend-v14` | 2 | 6 | diverged | index.html, sw.js | **needs review; frontend/service-worker** |
+| `chore/step0-project-governance` | 38 | 39 | diverged | .github/workflows/step0b-verification.yml, AGENTS.md, PROGRESS.md, index.html, js/app.js, js/document-extraction.js, js/garage-workspace.js, js/password-change.js, scripts/test-garage-workspace.mjs, supabase/ws_001_core.sql, tests/document-extraction-quality.test.cjs, tests/password-change.test.mjs | **risky / auth-SQL-workflow review** |
+| `content/clarify-private-records-terms` | 0 | 329 | behind | none returned | **stale (zero unique commits)** |
+| `design/motordesk-login-motion-copy` | 0 | 360 | behind | none returned | **stale (zero unique commits)** |
+| `design/torqdesk-blue-car-landing` | 11 | 294 | diverged | assets/torqdesk-icon.svg, assets/torqdesk-logo.svg, css/premium.css, favicon.svg, icons/apple-touch-icon-180.svg, icons/icon-192.svg, icons/icon-512.svg, index.html | **stale + needs review** |
+| `design/torqdesk-marketing-home-loading-brand` | 1 | 276 | diverged | index.html | **stale + needs review** |
+| `design/torqdesk-unified-blue-ui` | 3 | 273 | diverged | css/premium.css, index.html | **stale + needs review** |
+| `docs/correct-merge-status-2026-10-18` | 2 | 4 | diverged | AGENT.md, PROGRESS.md | **needs review (docs-only)** |
+| `docs/preserve-project-history-2026-10-18` | 4 | 5 | diverged | AGENT.md, PROGRESS.md | **merged PR #157 exists; residual diff needs review** |
+| `docs/sync-frontend-deployment-verification-2026-10-18` | 1 | 2 | diverged | AGENT.md, PROGRESS.md | **needs review (docs-only)** |
+| `feat/fix-data-loading-and-dashboard-ux` | 0 | 49 | behind | none returned | **stale (zero unique commits)** |
+| `feat/full-workshop-demo-features` | 0 | 125 | behind | none returned | **stale (zero unique commits)** |
+| `feat/garage-demo-portal` | 0 | 129 | behind | none returned | **stale (zero unique commits)** |
+| `feat/garage-frontend-redesign` | 3 | 3 | diverged | AGENT.md, PROGRESS.md, css/garage-workspace.css, css/styles.css, garage-onboarding.html, garage-portal.html, index.html, js/garage-onboarding.js, js/garage-workspace.js, package.json, partials/public-header.html, scripts/local-preview-server.cjs, sw.js, tests/customer-portal-regression.test.mjs, tests/garage-redesign.test.mjs, tests/workshop-m0-contract.test.mjs | **merged PR #159 exists; residual diff; do not merge wholesale** |
+| `feat/home-first-screen-audience-switch` | 13 | 208 | diverged | .github/workflows/pages.yml, css/home-v2.css, docs/homepage-v2-self-critique.md, index.html, js/public-site.js, partials/public-header.html, scripts/capture-home-screenshots.mjs, scripts/check-pages-output.sh | **stale + needs review (workflow/frontend)** |
+| `feat/home-first-screen-audience-switch-v2` | 0 | 202 | behind | none returned | **stale (zero unique commits)** |
+| `feat/issue-17-logo-preview` | 0 | 543 | behind | none returned | **stale (zero unique commits)** |
+| `feat/mandatory-production-fixes` | 0 | 42 | behind | none returned | **stale (zero unique commits; name alone not evidence)** |
+| `feat/modern-report-preparation-ui` | 2 | 380 | diverged | index.html, js/app.js | **stale + needs review** |
+| `feat/multipage-policy-extraction` | 36 | 39 | diverged | .github/workflows/step0b-verification.yml, AGENTS.md, PROGRESS.md, index.html, js/app.js, js/document-extraction.js, js/garage-workspace.js, js/password-change.js, scripts/test-garage-workspace.mjs, supabase/ws_001_core.sql, tests/document-extraction-quality.test.cjs, tests/password-change.test.mjs | **risky / auth-SQL-workflow review** |
