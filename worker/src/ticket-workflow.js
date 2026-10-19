@@ -183,7 +183,7 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
         if (assignee) {
           const eligibility = await isActiveTicketAssignee(env, assignee);
           if (eligibility.unavailable) return fail("Ticket assignment authorization is temporarily unavailable.",503,origin,"ASSIGNEE_LOOKUP_UNAVAILABLE");
-          if (!eligibility.allowed) return fail("Assignee must be an active Super Admin team member.",403,origin,"ASSIGNEE_NOT_ALLOWED");
+          if (!eligibility.allowed) return fail("Assignee must be an active Super Admin or support team member.",403,origin,"ASSIGNEE_NOT_ALLOWED");
         }
         if(!["pending","assigned"].includes(ticket.status))return fail("Assignment can only change while a ticket is pending or assigned.",409,origin,"INVALID_TRANSITION");
         changes.push(["assignee_id",assignee],["status",assignee?"assigned":"pending"]);
