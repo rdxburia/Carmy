@@ -219,3 +219,10 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Activated the staging-only QA admin registry entry for the admin user UUID, with `created_by=NULL` because no staging owner actor was available.
 - `SUPABASE_SECRET_KEY` is still absent from `carmy-api-staging`; do not put key material in chat, source, or logs. Continue only after the owner securely sets the key on the staging Worker.
 - Real-JWT E2E and all production rollout gates remain HOLD. Do not modify production or merge PR #161.
+
+
+## 2026-10-19 — Staging secret inventory retry
+- Cloudflare API read-only inventory for Worker `carmy-api-staging` succeeded (HTTP 200). Secret binding names returned: `CACHE_INVALIDATION_SECRET`, `SUPABASE_SECRET_KEY`. Secret values were not requested, returned, logged, or copied.
+- This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
+- Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
+- Production remains HOLD and untouched. PR #161 remains open/unmerged.
