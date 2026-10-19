@@ -5,6 +5,18 @@ async function check(name, fn) {
   try { await fn(); results.push({ name, status: "PASS" }); }
   catch (error) { results.push({ name, status: "FAIL", error: String(error?.message || error).slice(0, 180) }); }
 }
+await check("staging Pages login UI and staging-only config are served", async () => {
+  const pageResponse = await fetch(origin + "/");
+  if (pageResponse.status !== 200) throw new Error("staging Pages root returned HTTP " + pageResponse.status);
+  const html = await pageResponse.text();
+  if (!html.includes('id="auth"') || !html.includes('data-torq-auth="signup"')) throw new Error("login/sign-up UI markers missing");
+  const configResponse = await fetch(origin + "/js/config.js");
+  if (configResponse.status !== 200) throw new Error("staging config returned HTTP " + configResponse.status);
+  const config = await configResponse.text();
+  for (const marker of ["https://vejccahjrlwhaniajgez.supabase.co", "https://carmy-api-staging.mr-rny-buria.workers.dev"]) {
+    if (!config.includes(marker)) throw new Error("staging config marker missing: " + marker);
+  }
+});
 await check("staging Worker root responds", async () => {
   const response = await fetch(worker + "/");
   if (response.status !== 200) throw new Error(`HTTP ${response.status}`);
