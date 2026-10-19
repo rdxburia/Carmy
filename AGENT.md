@@ -204,3 +204,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Staging unauthenticated smoke harness
 - Added `tests/staging-auth-smoke.mjs` and `.github/workflows/staging-auth-smoke.yml` on PR #171 to test the public staging Worker root, missing-token 401, tampered-token 401, and CORS preflight from `https://carmy-ticket-staging.pages.dev` without any credentials. This lets non-authenticated checks run even while QA users are blocked.
 - Workflow is configured to execute against the staging Worker URL only. It does not read/write ticket rows and contains no secrets. Awaiting GitHub Actions result before treating these checks as PASS.
+
+
+## 2026-10-19 — Staging Pages smoke failure fixed
+- GitHub Actions found that `https://carmy-ticket-staging.pages.dev/js/config.js` was being redirected to production GitHub Pages by the staging branch `_redirects` rule. Removed that rule only on `staging/ticket-e2e-frontend`; staging Pages deployment `e7d4689f-af88-4937-850a-a8fc9489304b` is now active for commit `acc363475dab2113a3f251d1407532d9000bd882`. Production GitHub Pages and main `_redirects` were untouched.
+- Re-running the staging smoke suite against the stable staging URL to verify it now serves the staging Supabase config rather than the production config. Previous Worker root, no-token 401, tampered-token 401, and CORS checks passed; the config check exposed and drove this fix.
