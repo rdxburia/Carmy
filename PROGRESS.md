@@ -660,3 +660,14 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 ## 2026-10-19 — Follow-up permission hardening
 - Updated ticket assignment eligibility so an unavailable Super Admin lookup does not automatically deny an active support roster member; it checks the active support roster and only allows a confirmed match. If neither lookup establishes eligibility, assignment fails closed. Changed file: worker/src/ticket-workflow.js.
 - Commit: ba65d46b48504fd699ba47b30ba9fcf49a2f945e. Automated tests remain NOT RUN in this environment. No staging migration, deploy, or production action performed.
+
+
+## 2026-10-19 — Independent support-ticket branch verification
+- **User request:** “step 1 to tum bhi verify kr skte ho and other step jo tum kar skte ho wo tum kro bar bar fail mt kro reply”. Interpreted as independently verifying repository Step 1 and doing safe checks available through connected GitHub, without asking the user to repeat checks that can be done here.
+- **Branch inspected:** `feat/support-ticket-backend-v2`; head at inspection `845eb27affce015805482220ee1ea074ff98c796`. GitHub compare: `main` base `3710bc112401a899975c7df5475ee44d4c7937ff`, 21 commits ahead, 0 behind.
+- **Read-only review performed:** `AGENT.md`, `PROGRESS.md`, `package.json`, `wrangler.staging.toml`, `worker/src/index.js`, `worker/src/super-admin.js`, `worker/src/admin-team.js`, `worker/src/ticket-workflow.js`, migrations 0007/0008, `tests/admin-team-workflow.test.mjs`, and `tests/ticket-workflow-route.test.mjs`.
+- **Verified:** migration 0007 blob SHA matches main exactly (`475671753bbd202182499201b5a3515184749d14`); migration 0008 adds a standalone `team_members` table/index; role checks are wired in the Worker entrypoint. The staging config points to D1 database `carmy-ticket-workflow-staging` UUID `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`.
+- **CI status:** no pull request was found for this branch and GitHub Actions API returned zero workflow runs for the branch. This is not a test pass.
+- **Checks not run:** `npm test` could not be executed because this connection provides GitHub file/API operations but no local Node shell. D1 migration tracking has not been queried in this pass; no migration was applied. Staging E2E remains NOT RUN.
+- **Safety outcomes:** no merge, no deployment, no staging migration apply, no production operations/data reads, and no changes to `feat/ticket-frontend-v2`.
+- **Next actions:** execute the configured `npm test` suite in a Node-capable checkout; inspect staging migration ledger/schema before any apply; then perform staging E2E only after schema/tracking are consistent. Production remains HOLD; branch is NOT READY TO MERGE based on evidence currently available.
