@@ -62,6 +62,11 @@ let adminAuditError=null;
 let adminAuditActorFilter='all';
 let adminAuditActionFilter='all';
 let adminContentTab='about';
+let userPlanStatus=null;
+let userPlanLoading=false;
+let userPlanError=null;
+let currentComparisonCycle='monthly';
+let isActivationRedeemOpen=false;
 
 function updateAdminNavVisibility(){
   const desktopBtn=document.getElementById('adminNavBtn');
@@ -121,6 +126,7 @@ function clearUserMemory(){
   adminTeamList=null;adminTeamLoading=false;adminTeamError=null;
   adminAuditList=null;adminAuditLoading=false;adminAuditError=null;
   userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
+  userPlanStatus=null;userPlanLoading=false;userPlanError=null;isActivationRedeemOpen=false;
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -1548,6 +1554,12 @@ function policeLogoutAnimation(type){
 }
 async function forceLogoutWithJoke(msg){localStorage.setItem('carcare_logout_joke',msg);await db.auth.signOut()}
 function showCarForm(){
+  const maxAllowed = userPlanStatus?.max_vehicles || (userPlanStatus?.plan === 'ultra' ? 999 : (userPlanStatus?.plan === 'premium' ? 5 : 1));
+  if(Array.isArray(cars) && cars.length >= maxAllowed){
+    openPlanComparisonModal();
+    toast('Vehicle limit reached ('+cars.length+'/'+(maxAllowed===999?'Unlimited':maxAllowed)+' on '+(userPlanStatus?.plan||'Lite').toUpperCase()+'). Upgrade to add more vehicles.', 'info');
+    return;
+  }
  $('carForm').classList.remove('hidden');
  $('carForm').innerHTML='<div class="toolbar"><div><h3>Add Car</h3><p class="muted">Save complete vehicle, insurance and PUC details.</p></div><button class="ghost" onclick="hideCarForm()">Cancel</button></div><div class="form">'+
  '<div class="field"><label>Registration Number *</label><input id="cfReg"></div>'+
@@ -1573,6 +1585,11 @@ function showCarForm(){
 function hideCarForm(){$('carForm').classList.add('hidden');$('carForm').innerHTML=''}
 $('newCar').onclick=showCarForm;
 async function saveCarForm(){
+  const maxAllowed = userPlanStatus?.max_vehicles || (userPlanStatus?.plan === 'ultra' ? 999 : (userPlanStatus?.plan === 'premium' ? 5 : 1));
+  if(Array.isArray(cars) && cars.length >= maxAllowed){
+    openPlanComparisonModal();
+    return toast('Vehicle limit reached for your plan. Upgrade to register additional vehicles.', 'error');
+  }
  let reg=$('cfReg').value.trim().toUpperCase(),model=$('cfModel').value.trim(),year=$('cfYear').value.trim(),fuel=$('cfFuel').value,ins=$('cfIns').value,insNo=$('cfInsNo').value.trim(),insExp=dateInputValue('cfInsExp'),puc=$('cfPuc').value,pucNo=puc==='yes'?$('cfPucNo').value.trim():'',pucState=puc==='yes'?$('cfPucState').value:'',pucValidity=puc==='yes'?$('cfPucValidity').value:'',pucExp=puc==='yes'?dateInputValue('cfPucExp'):'';
  let insTypes=selectedChoices('cfInsType'),insAddons=selectedChoices('cfInsAddons');
  if(!reg||!model||!year||!fuel||ins==='Not Available'||!insNo||!insExp||insTypes.length<2||puc!=='yes'||!pucNo||!pucState||!pucValidity||!pucExp)return toast('Complete all required fields. Insurance Type needs minimum 2 selections.');
@@ -1673,6 +1690,7 @@ function dash(){
   $('dashTitle').textContent='Overview';
   $('dashSub').textContent='Private Vehicle Garage';
   $('dash').innerHTML=
+    renderPlanExpirationBanner()+
     '<div class="card empty-garage-card">'+
     '<div class="empty-garage-icon"><svg aria-hidden="true" style="width:48px;height:48px;stroke:var(--c-accent)"><use href="#td-icon-car"/></svg></div>'+
     '<h2>Welcome to your Torq Desk Garage</h2>'+
@@ -1695,6 +1713,7 @@ function dash(){
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
  const activeDocs=docs.filter(d=>!d.archived_at);
  $('dash').innerHTML=
+  renderPlanExpirationBanner()+
   '<section class="minimal-dashboard">'+
   '<div class="minimal-hero">'+
     '<div class="minimal-hero-left">'+
@@ -2860,6 +2879,7 @@ function ownerProfileView(){
       '</div>'+
       '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
     '</div>'+
+    renderPlanStatusCard()+
     '<div class="card owner-profile-card">'+
     '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Transfer Documents.</p></div>'+
     '<button type="button" class="ghost btn-sm" id="opEditBtn">Edit Profile</button></div>'+
@@ -3072,7 +3092,407 @@ function ownerProfileView(){
       }
     };
   }
+  if(!userPlanStatus&&!userPlanLoading&&!userPlanError){
+    loadUserPlanStatus();
+  }
 }
+
+/* ===== Phase 3: User Dashboard & Subscription Plan Services ===== */
+
+async function loadUserPlanStatus(force=false){
+  if(!user)return null;
+  if(userPlanStatus&&!force)return userPlanStatus;
+  userPlanLoading=true;
+  userPlanError=null;
+  try{
+    const res=await workerGet('/api/plan/status');
+    if(res&&res.ok&&res.data){
+      userPlanStatus=res.data;
+      userPlanError=null;
+    }else{
+      userPlanStatus={
+        plan:user?.user_metadata?.plan||'lite',
+        status:'active',
+        expires_at:null,
+        max_vehicles:1,
+        storage_mb_limit:10,
+        storage_mb_used:0.8
+      };
+    }
+  }catch(err){
+    if(err?.status===404){
+      userPlanError={status:404,message:'Route /api/plan/status returned 404'};
+    }else{
+      userPlanError=err;
+    }
+  }finally{
+    userPlanLoading=false;
+    updatePlanStatusCardDom();
+  }
+  return userPlanStatus;
+}
+
+function updatePlanStatusCardDom(){
+  const card=document.getElementById('userPlanStatusCard');
+  if(!card)return;
+  const tmp=document.createElement('div');
+  tmp.innerHTML=renderPlanStatusCard();
+  if(tmp.firstElementChild){
+    card.replaceWith(tmp.firstElementChild);
+  }
+}
+
+function renderPlanStatusCard(){
+  if(userPlanLoading){
+    return '<div class="card plan-status-card" id="userPlanStatusCard"><div style="text-align:center;padding:24px"><span class="spinner-sm"></span> Loading subscription status from <code>GET /api/plan/status</code>...</div></div>';
+  }
+  if(userPlanError){
+    return '<div class="card plan-status-card" id="userPlanStatusCard">'+renderAdminBlockedCard('/api/plan/status','GET',userPlanError.message||'Plan status endpoint unavailable (404).')+'</div>';
+  }
+  const st=userPlanStatus||{
+    plan:user?.user_metadata?.plan||'lite',
+    status:'active',
+    expires_at:null,
+    max_vehicles:1,
+    storage_mb_limit:10,
+    storage_mb_used:0.8
+  };
+  const planKey=(st.plan||'lite').toLowerCase();
+  const planName=planKey==='ultra'?'Ultra (Workshop SaaS)':(planKey==='premium'?'Premium (Owner Plus)':'Lite (Free Tier)');
+  const maxVehicles=st.max_vehicles||(planKey==='ultra'?999:(planKey==='premium'?5:1));
+  const maxVehiclesDisplay=planKey==='ultra'?'Unlimited':String(maxVehicles);
+  const vehicleCount=Array.isArray(cars)?cars.length:0;
+  const vehiclePercent=maxVehicles===999?10:Math.min(100,Math.round((vehicleCount/maxVehicles)*100));
+  const storageLimit=st.storage_mb_limit||(planKey==='ultra'?5000:(planKey==='premium'?500:10));
+  const storageUsed=Number(st.storage_mb_used||0).toFixed(1);
+  const storagePercent=Math.min(100,Math.round((storageUsed/storageLimit)*100));
+  const isExpired=(st.status==='expired'||Boolean(st.is_expired));
+
+  return '<div class="card plan-status-card" id="userPlanStatusCard">'+
+    '<div class="plan-card-head">'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+        '<div style="font-size:24px">🏷️</div>'+
+        '<div>'+
+          '<h3 style="margin:0;font-size:16px">Subscription &amp; Entitlements</h3>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Active plan benefits, vehicle quotas, and cloud vault storage.</p>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span class="plan-badge plan-'+esc(planKey)+'">'+esc(planName)+'</span>'+
+        (isExpired?'<span class="sec-tag danger">EXPIRED</span>':'<span class="sec-tag ok">ACTIVE</span>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-metrics-grid">'+
+      '<div class="plan-metric-box">'+
+        '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Vehicle Limit</span>'+
+        '<b>'+esc(vehicleCount)+' / '+esc(maxVehiclesDisplay)+' Vehicles</b>'+
+        '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+vehiclePercent+'%;background:'+(vehiclePercent>=100?'#dc2626':'#2563eb')+'"></div></div>'+
+        '<small class="muted" style="margin-top:6px;display:block">'+(vehicleCount>=maxVehicles?'Limit reached for this tier':'Slot available for vehicle registration')+'</small>'+
+      '</div>'+
+      '<div class="plan-metric-box">'+
+        '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Encrypted Document Vault</span>'+
+        '<b>'+esc(storageUsed)+' / '+esc(storageLimit)+' MB</b>'+
+        '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+storagePercent+'%;background:'+(storagePercent>=100?'#dc2626':'#2563eb')+'"></div></div>'+
+        '<small class="muted" style="margin-top:6px;display:block">'+(storagePercent>=100?'Vault full — upgrade for more storage':'Private cloud space for RC, PUC & Insurance')+'</small>'+
+      '</div>'+
+      '<div class="plan-metric-box">'+
+        '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Entitlement Validity</span>'+
+        '<b>'+(st.expires_at?formatAdminDate(st.expires_at):'Indefinite / Lifetime')+'</b>'+
+        '<small class="muted" style="margin-top:14px;display:block">'+(isExpired?'Plan has expired. Renew to restore access.':'Your subscription is active and verified.')+'</small>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button type="button" class="primary btn-sm" id="btnOpenPlanComparison" onclick="openPlanComparisonModal()">Compare &amp; Upgrade Plans</button>'+
+        '<button type="button" class="ghost btn-sm" id="btnToggleActivationCode" onclick="toggleActivationRedeemSection()">Redeem Code</button>'+
+      '</div>'+
+      '<small class="muted">Need custom workshop seats? <a href="javascript:void(0)" onclick="openUpgradeRequestModal(\'ultra\')" style="color:#2563eb;font-weight:600">Contact Sales</a></small>'+
+    '</div>'+
+    '<div id="activationRedeemSection" class="'+(isActivationRedeemOpen?'':'hidden')+'" style="margin-top:14px;padding:14px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px">'+
+      '<label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">Redeem Activation Code or Voucher</label>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<input type="text" id="activationCodeInput" placeholder="e.g. TD-PLUS-XXXX-XXXX" style="flex:1;min-width:200px;text-transform:uppercase;font-family:monospace;font-weight:700">'+
+        '<button type="button" class="primary" id="btnRedeemActivationCode" onclick="redeemActivationCode()">Apply Code</button>'+
+      '</div>'+
+      '<div id="activationRedeemMsg" style="display:none;margin-top:8px;font-size:12px;padding:8px 12px;border-radius:6px"></div>'+
+    '</div>'+
+  '</div>';
+}
+
+function toggleActivationRedeemSection(){
+  isActivationRedeemOpen=!isActivationRedeemOpen;
+  const sec=document.getElementById('activationRedeemSection');
+  if(sec){
+    sec.classList.toggle('hidden',!isActivationRedeemOpen);
+  }
+}
+
+async function redeemActivationCode(){
+  const input=document.getElementById('activationCodeInput');
+  const code=input?.value?.trim()?.toUpperCase()||'';
+  const msgEl=document.getElementById('activationRedeemMsg');
+  const btn=document.getElementById('btnRedeemActivationCode');
+  if(!code){
+    toast('Please enter an activation code.','error');
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Verifying...';}
+  if(msgEl){msgEl.style.display='none';}
+  try{
+    const res=await workerPost('/api/activation/redeem',{code});
+    const newPlan=res?.plan||res?.data?.plan||'premium';
+    toast('Activation code redeemed successfully! Plan upgraded to '+newPlan+'.','ok');
+    if(msgEl){
+      msgEl.style.display='block';
+      msgEl.style.background='rgba(22,163,74,.08)';
+      msgEl.style.color='#166534';
+      msgEl.textContent='Success! Code '+code+' applied. Plan updated to '+newPlan+'.';
+    }
+    if(input)input.value='';
+    await loadUserPlanStatus(true);
+  }catch(err){
+    const errMsg=err?.message||'Invalid or expired activation code.';
+    toast('Redemption failed: '+errMsg,'error');
+    if(msgEl){
+      msgEl.style.display='block';
+      msgEl.style.background='rgba(220,38,38,.08)';
+      msgEl.style.color='#b91c1c';
+      msgEl.textContent=errMsg;
+    }
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Apply Code';}
+  }
+}
+
+function setComparisonCycle(cycle){
+  currentComparisonCycle=cycle;
+  renderPlanComparisonModalContent();
+}
+
+function openPlanComparisonModal(){
+  let old=document.getElementById('planComparisonModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='planComparisonModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:820px" id="planComparisonModalBox"></div>';
+  modal.onclick=e=>{if(e.target===modal)closePlanComparisonModal();};
+  document.body.appendChild(modal);
+
+  renderPlanComparisonModalContent();
+}
+
+function closePlanComparisonModal(){
+  const m=document.getElementById('planComparisonModal');
+  if(m)m.remove();
+}
+
+function renderPlanComparisonModalContent(){
+  const box=document.getElementById('planComparisonModalBox');
+  if(!box)return;
+
+  const isYearly=(currentComparisonCycle==='yearly');
+  const curPlan=(userPlanStatus?.plan||'lite').toLowerCase();
+
+  box.innerHTML='<div class="admin-modal-head">'+
+    '<div>'+
+      '<h3 style="margin:0;font-size:18px">Choose the Right Plan for Your Garage</h3>'+
+      '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Transparent pricing with zero hidden fees. Upgrade or cancel anytime.</p>'+
+    '</div>'+
+    '<button type="button" class="ghost" onclick="closePlanComparisonModal()">✕</button>'+
+  '</div>'+
+  '<div style="display:flex;justify-content:center;margin:16px 0 20px">'+
+    '<div class="plan-cycle-toggle">'+
+      '<button type="button" class="plan-cycle-btn '+(isYearly?'':'active')+'" onclick="setComparisonCycle(\'monthly\')">Monthly Billing</button>'+
+      '<button type="button" class="plan-cycle-btn '+(isYearly?'active':'')+'" onclick="setComparisonCycle(\'yearly\')">Annual Billing <span class="plan-save-pill">Save 15%</span></button>'+
+    '</div>'+
+  '</div>'+
+  '<div class="plan-cards-grid">'+
+    '<div class="plan-tier-card '+(curPlan==='lite'?'current':'')+'">'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-lite">LITE</span>'+
+        '<h4 style="margin:8px 0 4px">Free Forever</h4>'+
+        '<div class="plan-tier-price">₹0<small>/mo</small></div>'+
+        '<p class="muted" style="font-size:12px">Essential vehicle maintenance tracker for individual owners.</p>'+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>1 Vehicle</b> maximum</li>'+
+        '<li><b>10 MB</b> Document Vault</li>'+
+        '<li>Basic Service History Logs</li>'+
+        '<li>Digital Maintenance Reminders</li>'+
+        '<li>Standard Community Support</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='lite'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="ghost" disabled style="width:100%">Base Tier</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card featured '+(curPlan==='premium'?'current':'')+'">'+
+      '<div class="plan-ribbon">MOST POPULAR</div>'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-premium">PREMIUM</span>'+
+        '<h4 style="margin:8px 0 4px">Vehicle Owner Plus</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹708<small>/yr</small>':'₹69<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'₹59/mo equivalent, billed annually':'Billed monthly, cancel anytime')+'</p>'+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>Up to 5 Vehicles</b></li>'+
+        '<li><b>500 MB</b> Encrypted Document Vault</li>'+
+        '<li><b>RTO Transfer Pack</b> (Form 29 &amp; 30 PDF)</li>'+
+        '<li>Export Full Vehicle Dossier</li>'+
+        '<li>Priority Support Tickets (24h SLA)</li>'+
+        '<li>Ad-free Experience</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='premium'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToPremium" onclick="openUpgradeRequestModal(\'premium\')">Upgrade to Premium</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card '+(curPlan==='ultra'?'current':'')+'">'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-ultra">ULTRA</span>'+
+        '<h4 style="margin:8px 0 4px">Workshop SaaS</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹1999<small>/yr</small>':'₹199<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'₹166/mo equivalent, billed annually':'For professional garages & workshops')+'</p>'+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>Unlimited Vehicles</b></li>'+
+        '<li><b>5 GB</b> Document Cloud Storage</li>'+
+        '<li>Digital Job Cards &amp; Invoicing</li>'+
+        '<li>Multi-bay Mechanic Management</li>'+
+        '<li>WhatsApp Customer Updates</li>'+
+        '<li>Dedicated Support Representative</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='ultra'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToUltra" onclick="openUpgradeRequestModal(\'ultra\')">Upgrade to Ultra</button>')+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function openUpgradeRequestModal(targetPlan='premium'){
+  closePlanComparisonModal();
+  let old=document.getElementById('userUpgradeRequestModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='userUpgradeRequestModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  const defaultPhone=ownerProfile?.phone||user?.user_metadata?.phone||'';
+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:500px">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Request Plan Upgrade</h3>'+
+        '<span class="muted" style="font-size:12px">Instant manual activation via WhatsApp or UPI</span>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeUpgradeRequestModal()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label>Target Plan</label>'+
+        '<select id="userUpgradePlanSelect">'+
+          '<option value="premium"'+(targetPlan==='premium'?' selected':'')+'>Vehicle Owner Plus (₹69/mo or ₹708/yr)</option>'+
+          '<option value="ultra"'+(targetPlan==='ultra'?' selected':'')+'>Workshop SaaS Ultra (₹199/mo or ₹1999/yr)</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Contact Mobile (+91) *</label>'+
+        '<input type="tel" id="userUpgradePhoneInput" placeholder="e.g. 9876543210" value="'+esc(defaultPhone)+'">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Preferred Payment Method</label>'+
+        '<select id="userUpgradePaymentSelect">'+
+          '<option value="upi">UPI (Google Pay, PhonePe, Paytm)</option>'+
+          '<option value="netbanking">Net Banking / IMPS</option>'+
+          '<option value="card">Debit / Credit Card</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Optional Notes or Billing Requirement</label>'+
+        '<textarea id="userUpgradeNotesInput" rows="2" placeholder="e.g. Need GST invoice for workshop..."></textarea>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+        '<button type="button" class="ghost" onclick="closeUpgradeRequestModal()">Cancel</button>'+
+        '<button type="button" class="primary" id="btnSubmitUpgradeRequest" onclick="submitUpgradeRequest()">Submit Upgrade Request</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeUpgradeRequestModal();};
+  document.body.appendChild(modal);
+}
+
+function closeUpgradeRequestModal(){
+  const m=document.getElementById('userUpgradeRequestModal');
+  if(m)m.remove();
+}
+
+async function submitUpgradeRequest(){
+  const plan=document.getElementById('userUpgradePlanSelect')?.value||'premium';
+  const phone=document.getElementById('userUpgradePhoneInput')?.value?.trim()||'';
+  const payment=document.getElementById('userUpgradePaymentSelect')?.value||'upi';
+  const notes=document.getElementById('userUpgradeNotesInput')?.value?.trim()||'';
+  const btn=document.getElementById('btnSubmitUpgradeRequest');
+
+  if(!phone||phone.length<10){
+    toast('Valid 10-digit contact mobile number is required.','error');
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Submitting...';}
+  try{
+    await workerPost('/api/upgrade-requests',{
+      requested_plan:plan,
+      phone:phone,
+      payment_method:payment,
+      notes:notes
+    });
+    toast('Upgrade request submitted successfully! We will contact you on WhatsApp/phone.','ok');
+    closeUpgradeRequestModal();
+  }catch(err){
+    toast('Failed to submit upgrade request: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent='Submit Upgrade Request';}
+  }
+}
+
+function renderPlanExpirationBanner(){
+  if(!userPlanStatus||(userPlanStatus.status!=='expired'&&!userPlanStatus.is_expired))return '';
+  const expDate=formatAdminDate(userPlanStatus.expires_at);
+  return '<div class="plan-expired-banner" role="alert">'+
+    '<div style="display:flex;align-items:center;gap:10px">'+
+      '<span style="font-size:20px">⚠️</span>'+
+      '<div><b>Subscription Expired</b><p style="margin:2px 0 0;font-size:12px">Your plan expired on '+esc(expDate)+'. Renew now to retain access to multiple vehicles and vault storage.</p></div>'+
+    '</div>'+
+    '<button type="button" class="primary btn-sm" onclick="openPlanComparisonModal()">Renew Subscription</button>'+
+  '</div>';
+}
+
+window.loadUserPlanStatus=loadUserPlanStatus;
+window.updatePlanStatusCardDom=updatePlanStatusCardDom;
+window.renderPlanStatusCard=renderPlanStatusCard;
+window.toggleActivationRedeemSection=toggleActivationRedeemSection;
+window.redeemActivationCode=redeemActivationCode;
+window.setComparisonCycle=setComparisonCycle;
+window.openPlanComparisonModal=openPlanComparisonModal;
+window.closePlanComparisonModal=closePlanComparisonModal;
+window.renderPlanComparisonModalContent=renderPlanComparisonModalContent;
+window.openUpgradeRequestModal=openUpgradeRequestModal;
+window.closeUpgradeRequestModal=closeUpgradeRequestModal;
+window.submitUpgradeRequest=submitUpgradeRequest;
+window.renderPlanExpirationBanner=renderPlanExpirationBanner;
+window.getUserPlanStatus=()=>userPlanStatus;
+window.setUserPlanStatus=(val)=>{userPlanStatus=val;};
 
 let currentHelpTab='faqs';
 let userSupportTickets=[];
@@ -6962,9 +7382,11 @@ async function docsView(){
   const dl=$('docList');if(dl)dl.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle first to view its private document vault.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
   return;
  }
+ const isStorageExceeded = Boolean(userPlanStatus && Number(userPlanStatus.storage_mb_used || 0) >= Number(userPlanStatus.storage_mb_limit || 10));
+ const storageBanner = isStorageExceeded ? '<div class="plan-storage-banner"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">💾</span><div><b>Vault Storage Limit Reached</b><p style="margin:2px 0 0;font-size:12px">You have used '+userPlanStatus.storage_mb_used+' of '+userPlanStatus.storage_mb_limit+' MB on your current plan. Upgrade to expand your encrypted document vault.</p></div></div><button type="button" class="primary btn-sm" onclick="openPlanComparisonModal()">Upgrade Storage</button></div>' : '';
  let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};
  active.forEach(d=>(groups[d.document_type]||groups.other).push(d));
- let html='<div class="doc-grid">';
+ let html=storageBanner+'<div class="doc-grid">';
  const catConfigs=[
   ['rc','Registration Certificate','td-icon-book'],
   ['puc','PUC Certificate','td-icon-route'],
@@ -7042,6 +7464,12 @@ function extractionReviewField(id,label,value,type='text',unverified=false){
 }
 function openExtractionReview(kind,initial,validation,meta={}){return new Promise(resolve=>{const data=JSON.parse(JSON.stringify(initial||{}));let modal=document.getElementById('extractionReviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='extractionReviewModal';modal.style='position:fixed;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(8px);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';const isRc=kind==='rc',isPuc=kind==='puc',fields=isRc?[['registration_no','Regn No','text'],['date_of_regn','Date of Regn','date'],['regn_validity','Regn Validity','date'],['chassis_no','Chassis No','text'],['engine_no','Engine No','text'],['owner_name','Owner Name','text'],['owner_relation','S/D/W of','text'],['ownership_type','Ownership Type','text'],['address','Address','text'],['fuel','Fuel','text'],['emission_norms','Emission Norms (BS)','text'],['vehicle_class','Vehicle Class','text'],['maker','Maker','text'],['model','Model','text'],['colour','Colour','text'],['body_type','Body Type','text'],['seating','Seating','number'],['unladen_weight','Unladen Weight (Kg)','number'],['cubic_capacity','Cubic Capacity','number'],['mfg_month_year','Month-Year of Mfg','text'],['no_of_cylinders','No. of Cylinders','number'],['registration_authority','Registration Authority','text'],['card_issue_date','Card Issue Date','date']]:isPuc?[['test_date','Test Date','date'],['valid_until','Validity Upto','date'],['certificate_number','Certificate SL. No.','text'],['cost','Fees','number']]:[['insurer_name','Insurer Name','text'],['policy_number','Policy No','text'],['insured_name','Insured Name','text'],['period_from','Period From','date'],['period_to','Period To','date'],['reg_no','Reg No','text'],['chassis_no','Chassis','text'],['engine_no','Engine','text'],['idv','IDV','number'],['total_premium','Total / Gross Premium','number'],['previous_policy_number','Previous Policy No','text'],['previous_insurer','Previous Insurer','text'],['policy_type','Policy Type','text']];const inputField=(f)=>{const val=f[2]==='date'?formatDateNice(data[f[0]]):data[f[0]]??'';return '<label class="ex-review-field"><span>'+esc(f[1])+(data.confidence?.[f[0]]==='unverified'||data.confidence?.[f[0]]==='review'?' <em>UNVERIFIED</em>':'')+'</span>'+dateInputHtml(f[0],data[f[0]])+'</label>'.replace('>'+dateInputHtml(f[0],data[f[0]])+'</label>','>'+dateInputHtml(f[0],data[f[0]])+'</label>').replace('type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"','type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"')||''};const evidenceText=key=>{const c=String(data.confidence?.[key]||'unverified'),v=c.match(/^verified:(\d+)/),one=c.match(/^single:(\d+)/);if(v)return 'Verified (found on '+v[1]+' pages)';if(one)return 'Single source · page '+one[1];if(c==='high')return 'Single source';if(c==='medium')return 'Single source · review recommended';if(c==='review')return 'Needs review';return 'Unverified'};const evidenceHtml=key=>'<small class="ex-field-evidence '+(String(data.confidence?.[key]||'unverified').startsWith('verified:')?'is-verified':String(data.confidence?.[key]||'').startsWith('single:')?'is-single':'is-unverified')+'">'+esc(evidenceText(key))+(data.field_sources?.[key]?.length?' · Source page(s): '+esc(data.field_sources[key].join(', ')):'')+'</small>';const fieldHtml=fields.map(f=>'<label class="ex-review-field"><span>'+esc(f[1])+'</span>'+(f[2]==='date'?dateInputHtml(f[0],data[f[0]]):'<input id="'+esc(f[0])+'" type="'+(f[2]==='number'?'number':'text')+'" value="'+esc(data[f[0]]??'')+'">')+evidenceHtml(f[0])+'</label>').join('');const devDiagnostics=(window.CARMY_DEV_DIAGNOSTICS===true||new URLSearchParams(window.location.search).get('debugExtraction')==='1')&&kind==='insurance'&&data.diagnostics;const diagnosticsHtml=devDiagnostics?'<details class="extraction-diagnostics"><summary>Developer extraction diagnostics</summary><p>Pages: '+esc(data.diagnostics.page_count)+'</p><pre>'+esc(JSON.stringify(data.diagnostics,null,2))+'</pre></details>':'';let duplicate='';if(meta.saved){const diff=fields.map(f=>{const old=meta.saved[f[0]],neu=data[f[0]];return old!=null&&String(old)!==String(neu??'')?'<div><b>'+esc(f[1])+'</b>: saved <span>'+esc(old)+'</span> → extracted <span>'+esc(neu??'')+'</span></div>':''}).join('');duplicate='<div class="ex-review-duplicate"><b>Already saved</b><p>Existing non-empty values will not be overwritten. Only empty saved fields can be filled.</p>'+(diff||'<span>No field differences.</span>')+'</div>'}const claim=isRc||isPuc?'':'<div class="ex-review-claim"><div><b>Claim taken</b><small>Choose Yes or No before saving.</small></div><div class="ex-review-claim-actions"><label><input type="radio" name="exClaim" value="yes"> Yes</label><label><input type="radio" name="exClaim" value="no"> No</label></div><label class="ex-review-field ex-claim-invoice" id="exClaimInvoiceWrap" style="display:none"><span>Claim Invoice No. *</span><input id="claim_invoice_no" type="text" value=""></label></div>';const thumb=meta.thumbnail?'<div class="ex-review-preview"><img src="'+meta.thumbnail+'" alt="Document preview"></div>':'';modal.innerHTML='<div class="ex-review-card"><div class="ex-review-head"><div><div class="ex-review-kicker">REVIEW BEFORE SAVE</div><h2>'+esc(isRc?'RC details review':isPuc?'PUC certificate review':'Insurance policy review')+'</h2><p>Nothing is saved until you confirm.</p></div><button class="ghost" id="exReviewCancel" type="button">Cancel</button></div><div class="ex-review-layout">'+thumb+'<div><div id="exReviewValidation" class="ex-review-validation"></div>'+duplicate+'<div class="ex-review-grid">'+fieldHtml+'</div>'+diagnosticsHtml+(!isPuc?'':(data.suggested_valid_until&&!data.valid_until?'<div class="ex-review-validation">Suggested validity: <b>'+esc(formatDateNice(data.suggested_valid_until))+'</b> — please verify and enter it.</div>':''))+claim+'</div></div><div class="ex-review-footer"><span id="exReviewStatus"></span><div><button class="ghost" id="exReviewBack" type="button">Cancel</button><button class="primary" id="exReviewConfirm" type="button">CONFIRM &amp; SAVE</button></div></div></div>';document.body.appendChild(modal);wireDateInputs(modal);const read=()=>{for(const f of fields){const el=document.getElementById(f[0]);if(el)data[f[0]]=f[2]==='date'?dateInputValue(f[0]):el.value===''?null:(f[2]==='number'?Number(el.value):el.value)}if(kind==='insurance'){const q=document.querySelector('input[name="exClaim"]:checked');data.claim_taken=q?String(q.value)==='yes':null;data.claim_invoice_no=document.getElementById('claim_invoice_no')?.value.trim()||null}return data};const render=()=>{const d=read(),v=CarmyExtraction.validate(d,car,kind);if(kind==='insurance'){if(!d.period_from||!d.period_to)v.errors.push('Policy period From/To is required.');if(d.period_from&&d.period_to&&d.period_from>d.period_to)v.errors.push('Policy period is invalid.');if(d.claim_taken===null)v.errors.push('Choose Claim Yes or No.');if(d.claim_taken===true&&!d.claim_invoice_no)v.errors.push('Claim Invoice No. is required when Claim = Yes.')}if(isPuc&&d.valid_until&&data.suggested_valid_until&&d.valid_until!==data.suggested_valid_until)v.warnings.push('Validity differs from test date + 1 year - 1 day. Please verify.');const box=document.getElementById('exReviewValidation'),btn=document.getElementById('exReviewConfirm');box.innerHTML=(v.errors.length?'<b>Cannot save yet</b><ul>'+v.errors.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<b class="ok">Vehicle/type checks passed.</b>')+(v.warnings.length?'<div class="ex-review-warning">'+v.warnings.map(x=>esc(x)).join('<br>')+'</div>':'');if(isPuc)document.getElementById('exReviewStatus').textContent='Status preview: '+(!d.valid_until?'Needs verification':d.valid_until>=istTodayClient()?'Current':'Archive');else if(kind==='insurance')document.getElementById('exReviewStatus').textContent='Status preview: '+policyStatusPreview(d.period_from,d.period_to);btn.disabled=v.errors.length>0;return{data:d,validation:v}};modal.querySelectorAll('input').forEach(x=>x.addEventListener('input',render));modal.querySelectorAll('input[name="exClaim"]').forEach(x=>x.addEventListener('change',()=>{document.getElementById('exClaimInvoiceWrap').style.display=document.querySelector('input[name="exClaim"]:checked')?.value==='yes'?'block':'none';render()}));const close=()=>{modal.remove();resolve(null)};document.getElementById('exReviewCancel').onclick=close;document.getElementById('exReviewBack').onclick=close;document.getElementById('exReviewConfirm').onclick=()=>{const r=render();if(r.validation.errors.length)return;modal.remove();resolve(r.data)};render()})}
 function openDocUploader(preselectedType=''){
+ const isStorageExceeded = Boolean(userPlanStatus && Number(userPlanStatus.storage_mb_used || 0) >= Number(userPlanStatus.storage_mb_limit || 10));
+ if(isStorageExceeded){
+  openPlanComparisonModal();
+  toast('Document vault storage limit reached ('+userPlanStatus.storage_mb_used+'/'+userPlanStatus.storage_mb_limit+' MB). Upgrade your plan to upload more files.', 'info');
+  return;
+ }
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
  m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. RC and Insurance are reviewed before extracted data is saved.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label>'+dateInputHtml('docIssue','')+'</div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label>'+dateInputHtml('docExpiry','')+'</div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';

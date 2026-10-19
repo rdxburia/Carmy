@@ -3318,4 +3318,153 @@ test("Super Admin Phase 2: Missing or 404 admin endpoints render .admin-blocked-
   assert.ok(auditHtml.includes("/api/admin/audit"));
 });
 
+test("User Dashboard Phase 3: Plan status card displays plan details, metrics and renders blocked card on 404", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Error state renders blocked card for /api/plan/status
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    userPlanError = { message: 'Route /api/plan/status returned 404' };
+    userPlanStatus = null;
+  `);
+
+  const blockedHtml = h.eval("renderPlanStatusCard()");
+  assert.ok(blockedHtml.includes("admin-blocked-card"), "Must render blocked card when /api/plan/status returns error");
+  assert.ok(blockedHtml.includes("GET"), "Blocked card must show GET method");
+  assert.ok(blockedHtml.includes("/api/plan/status"), "Blocked card must show /api/plan/status endpoint");
+
+  // 2. Active status renders metrics and plan tier
+  h.eval(`
+    userPlanError = null;
+    userPlanStatus = {
+      plan: 'premium',
+      status: 'active',
+      expires_at: '2027-10-19T00:00:00Z',
+      max_vehicles: 5,
+      storage_mb_limit: 500,
+      storage_mb_used: 120.5
+    };
+    cars = [{ id: 'car-1', make_model: 'Swift' }, { id: 'car-2', make_model: 'City' }];
+  `);
+
+  const activeHtml = h.eval("renderPlanStatusCard()");
+  assert.ok(activeHtml.includes("Premium"), "Must display Premium tier badge");
+  assert.ok(activeHtml.includes("2 / 5 Vehicles"), "Must display 2 / 5 vehicles metric");
+  assert.ok(activeHtml.includes("120.5 / 500 MB"), "Must display 120.5 / 500 MB storage metric");
+  assert.ok(activeHtml.includes("ACTIVE"), "Must display ACTIVE badge");
+});
+
+test("User Dashboard Phase 3: Activation code redemption calls POST /api/activation/redeem and refreshes plan", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    globalThis.__lastPostCall = null;
+    globalThis.__planStatusCalls = 0;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true, plan: 'ultra' };
+    };
+    workerGet = async (path) => {
+      if (path.includes('/api/plan/status')) {
+        globalThis.__planStatusCalls++;
+        return { ok: true, data: { plan: 'ultra', status: 'active', max_vehicles: 999, storage_mb_limit: 5000, storage_mb_used: 10 } };
+      }
+      return { ok: true };
+    };
+  `);
+
+  // Open activation code section
+  h.eval("toggleActivationRedeemSection()");
+  assert.equal(h.eval("isActivationRedeemOpen"), true, "Activation redeem section must toggle open");
+
+  // Setup input
+  h.eval(`
+    const input = document.getElementById('activationCodeInput');
+    input.value = 'TD-ULTRA-2026';
+  `);
+
+  await h.eval("redeemActivationCode()");
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/activation/redeem", "Must call POST /api/activation/redeem");
+  assert.equal(postCall.body.code, "TD-ULTRA-2026", "Must submit entered code");
+  assert.ok(h.eval("globalThis.__planStatusCalls") >= 1, "Must reload plan status after successful redemption");
+});
+
+test("User Dashboard Phase 3: Upgrade request modal validates phone and calls POST /api/upgrade-requests", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    ownerProfile = { phone: '9876543210' };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true, data: { id: 'req-1' } };
+    };
+  `);
+
+  h.eval("openUpgradeRequestModal('ultra');");
+  assert.ok(h.elements.get('userUpgradeRequestModal'), "Upgrade request modal must be open");
+
+  // Phone validation (<10 digits fails)
+  h.eval("document.getElementById('userUpgradePhoneInput').value = '12345';");
+  await h.eval("submitUpgradeRequest();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must not submit request with invalid phone");
+
+  // Valid submit
+  h.eval(`
+    document.getElementById('userUpgradePlanSelect').value = 'ultra';
+    document.getElementById('userUpgradePhoneInput').value = '9876543210';
+    document.getElementById('userUpgradePaymentSelect').value = 'upi';
+    document.getElementById('userUpgradeNotesInput').value = 'Need GST receipt';
+  `);
+  await h.eval("submitUpgradeRequest();");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/upgrade-requests", "Must call POST /api/upgrade-requests");
+  assert.equal(postCall.body.requested_plan, "ultra");
+  assert.equal(postCall.body.phone, "9876543210");
+  assert.equal(postCall.body.payment_method, "upi");
+  assert.equal(postCall.body.notes, "Need GST receipt");
+
+  // Modal must close
+  assert.ok(!h.elements.get('userUpgradeRequestModal'), "Modal must close on success");
+});
+
+test("User Dashboard Phase 3: Vehicle addition and Document Vault enforce plan quota limits", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    userPlanStatus = {
+      plan: 'lite',
+      status: 'active',
+      max_vehicles: 1,
+      storage_mb_limit: 10,
+      storage_mb_used: 10.0
+    };
+    cars = [{ id: 'car-1', make_model: 'Alto 800' }];
+  `);
+
+  // 1. Vehicle addition blocked when cars.length >= max_vehicles
+  h.eval("showCarForm();");
+  assert.ok(h.elements.get('planComparisonModal'), "Must open plan comparison modal when vehicle limit reached");
+  assert.equal(h.elements.get('carForm')?.innerHTML || '', '', "Car form must not be populated when limit reached");
+
+  // Close comparison modal
+  h.eval("closePlanComparisonModal();");
+  assert.ok(!h.elements.get('planComparisonModal'), "Comparison modal must close");
+
+  // 2. Document uploader blocked when storage_mb_used >= storage_mb_limit
+  h.eval("openDocUploader('insurance');");
+  assert.ok(h.elements.get('planComparisonModal'), "Must open plan comparison modal when vault storage limit reached");
+  assert.ok(!h.elements.get('docUploadModal'), "Document upload modal must not open when storage limit reached");
+});
+
+
 

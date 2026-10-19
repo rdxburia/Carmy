@@ -3934,5 +3934,206 @@ body.td-admin-mode #admin.view.active {
   border: 1px solid #fbcfe8;
 }
 
+/* ===== Phase 3: User Dashboard & Subscription Plans ===== */
+.plan-status-card {
+  margin-top: 14px;
+  background: #ffffff;
+  border: 1px solid var(--c-line, #e2e8f0);
+  border-radius: 16px;
+  padding: 20px;
+}
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--c-line, #f1f5f9);
+}
+.plan-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+.plan-badge.plan-lite {
+  background: #f1f5f9;
+  color: #475569;
+}
+.plan-badge.plan-premium {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.plan-badge.plan-ultra {
+  background: #faf5ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+.plan-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+.plan-metric-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+}
+.plan-metric-box b {
+  display: block;
+  font-size: 16px;
+  color: #0f172a;
+  margin-top: 4px;
+}
+.plan-quota-meter {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.plan-quota-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.plan-cycle-toggle {
+  display: inline-flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  gap: 4px;
+}
+.plan-cycle-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plan-cycle-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.plan-save-pill {
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.plan-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.plan-tier-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.plan-tier-card.featured {
+  border: 2px solid #2563eb;
+  box-shadow: 0 4px 20px rgba(37,99,235,0.08);
+}
+.plan-tier-card.current {
+  background: #f8fafc;
+}
+.plan-ribbon {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+.plan-tier-price {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 8px 0;
+}
+.plan-tier-price small {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+.plan-tier-features {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: #334155;
+  flex-grow: 1;
+}
+.plan-tier-features li:before {
+  content: "✓ ";
+  color: #16a34a;
+  font-weight: 800;
+}
+.plan-expired-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plan-storage-banner {
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plan-limit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 
 

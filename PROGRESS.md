@@ -763,3 +763,42 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - `npm.cmd test`: 146/146 tests passing (100% green, 0 failures, 0 skips).
 
 
+## 2026-10-19 — Phase 3: User Dashboard Plan Management & Quotas
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only plan management, subscription status card, plan comparison modal, upgrade request workflow, activation code redemption, and vehicle/vault storage quota enforcement.
+- **Implemented Changes:**
+  - **Plan Status Card (`renderPlanStatusCard`, `loadUserPlanStatus`):**
+    - Mounted in Owner Profile (`ownerProfileView`).
+    - Loads authoritative plan status via `GET /api/plan/status`.
+    - Renders `.admin-blocked-card` containing HTTP method and `/api/plan/status` on endpoint failure/404.
+    - Displays active tier badge (Lite, Premium, Ultra), subscription status (ACTIVE/EXPIRED), entitlement expiration date, vehicle quota meter (`vehicleCount / maxVehicles`), and encrypted vault storage meter (`storageUsed / storageLimit MB`).
+  - **Activation Code Redemption (`toggleActivationRedeemSection`, `redeemActivationCode`):**
+    - Expandable redemption box in plan card.
+    - Submits voucher code to `POST /api/activation/redeem`.
+    - Refreshes authoritative plan status upon successful redemption and displays inline status feedback.
+  - **Plan Comparison Modal (`openPlanComparisonModal`, `setComparisonCycle`, `renderPlanComparisonModalContent`):**
+    - Multi-tier side-by-side comparison for Lite (₹0), Premium (₹69/mo or ₹708/yr), and Ultra (₹199/mo or ₹1999/yr).
+    - Monthly vs Annual billing toggle with 15% discount badge.
+    - Feature check-matrix (vehicle counts, vault storage, Form 29/30 PDF generator, priority SLA).
+    - Current plan indicator and direct upgrade action buttons.
+  - **Upgrade Request Modal (`openUpgradeRequestModal`, `submitUpgradeRequest`):**
+    - Allows requesting upgrade to Premium or Ultra with preferred payment mode (UPI, Netbanking, Card).
+    - Validates 10-digit contact mobile number and posts request to `POST /api/upgrade-requests`.
+  - **Vehicle Limit Guard (`showCarForm`, `saveCarForm`):**
+    - Compares current registered vehicle count against `userPlanStatus.max_vehicles`.
+    - Blocks opening car form and saving new cars when quota is exceeded, opening the Plan Comparison modal with a descriptive toast.
+  - **Document Vault Storage Guard (`docsView`, `openDocUploader`):**
+    - Checks document vault usage against `userPlanStatus.storage_mb_limit`.
+    - Renders `.plan-storage-banner` warning in docs view and blocks opening file uploader when vault is full, launching the comparison modal.
+  - **Expiration Warning Banner (`renderPlanExpirationBanner`):**
+    - Renders prominent warning in dashboard when `userPlanStatus.status === 'expired'` or `is_expired` is true with one-click renewal button.
+  - **CSS Styling:** Appended `.plan-status-card`, `.plan-card-head`, `.plan-badge`, `.plan-metrics-grid`, `.plan-metric-box`, `.plan-quota-meter`, `.plan-quota-fill`, `.plan-cycle-toggle`, `.plan-cycle-btn`, `.plan-save-pill`, `.plan-cards-grid`, `.plan-tier-card`, `.plan-ribbon`, `.plan-tier-price`, `.plan-tier-features`, `.plan-expired-banner`, `.plan-storage-banner`, `.plan-limit-badge` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase3-plan`.
+  - **Automated Tests:** Added 4 new regression tests in `tests/customer-portal-regression.test.mjs` verifying plan status card rendering & 404 blocked card, activation code redemption API calls, upgrade request validation & submission, and vehicle/vault quota blocking.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 150/150 tests passing (100% green, 0 failures, 0 skips).
+
+
+
