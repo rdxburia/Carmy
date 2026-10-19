@@ -201,3 +201,14 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - W3: Worker script tag `ca37e48aa3b74432954ce6e4a2d9a0b3`, trigger `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`, latest build `c67646ef-3f63-4137-9a20-4e21e454f5d5` succeeded for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721`. Version 28 `130bfe07-5f43-4d90-afd0-3954d5ba3058` was verified to use staging-only D1/R2/rate-limit/Supabase resources.
 - Added staging binding guard test and CI workflow on branch `ci/staging-worker-bindings-20261019`; see `PROGRESS.md` for exact details. Wait for CI/PR and sync test to the Cloudflare trigger branch before changing its build command to execute the guard.
 - Do not modify production resources while any production gate is unmet.
+
+
+## 2026-10-19 — Autonomous Mode v5 execution status
+- W1: Staging project ref verified, but `auth.users=0`, `auth.identities=0`, and `super_admins=0`; no JWT sign-in/admin registry PASS. The full execution details and exact connector errors are in `PROGRESS.md`.
+- W2: `SUPABASE_SECRET_KEY` absent on staging Worker. Cloudflare exact error: `10056: Binding 'SUPABASE_SECRET_KEY' not found.`; Supabase tool returns only public keys; Management API URL is inaccessible through web tool. Never substitute a publishable key.
+- W3: PASS for staging build trigger and guard. Build `c9433d84-ccb7-4d9a-b46b-cf8b74781a2b` succeeded with the guard command and deployed staging Worker version 30 `09d68d44-3f3f-4f7a-a245-93d343663b06`, 100% traffic, isolated D1/R2/rate-limit/Supabase bindings. PR #173 merged; guard workflow passed.
+- W4: Staging login URL https://carmy-ticket-staging.pages.dev; staging API URL https://carmy-api-staging.mr-rny-buria.workers.dev. Deployment metadata is successful, but actual login cannot be proven until Auth users/key are fixed. Keep PR #161 open and unmerged.
+- W5: Real-JWT E2E not run; no synthetic ticket was created.
+- W6: Duplicate-contact migrations and cache invalidation secret names verified in staging Vault/Worker; values never read.
+- W7: Production backup bookmark and export success recorded, but export size/checksum missing. Production schema/aggregate baseline and 0007 impact counts are recorded. Production Worker version 248 is active, but exact Git commit mapping is not available.
+- Production remains HOLD until all five gates pass. No production data/schema/Worker was changed. See the dated PROGRESS.md entry for detailed evidence and next actions.
