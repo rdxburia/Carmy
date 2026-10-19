@@ -765,3 +765,34 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - **PR #161 Synchronized:** Merged `origin/main` (`e89a84f`) into `feat/ticket-frontend` with zero code conflicts. Executed `npm.cmd test` (136/136 passed) and `tests/customer-portal-regression.test.mjs` (82/82 passed). Pushed commit `4b3f820`; GitHub PR #161 is `CLEAN` and `MERGEABLE`.
 - **Authenticated Staging E2E Status:** Live non-authenticated smoke suite executed against `https://carmy-api-staging.mr-rny-buria.workers.dev` and `https://carmy-ticket-staging.pages.dev` with 5/5 checks PASS. Authenticated customer/admin browser E2E (isolation of Customer A vs Customer B tickets, admin roster view) remains **NOT RUN** because QA password (`QA_TEST_PASSWORD`) and privileged secrets are not provisioned in local environment. Per explicit owner directive, mandatory E2E release gate is strictly enforced; PR #177 and PR #161 remain unmerged until authenticated E2E verification is completed.
 - **Production Isolation:** No modifications to production Worker, production D1, production Supabase auth, or production secrets.
+
+
+## 2026-10-19 13:55 IST — Live authenticated staging E2E unblocked and verified (8/8 PASS)
+- **Goal & Authorization:** Unblock authenticated staging E2E using real sessions for QA accounts (`qa-customer-a@carmy-staging.test`, `qa-customer-b@carmy-staging.test`, `qa-admin@carmy-staging.test`) on staging Supabase `vejccahjrlwhaniajgez`, staging Worker `carmy-api-staging`, and staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`.
+- **Access Check & Configuration:**
+  - Local secret store: Authorized ignored file `.env.local` is present (matches `.gitignore` rule `.env*`).
+  - Staging Auth: Password-grant sign-in verified live with HTTP 200 for all three QA accounts using the staging Supabase publishable key from `carmy-ticket-staging.pages.dev/js/config.js`.
+  - Cloudflare staging access: Account OAuth token configured with D1 read/write permissions enables live aggregate queries against staging D1 without production access.
+  - Local environment store populated with staging keys (zero credentials or JWTs logged or committed).
+- **Admin Role Source Verification:**
+  - `qa-admin@carmy-staging.test` UUID is authorized via `public.super_admins` table on staging Supabase (`vejccahjrlwhaniajgez`) with `active = true`.
+  - Role lookup in `worker/src/super-admin.js` (`canManageTickets` / `requireSuperAdmin`) executes PostgREST check against `/rest/v1/super_admins?user_id=eq.<id>&active=eq.true`.
+  - Live authorization check confirmed: Non-admin customers (`qa-customer-a`, `qa-customer-b`) receive HTTP 403 (`Super Admin access required.`) on `/api/admin/*`, while admin receives HTTP 200.
+- **Test Suite Results (100% PASS):**
+  - `node --env-file=.env.local tests/staging-ticket-e2e.mjs`: 8/8 PASS.
+    1. Password-grant sign-in returns real JWTs for all three QA users: PASS
+    2. Unauthenticated and tampered-token requests are rejected (401): PASS
+    3. Customer-A creates a synthetic ticket and reads its detail: PASS
+    4. Customer-B cannot list or read Customer-A's ticket (IDOR isolation): PASS
+    5. Non-admin cannot mutate an admin ticket route (403): PASS
+    6. Admin enables chat, posts public/internal messages; customer reply succeeds: PASS
+    7. Customer view exposes public events and never exposes internal note: PASS
+    8. Admin assignment and atomic event/read/audit writes; original rows preserved: PASS
+  - `tests/staging-readonly-jwt-smoke.mjs` (from PR #176): PASS (3 JWT sign-ins, 401 missing/tampered token, 403 customer denied admin list, customer & admin ticket list reads).
+- **PR Status & Recommendations:**
+  - PR #177 (`feat/support-ticket-backend-v2`): `CLEAN`, `MERGEABLE`, all GitHub Actions CI checks green. Backend ticket workflow verified against real staging D1 and Supabase. Ready for merge.
+  - PR #161 (`feat/ticket-frontend`): `CLEAN`, `MERGEABLE`, all GitHub Actions CI checks green. Ready for merge following PR #177.
+  - PR #176 (`test/staging-readonly-jwt-smoke-20261019`): `CLEAN`, `MERGEABLE`, smoke test verified.
+  - No PR was merged in this session per strict instructions.
+- **Production Isolation:** Zero modifications to production Worker (`carmy-api`), production D1 (`57c85007-...`), production Supabase (`hlrmuvzmaegnbgzvvfsn`), or production secrets.
+
