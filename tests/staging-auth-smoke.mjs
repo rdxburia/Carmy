@@ -17,7 +17,7 @@ await check("missing bearer token returns 401", async () => {
 });
 await check("tampered JWT returns 401", async () => {
   const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJxdWEtc3RheWluZy1zbW9rZSJ9.invalid";
-  const response = await fetch(worker + "/api/tickets", { headers: { Authorization: `Bearer ${token} } });
+  const response = await fetch(worker + "/api/tickets", { headers: { Authorization: "Bearer " + token } });
   if (response.status !== 401) throw new Error(`expected 401, got ${response.status}`);
 });
 await check("staging Pages origin receives CORS preflight", async () => {
