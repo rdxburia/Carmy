@@ -522,3 +522,10 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - The staging isolation and production HOLD notes are now on `main`. No additional infrastructure changes in this documentation-only follow-up.
 - Active staging deployment remains version 19, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`; secret inventory empty. Staging E2E is still not run because privileged staging Supabase credentials are unavailable through the connector.
 - No production data read or mutation; no production migration or Worker deployment.
+
+
+## 2026-10-19 — Autonomous v5 staging build-trigger verification
+- After checking the active Workers Builds configuration, verified trigger `4f8aa961-d0fc-43d1-90f3-b8016e090b5c` watches branch `staging-worker-cors` and deploys with `npx wrangler deploy --config wrangler.staging.toml`.
+- Confirmed a prior push-triggered build for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721` completed successfully; its resulting staging Worker version 28 used only staging D1/R2/rate-limit/Supabase bindings.
+- This documentation-only commit is intended to prove the branch push trigger again. No production resources or secrets are modified by this commit.
+- W1 remains unresolved: Auth SQL currently reports zero users in the selected staging project. W2 remains unresolved: the staging Worker has no `SUPABASE_SECRET_KEY`, and connected tools do not expose a privileged Supabase key retrieval action. Details are recorded in the latest main-branch progress log.
