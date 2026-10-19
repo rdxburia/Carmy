@@ -201,3 +201,11 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - W3: Worker script tag `ca37e48aa3b74432954ce6e4a2d9a0b3`, trigger `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`, latest build `c67646ef-3f63-4137-9a20-4e21e454f5d5` succeeded for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721`. Version 28 `130bfe07-5f43-4d90-afd0-3954d5ba3058` was verified to use staging-only D1/R2/rate-limit/Supabase resources.
 - Added staging binding guard test and CI workflow on branch `ci/staging-worker-bindings-20261019`; see `PROGRESS.md` for exact details. Wait for CI/PR and sync test to the Cloudflare trigger branch before changing its build command to execute the guard.
 - Do not modify production resources while any production gate is unmet.
+
+
+## 2026-10-19 — Read-only staging JWT smoke test added
+- Added `tests/staging-readonly-jwt-smoke.mjs` on branch `test/staging-readonly-jwt-smoke-20261019`. It is intentionally read-only: no ticket creation, update, reply, assignment, deletion, or audit/event mutation.
+- It guards the exact staging Worker hostname and Supabase project ref, then signs in the two customer QA accounts and staging admin and checks missing/tampered-token rejection, customer denial of the admin list, and customer/admin ticket-list reads.
+- This is a smoke test, not the full ticket workflow E2E. It cannot establish per-ticket isolation or internal-note visibility without a known owner-approved fixture, and it does not validate ticket event/audit writes.
+- Cloudflare's read-only secret inventory verified the names `SUPABASE_SECRET_KEY` and `CACHE_INVALIDATION_SECRET` on `carmy-api-staging`; secret values were not accessed. The real-JWT smoke script has not been executed in this session because no secure Node.js runtime is available through the connected tools.
+- Production remains HOLD and untouched; PR #161 remains open/unmerged. Do not bypass append-only staging event/audit protections.
