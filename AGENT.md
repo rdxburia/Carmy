@@ -246,3 +246,9 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - **PR/CI:** GitHub API returned no pull request for this branch and no Actions workflow runs for this branch at verification time. Therefore there is no CI test result to rely on. The GitHub connector has no local Node shell; `npm test` was NOT RUN. Staging D1 migration tracking has NOT been queried in this pass.
 - **Code review note:** route authorization is wired in `worker/src/index.js`: team POST uses Super Admin auth plus audit; team GET and admin ticket routes use `canManageTickets`; view-as-user is routed after ticket permission checks. Static review is not runtime verification.
 - **Safety:** no files other than this append-only log and `PROGRESS.md` were changed by this audit; no merge, deployment, migration apply, or production operation occurred. Next: run `npm test` in a Node-capable checkout, then inspect staging D1 migration tracking before considering any staging apply/E2E. Production remains HOLD.
+
+
+## 2026-10-19 — Read-only staging D1 tracking check
+- Queried only the staging D1 UUID explicitly configured in `wrangler.staging.toml` (`803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`); no production database was queried.
+- Read-only SQL results: `d1_migrations` contains only `0007_support_ticket_workflow.sql` (applied_at `2026-10-18 19:33:58`); the `team_members` table is absent; `support_tickets` has the seven 0007 workflow columns; aggregate ticket count is 4. No ticket row content was selected. Queries reported `changed_db=false` and `rows_written=0`.
+- **Decision:** do not apply anything through a hand-written SQL call. Wrangler migration application is not available in this execution environment, so 0008 remains pending and the D1 ledger was not modified. Use Wrangler with `wrangler.staging.toml` after tests are run and reviewed. Production remains HOLD.
