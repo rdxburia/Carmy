@@ -80,7 +80,7 @@ export async function viewTicketAsUser(request, env, origin, user, ticketId) {
       chat_enabled: Boolean(row.chat_enabled) && Number(row.chat_enabled_until || 0) > now && row.status !== "closed",
       chat_enabled_until: row.chat_enabled_until, show_agent_name: Boolean(row.show_agent_name),
     };
-    return json({ ok: true, data: { ticket, public_events: events.results || [] } }, 200, origin);
+    return json({ ok: true, data: { ticket, public_events: (events.results || []).filter((event) => event?.visibility !== "internal" && event?.event_type !== "internal_note").map((event) => ({ id: event.id, ticket_id: event.ticket_id, actor_type: event.actor_type, event_type: event.event_type, message: event.message, created_at: event.created_at })) } }, 200, origin);
   } catch (err) {
     console.error("View-as-user ticket read failed", err?.message || err);
     return fail("Ticket data is temporarily unavailable.", 503, origin, "TICKET_READ_UNAVAILABLE");
