@@ -193,3 +193,11 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - PR #168 merged at `3e050234079df6157dc718e625be0339584ed3f4`; append-only staging isolation and production HOLD evidence is now on `main`.
 - Current staging status remains: active Worker version 19/deployment `2a9497bb-a110-457f-aded-5c16b77dd75a` with staging D1/R2/rate-limit/Supabase URL bindings; `SUPABASE_SECRET_KEY` absent. Authenticated E2E remains unverified because the connected Supabase tools cannot retrieve the privileged staging key.
 - Production remains untouched pending passing staging E2E and all production preconditions.
+
+
+## 2026-10-19 — Autonomous v5 W1–W3 execution record
+- W1: Staging Supabase ref verified as `vejccahjrlwhaniajgez`; SQL reports zero Auth users in this project, so owner-listed QA accounts are absent here. No manual writes to Auth system tables were attempted. Auth Admin creation and password-grant sign-in require a supported Auth/Management API path not present in connected actions.
+- W2: Cloudflare inventory for `carmy-api-staging` has `CACHE_INVALIDATION_SECRET` only; `SUPABASE_SECRET_KEY` is missing. Supabase key tool returns only publishable/anon keys. Never substitute them for privileged credentials or log secret values.
+- W3: Worker script tag `ca37e48aa3b74432954ce6e4a2d9a0b3`, trigger `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`, latest build `c67646ef-3f63-4137-9a20-4e21e454f5d5` succeeded for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721`. Version 28 `130bfe07-5f43-4d90-afd0-3954d5ba3058` was verified to use staging-only D1/R2/rate-limit/Supabase resources.
+- Added staging binding guard test and CI workflow on branch `ci/staging-worker-bindings-20261019`; see `PROGRESS.md` for exact details. Wait for CI/PR and sync test to the Cloudflare trigger branch before changing its build command to execute the guard.
+- Do not modify production resources while any production gate is unmet.
