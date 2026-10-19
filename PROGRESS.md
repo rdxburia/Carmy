@@ -522,3 +522,9 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - The staging isolation and production HOLD notes are now on `main`. No additional infrastructure changes in this documentation-only follow-up.
 - Active staging deployment remains version 19, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`; secret inventory empty. Staging E2E is still not run because privileged staging Supabase credentials are unavailable through the connector.
 - No production data read or mutation; no production migration or Worker deployment.
+
+
+## 2026-10-19 — Staging duplicate-contact parity restored
+- Read production migration names and compared routine/trigger names only. Production has `check_registration_duplicate`, `reject_duplicate_profile_contacts_on_signup`, and BEFORE INSERT trigger `auth.reject_duplicate_contacts_before_auth_signup`; staging had the helper but lacked the signup guard and trigger.
+- Reconstructed two idempotent migration files on branch `fix/staging-auth-duplicate-guard-v4`: `20261019010000_add_registration_duplicate_check.sql` and `20261019010001_block_duplicate_contacts_during_auth_signup.sql`. Applied staging-only connector migrations `v4_reconstructed_add_registration_duplicate_check` (ledger version `20261019011825`) and `v4_reconstructed_block_duplicate_contacts_during_auth_signup` (ledger version `20261019011830`).
+- Verified staging routine names include both duplicate-check functions and verified `reject_duplicate_contacts_before_auth_signup` exists on `auth.users` as a BEFORE INSERT trigger. No production schema or data was modified. These migrations were applied only to `vejccahjrlwhaniajgez`.
