@@ -66,6 +66,8 @@ let adminGaragesLoading=false;
 let adminGaragesError=null;
 let adminGaragesFilter='all';
 let adminGaragesSearch='';
+let teamMeLoading=false;
+let teamMeError=null;
 let adminContentTab='about';
 let userPlanStatus=null;
 let userPlanLoading=false;
@@ -135,6 +137,7 @@ function clearUserMemory(){
   adminTeamList=null;adminTeamLoading=false;adminTeamError=null;
   adminAuditList=null;adminAuditLoading=false;adminAuditError=null;
   adminGaragesList=null;adminGaragesLoading=false;adminGaragesError=null;adminGaragesFilter='all';adminGaragesSearch='';
+  currentAdminRole=null;currentAdminProfile=null;teamMeLoading=false;teamMeError=null;
   userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   userPlanStatus=null;userPlanLoading=false;userPlanError=null;isActivationRedeemOpen=false;
   adminTpinStatus=null;adminTpinLoading=false;adminTpinError=null;pendingTpinActionCallback=null;
@@ -4590,6 +4593,11 @@ async function loadAdminGarages(force=false){
 }
 
 async function updateAdminGarageStatus(garageId, newStatus){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageGarages){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify workshop status.','error');
+    return;
+  }
   executeProtectedAdminAction('Update Workshop Status', async ()=>{
     try{
       await workerPatch('/api/admin/garages/'+encodeURIComponent(garageId)+'/status', { status: newStatus });
@@ -5374,36 +5382,8 @@ function renderScreenAdminAccount(){
       '</div>'+
     '</div>'+
     '<div class="admin-account-grid">'+
-      '<div class="admin-account-card">'+
-        '<div class="admin-card-head">'+
-          '<h3>Administrator Profile</h3>'+
-          '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
-        '</div>'+
-        '<div class="admin-profile-meta">'+
-          '<div class="admin-profile-meta-row">'+
-            '<span class="muted">Name</span>'+
-            '<b id="adminProfileNameDisplay">—</b>'+
-          '</div>'+
-          '<div class="admin-profile-meta-row">'+
-            '<span class="muted">Email</span>'+
-            '<span id="adminProfileEmailDisplay" style="font-family:monospace;font-weight:600;color:#2563eb">—</span>'+
-          '</div>'+
-          '<div class="admin-profile-meta-row">'+
-            '<span class="muted">Role Clearance</span>'+
-            '<span id="adminProfileRoleBadge" class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span>'+
-          '</div>'+
-          '<div class="admin-profile-meta-row">'+
-            '<span class="muted">MFA Verification</span>'+
-            '<span class="admin-badge status-active">Enforced (Session Guard)</span>'+
-          '</div>'+
-          '<div class="admin-profile-meta-row">'+
-            '<span class="muted">Account Status</span>'+
-            '<span class="admin-badge status-active">Active</span>'+
-          '</div>'+
-        '</div>'+
-        '<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px;color:#64748b">'+
-          '🔒 Profile metadata is read-only and governed by server directory. Password change below applies immediately to authenticated sessions.'+
-        '</div>'+
+      '<div class="admin-account-card" id="adminProfileCardContainer">'+
+        renderAdminProfileCardInner()+
       '</div>'+
 
       '<div class="admin-account-card">'+
@@ -5583,17 +5563,376 @@ async function handleAdminPasswordChange(){
   }
 }
 
+function renderAdminProfileCardInner(){
+  if(teamMeLoading){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrator Profile</h3>'+
+      '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+    '</div>'+
+    '<div style="padding:24px;text-align:center"><span class="spinner-sm"></span> Loading profile from <code>GET /api/team/me</code>...</div>';
+  }
+  if(teamMeError){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrator Profile</h3>'+
+      '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+    '</div>'+
+    renderAdminBlockedCard('/api/team/me','GET',teamMeError?.message||'Admin team profile endpoint unavailable (404).');
+  }
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const email=user?.email||currentAdminProfile?.email||'admin@carmy.internal';
+  const name=currentAdminProfile?.name||currentAdminProfile?.full_name||user?.user_metadata?.name||'Administrator';
+  return '<div class="admin-card-head">'+
+    '<h3>Administrator Profile</h3>'+
+    '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+  '</div>'+
+  '<div class="admin-profile-meta">'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Name</span>'+
+      '<b id="adminProfileNameDisplay">'+esc(name)+'</b>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Email</span>'+
+      '<span id="adminProfileEmailDisplay" style="font-family:monospace;font-weight:600;color:#2563eb">'+esc(email)+'</span>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Role Clearance</span>'+
+      '<span id="adminProfileRoleBadge" class="admin-badge team-role-badge role-'+esc(perms.role.replace('_','-'))+'">'+esc(perms.label)+'</span>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">MFA Verification</span>'+
+      '<span class="admin-badge status-active">Enforced (Session Guard)</span>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Account Status</span>'+
+      '<span class="admin-badge status-active">Active</span>'+
+    '</div>'+
+  '</div>'+
+  '<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px;color:#64748b">'+
+    '🔒 Profile metadata is read-only and governed by server directory. Password change below applies immediately to authenticated sessions.'+
+  '</div>';
+}
+
+function getAdminRolePermissions(role){
+  const normRole=(role||'').toLowerCase().trim();
+  if(normRole==='support_lead'||normRole==='support'){
+    return {
+      role:'support_lead',
+      label:'Support Lead',
+      allowedScreens:['home','tickets','account'],
+      canMutateTickets:true,
+      canViewAudit:false,
+      canManageUsers:false,
+      canManageTokens:false,
+      canManagePlans:false,
+      canManageGarages:false,
+      canManageTeam:false,
+      defaultScreen:'tickets'
+    };
+  }
+  if(normRole==='billing_admin'||normRole==='billing'){
+    return {
+      role:'billing_admin',
+      label:'Billing Admin',
+      allowedScreens:['home','plans','tokens','upgrades','account'],
+      canMutateTickets:false,
+      canViewAudit:false,
+      canManageUsers:false,
+      canManageTokens:true,
+      canManagePlans:true,
+      canManageGarages:false,
+      canManageTeam:false,
+      defaultScreen:'plans'
+    };
+  }
+  if(normRole==='auditor'){
+    return {
+      role:'auditor',
+      label:'Auditor',
+      allowedScreens:['home','audit','tickets','account'],
+      canMutateTickets:false,
+      canViewAudit:true,
+      canManageUsers:false,
+      canManageTokens:false,
+      canManagePlans:false,
+      canManageGarages:false,
+      canManageTeam:false,
+      defaultScreen:'audit'
+    };
+  }
+  return {
+    role:normRole==='owner'?'owner':'super_admin',
+    label:normRole==='owner'?'Owner / Super Admin':'Super Admin',
+    allowedScreens:['home','users','tokens','plans','upgrades','tickets','garages','team','audit','content','settings','reports','account'],
+    canMutateTickets:true,
+    canViewAudit:true,
+    canManageUsers:true,
+    canManageTokens:true,
+    canManagePlans:true,
+    canManageGarages:true,
+    canManageTeam:true,
+    defaultScreen:'home'
+  };
+}
+
+async function loadTeamMe(force=false){
+  if(teamMeLoading)return currentAdminProfile;
+  if(currentAdminProfile&&!force)return currentAdminProfile;
+  teamMeLoading=true;
+  teamMeError=null;
+  try{
+    const res=await workerGet('/api/team/me');
+    if(res){
+      currentAdminProfile=res.profile||res;
+      if(res.role){
+        currentAdminRole=res.role;
+      }else if(currentAdminProfile.role){
+        currentAdminRole=currentAdminProfile.role;
+      }
+      return currentAdminProfile;
+    }
+  }catch(err){
+    teamMeError=err;
+    console.warn('loadTeamMe notice:',err);
+  }finally{
+    teamMeLoading=false;
+    const cardEl=$('adminProfileCardContainer');
+    if(cardEl)cardEl.innerHTML=renderAdminProfileCardInner();
+    wireAdminAccountSecurityForm();
+  }
+  return null;
+}
+
+function checkForcedPasswordChange(){
+  let old=document.getElementById('forcedPasswordOverlay');
+  if(old)old.remove();
+  const req=Boolean(currentAdminProfile?.password_change_required||currentAdminProfile?.temp_password_active);
+  if(!req)return false;
+
+  const overlay=document.createElement('div');
+  overlay.id='forcedPasswordOverlay';
+  overlay.className='admin-forced-overlay';
+  overlay.innerHTML='<div class="admin-forced-box">'+
+    '<div style="text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:8px">🔒</div>'+
+      '<h2 style="margin:0 0 8px 0;font-size:20px;font-weight:800;color:#0f172a">First-Login Password Required</h2>'+
+      '<p class="muted" style="margin:0;font-size:13px;line-height:1.5">'+
+        'Your administrative account is flagged with a temporary password. You must set a permanent password before accessing console workspaces.'+
+      '</p>'+
+    '</div>'+
+    '<form id="forcedPasswordForm" onsubmit="event.preventDefault();submitForcedPasswordChange();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="forcedNewPassword" style="font-size:12.5px;font-weight:700">New Secure Password</label>'+
+        '<input type="password" id="forcedNewPassword" autocomplete="new-password" required minlength="8" placeholder="Minimum 8 characters" oninput="updateAdminPasswordMeter(this.value)">'+
+        '<div class="admin-password-meter"><div id="adminPasswordMeterFill" class="admin-password-meter-fill"></div></div>'+
+        '<div id="adminPasswordFeedback" class="admin-password-feedback">Strength: None</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="forcedConfirmPassword" style="font-size:12.5px;font-weight:700">Confirm New Password</label>'+
+        '<input type="password" id="forcedConfirmPassword" autocomplete="new-password" required minlength="8" placeholder="Re-type new password">'+
+      '</div>'+
+      '<div id="forcedPasswordError" class="admin-blocked-card" style="display:none;padding:10px;margin:0;font-size:12.5px"></div>'+
+      '<button type="submit" id="btnSubmitForcedPassword" class="primary" style="padding:12px;font-weight:700;font-size:14px;border-radius:10px;margin-top:6px">Set Password &amp; Proceed</button>'+
+    '</form>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  return true;
+}
+
+async function submitForcedPasswordChange(){
+  const newIn=$('forcedNewPassword');
+  const confIn=$('forcedConfirmPassword');
+  const errBox=$('forcedPasswordError');
+  const btn=$('btnSubmitForcedPassword');
+
+  const newPass=newIn?.value||'';
+  const confPass=confIn?.value||'';
+
+  if(errBox)errBox.style.display='none';
+
+  if(!newPass||newPass.length<8){
+    if(errBox){
+      errBox.textContent='Password must be at least 8 characters.';
+      errBox.style.display='block';
+    }
+    toast('Password must be at least 8 characters.','error');
+    return;
+  }
+  if(newPass!==confPass){
+    if(errBox){
+      errBox.textContent='Passwords do not match.';
+      errBox.style.display='block';
+    }
+    toast('Passwords do not match.','error');
+    return;
+  }
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Setting Password...';
+  }
+
+  try{
+    let ok=false;
+    let serverErr=null;
+    if(db&&db.auth&&typeof db.auth.updateUser==='function'){
+      const res=await db.auth.updateUser({password:newPass});
+      if(res?.error){
+        serverErr=res.error.message;
+      }else{
+        ok=true;
+      }
+    }else{
+      try{
+        const res=await workerPost('/api/admin/change-password',{new_password:newPass});
+        if(res&&res.ok)ok=true;
+        else serverErr=res?.error?.message||'Server rejected password update.';
+      }catch(e){
+        serverErr=e?.message||'Password change service unavailable.';
+        if(errBox){
+          errBox.innerHTML=renderAdminBlockedCard('/api/admin/change-password','POST',e?.message||'Password change service unavailable.');
+          errBox.style.display='block';
+          return;
+        }
+      }
+    }
+
+    if(!ok){
+      throw new Error(serverErr||'Password change failed.');
+    }
+
+    if(currentAdminProfile){
+      currentAdminProfile.password_change_required=false;
+      currentAdminProfile.temp_password_active=false;
+    }
+    const overlay=document.getElementById('forcedPasswordOverlay');
+    if(overlay)overlay.remove();
+
+    toast('Administrative password established successfully.','ok');
+    checkForcedProfileCompletion();
+  }catch(err){
+    if(errBox){
+      errBox.textContent=err?.message||'Password change failed.';
+      errBox.style.display='block';
+    }
+    toast(err?.message||'Password change failed.','error');
+  }finally{
+    if(newIn)newIn.value='';
+    if(confIn)confIn.value='';
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Set Password & Proceed';
+    }
+  }
+}
+
+function checkForcedProfileCompletion(){
+  let old=document.getElementById('forcedProfileOverlay');
+  if(old)old.remove();
+  const req=Boolean(currentAdminProfile?.profile_incomplete);
+  if(!req)return false;
+
+  const overlay=document.createElement('div');
+  overlay.id='forcedProfileOverlay';
+  overlay.className='admin-forced-overlay';
+  overlay.innerHTML='<div class="admin-forced-box">'+
+    '<div style="text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:8px">👤</div>'+
+      '<h2 style="margin:0 0 8px 0;font-size:20px;font-weight:800;color:#0f172a">Complete Specialist Profile</h2>'+
+      '<p class="muted" style="margin:0;font-size:13px;line-height:1.5">'+
+        'Please enter your administrative full name and 10-digit mobile number for verified audit tracking.'+
+      '</p>'+
+    '</div>'+
+    '<form id="forcedProfileForm" onsubmit="event.preventDefault();submitForcedProfileCompletion();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="forcedProfileName" style="font-size:12.5px;font-weight:700">Full Name</label>'+
+        '<input type="text" id="forcedProfileName" required placeholder="e.g. Rahul Sharma" value="'+esc(currentAdminProfile?.name||currentAdminProfile?.full_name||'')+'">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="forcedProfilePhone" style="font-size:12.5px;font-weight:700">Mobile Phone (10 digits)</label>'+
+        '<input type="tel" id="forcedProfilePhone" required placeholder="e.g. 9816012345" value="'+esc(currentAdminProfile?.phone||'')+'">'+
+      '</div>'+
+      '<div id="forcedProfileError" class="admin-blocked-card" style="display:none;padding:10px;margin:0;font-size:12.5px"></div>'+
+      '<button type="submit" id="btnSubmitForcedProfile" class="primary" style="padding:12px;font-weight:700;font-size:14px;border-radius:10px;margin-top:6px">Complete Profile &amp; Proceed</button>'+
+    '</form>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  return true;
+}
+
+async function submitForcedProfileCompletion(){
+  const nameIn=$('forcedProfileName');
+  const phoneIn=$('forcedProfilePhone');
+  const errBox=$('forcedProfileError');
+  const btn=$('btnSubmitForcedProfile');
+
+  const fullName=nameIn?.value?.trim()||'';
+  const phone=phoneIn?.value?.trim().replace(/\D/g,'')||'';
+
+  if(errBox)errBox.style.display='none';
+
+  if(!fullName){
+    if(errBox){
+      errBox.textContent='Full name is required.';
+      errBox.style.display='block';
+    }
+    toast('Full name is required.','error');
+    return;
+  }
+  if(!phone||phone.length<10){
+    if(errBox){
+      errBox.textContent='Valid 10-digit mobile phone number is required.';
+      errBox.style.display='block';
+    }
+    toast('Valid 10-digit mobile phone number is required.','error');
+    return;
+  }
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Saving Profile...';
+  }
+
+  try{
+    const res=await workerPost('/api/team/me/profile',{full_name:fullName,phone:phone});
+    if(currentAdminProfile){
+      currentAdminProfile.name=fullName;
+      currentAdminProfile.full_name=fullName;
+      currentAdminProfile.phone=phone;
+      currentAdminProfile.profile_incomplete=false;
+    }
+    const overlay=document.getElementById('forcedProfileOverlay');
+    if(overlay)overlay.remove();
+
+    toast('Specialist profile completed.','ok');
+    wireAdminAccountSecurityForm();
+  }catch(err){
+    if(errBox){
+      errBox.innerHTML=renderAdminBlockedCard('/api/team/me/profile','POST',err?.message||'Profile completion endpoint unavailable (404).');
+      errBox.style.display='block';
+    }
+    toast(err?.message||'Profile update failed.','error');
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Complete Profile & Proceed';
+    }
+  }
+}
+
 function wireAdminAccountSecurityForm(){
+  const perms=getAdminRolePermissions(currentAdminRole);
   const nameEl=$('adminProfileNameDisplay');
   const emailEl=$('adminProfileEmailDisplay');
   const roleEl=$('adminProfileRoleBadge');
   const topbarEmailEl=$('adminTopbarEmail');
   const email=user?.email||currentAdminProfile?.email||'admin@carmy.internal';
-  const name=currentAdminProfile?.name||user?.user_metadata?.name||'Administrator';
-  const role=currentAdminRole==='super_admin'?'Super Admin':(currentAdminRole==='support'?'Support Specialist':'Super Admin');
+  const name=currentAdminProfile?.name||currentAdminProfile?.full_name||user?.user_metadata?.name||'Administrator';
   if(nameEl)nameEl.textContent=name;
   if(emailEl)emailEl.textContent=email;
-  if(roleEl)roleEl.textContent=role;
+  if(roleEl){
+    roleEl.textContent=perms.label;
+    roleEl.className='admin-badge team-role-badge role-'+perms.role.replace('_','-');
+  }
   if(topbarEmailEl)topbarEmailEl.textContent=email;
 }
 
@@ -6263,6 +6602,17 @@ window.getAdminTpinStatus=()=>adminTpinStatus;
 window.setAdminTpinStatus=(val)=>{adminTpinStatus=val;};
 
 function renderAdminCurrentScreen(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.allowedScreens.includes(currentAdminScreen)){
+    return '<div class="admin-card" style="padding:40px;text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:12px">🔒</div>'+
+      '<h2 style="margin:0 0 8px 0;font-size:18px">Access Restricted</h2>'+
+      '<p class="muted" style="max-width:440px;margin:0 auto 16px auto">'+
+        'Your role <b>'+esc(perms.label)+'</b> does not have clearance to access the "'+esc(currentAdminScreen)+'" screen.'+
+      '</p>'+
+      '<button type="button" class="primary" onclick="switchAdminScreen(\''+perms.defaultScreen+'\')">Return to Allowed Workspace</button>'+
+    '</div>';
+  }
   if(currentAdminScreen==='users')return renderScreenUsers();
   if(currentAdminScreen==='tokens')return renderScreenTokens();
   if(currentAdminScreen==='plans')return renderScreenPlans();
@@ -6282,6 +6632,8 @@ function renderAdminViewContent(){
   const container=$('adminContent');
   if(!container)return;
 
+  const perms=getAdminRolePermissions(currentAdminRole);
+
   const screens=[
     {id:'home',label:'Overview',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'},
     {id:'users',label:'Users &amp; Accounts',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'},
@@ -6298,15 +6650,40 @@ function renderAdminViewContent(){
     {id:'account',label:'Account &amp; Security',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'}
   ];
 
-  const coreScreens=screens.slice(0,6);
-  const opsScreens=screens.slice(6);
+  const allowedScreens=screens.filter(s=>perms.allowedScreens.includes(s.id));
+  const coreScreens=allowedScreens.filter(s=>['home','users','tokens','plans','upgrades','tickets'].includes(s.id));
+  const opsScreens=allowedScreens.filter(s=>['garages','team','audit','content','settings','reports','account'].includes(s.id));
+
+  const mobileTabDefinitions=[
+    {id:'home',label:'Home',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'},
+    {id:'users',label:'Users',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'},
+    {id:'tickets',label:'Support',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>',badge:adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length},
+    {id:'plans',label:'Plans',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>'},
+    {id:'audit',label:'Audit',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'},
+    {id:'account',label:'Account',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'}
+  ];
+  const allowedMobileCandidates=mobileTabDefinitions.filter(t=>perms.allowedScreens.includes(t.id));
+  const mobileNavTabs=allowedMobileCandidates.length<=4 ? allowedMobileCandidates : allowedMobileCandidates.slice(0,4);
+  const showMoreTab=allowedScreens.length > mobileNavTabs.length;
+
+  const moreCandidates=[
+    {id:'account',label:'Account',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'},
+    {id:'tokens',label:'Tokens',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'},
+    {id:'upgrades',label:'Upgrades',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>'},
+    {id:'garages',label:'Garages',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'},
+    {id:'team',label:'Team',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'},
+    {id:'audit',label:'Audit Log',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'},
+    {id:'content',label:'Content',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'},
+    {id:'settings',label:'Settings',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'},
+    {id:'reports',label:'Reports',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'}
+  ].filter(item=>perms.allowedScreens.includes(item.id));
 
   container.innerHTML='<div class="admin-workspace-shell">'+
     '<header class="admin-topbar">'+
-      '<div class="admin-topbar-brand" onclick="switchAdminScreen(\'home\')">'+
+      '<div class="admin-topbar-brand" onclick="switchAdminScreen(\''+perms.defaultScreen+'\')">'+
         '<div class="admin-topbar-brand-mark">TD</div>'+
         '<div class="admin-brand-titles">'+
-          '<h1 class="admin-brand-title" style="margin:0;font-size:15px;line-height:1.2">Super Admin Console</h1>'+
+          '<h1 class="admin-brand-title" style="margin:0;font-size:15px;line-height:1.2">'+esc(perms.label)+' Console</h1>'+
           '<span class="admin-brand-badge">Torq Desk Operations</span>'+
         '</div>'+
       '</div>'+
@@ -6317,19 +6694,19 @@ function renderAdminViewContent(){
         '</div>'+
       '</div>'+
       '<div class="admin-topbar-actions">'+
-        '<span class="admin-security-pill">🔒 Server-Verified Admin</span>'+
+        '<span class="admin-security-pill">🔒 '+esc(perms.label)+'</span>'+
         '<div class="admin-profile-pill" onclick="switchAdminScreen(\'account\')" style="cursor:pointer" title="Manage Account &amp; Security"><span class="admin-profile-avatar">A</span><span id="adminTopbarEmail">admin</span></div>'+
         '<button type="button" class="admin-signout-btn" onclick="adminSignOut()">Sign Out</button>'+
       '</div>'+
     '</header>'+
     '<div class="admin-layout-body">'+
       '<aside class="admin-sidebar-shell">'+
-        '<div class="admin-sidebar-kicker">Core Workspace</div>'+
+        (coreScreens.length?'<div class="admin-sidebar-kicker">Core Workspace</div>':'')+
         coreScreens.map(s=>'<button type="button" class="admin-sidebar-item '+(currentAdminScreen===s.id?'active':'')+'" onclick="switchAdminScreen(\''+s.id+'\')">'+
           '<span class="admin-sidebar-item-content">'+s.icon+'<span>'+s.label+'</span></span>'+
           (s.badge?'<span class="admin-sidebar-badge open-badge">'+s.badge+'</span>':'')+
         '</button>').join('')+
-        '<div class="admin-sidebar-kicker">Operations &amp; Platform</div>'+
+        (opsScreens.length?'<div class="admin-sidebar-kicker">Operations &amp; Platform</div>':'')+
         opsScreens.map(s=>'<button type="button" class="admin-sidebar-item '+(currentAdminScreen===s.id?'active':'')+'" onclick="switchAdminScreen(\''+s.id+'\')">'+
           '<span class="admin-sidebar-item-content">'+s.icon+'<span>'+s.label+'</span></span>'+
         '</button>').join('')+
@@ -6345,27 +6722,15 @@ function renderAdminViewContent(){
       '</main>'+
     '</div>'+
     '<nav class="admin-mobile-nav" id="adminMobileNav">'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='home'?'active':'')+'" onclick="switchAdminScreen(\'home\')">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'+
-        '<span>Home</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='users'?'active':'')+'" onclick="switchAdminScreen(\'users\')">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'+
-        '<span>Users</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='tickets'?'active':'')+'" onclick="switchAdminScreen(\'tickets\')">'+
-        (adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length?'<span class="tab-badge"></span>':'')+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>'+
-        '<span>Support</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='plans'?'active':'')+'" onclick="switchAdminScreen(\'plans\')">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>'+
-        '<span>Plans</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen!=='home'&&currentAdminScreen!=='users'&&currentAdminScreen!=='tickets'&&currentAdminScreen!=='plans'?'active':'')+'" onclick="openAdminMoreSheet()">'+
+      mobileNavTabs.map(t=>'<button type="button" class="admin-mobile-tab '+(currentAdminScreen===t.id?'active':'')+'" onclick="switchAdminScreen(\''+t.id+'\')">'+
+        (t.badge?'<span class="tab-badge"></span>':'')+
+        t.icon+
+        '<span>'+t.label+'</span>'+
+      '</button>').join('')+
+      (showMoreTab?'<button type="button" class="admin-mobile-tab '+(allowedScreens.every(s=>s.id!==currentAdminScreen||mobileNavTabs.some(m=>m.id===currentAdminScreen))?'':'active')+'" onclick="openAdminMoreSheet()">'+
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>'+
         '<span>More</span>'+
-      '</button>'+
+      '</button>':'')+
     '</nav>'+
     '<div class="admin-more-sheet" id="adminMoreSheet" hidden onclick="if(event.target===this)closeAdminMoreSheet()">'+
       '<div class="admin-more-panel">'+
@@ -6374,42 +6739,9 @@ function renderAdminViewContent(){
           '<button type="button" class="ghost" onclick="closeAdminMoreSheet()" style="padding:4px 8px;font-size:16px">✕</button>'+
         '</div>'+
         '<div class="admin-more-grid">'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'account\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'+
-            '<span>Account</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'tokens\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'+
-            '<span>Tokens</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'upgrades\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>'+
-            '<span>Upgrades</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'garages\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'+
-            '<span>Garages</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'team\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'+
-            '<span>Team</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'audit\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'+
-            '<span>Audit Log</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'content\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'+
-            '<span>Content</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'settings\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'+
-            '<span>Settings</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'reports\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'+
-            '<span>Reports</span>'+
-          '</button>'+
+          moreCandidates.map(c=>'<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\''+c.id+'\')">'+
+            c.icon+'<span>'+c.label+'</span>'+
+          '</button>').join('')+
           '<button type="button" class="admin-more-btn" onclick="adminSignOut()" style="color:#dc2626">'+
             '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>'+
             '<span>Sign Out</span>'+
@@ -6422,11 +6754,23 @@ function renderAdminViewContent(){
 }
 
 function switchAdminScreen(screenId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.allowedScreens.includes(screenId)){
+    toast('Access denied: Role "'+perms.label+'" does not have clearance to view '+screenId+'.','error');
+    if(!perms.allowedScreens.includes(currentAdminScreen)){
+      currentAdminScreen=perms.defaultScreen;
+    }
+    renderAdminViewContent();
+    return;
+  }
   currentAdminScreen=screenId;
   closeAdminMoreSheet();
   renderAdminViewContent();
   if(screenId==='account'){
     wireAdminAccountSecurityForm();
+    if(!currentAdminProfile&&!teamMeLoading&&!teamMeError){
+      loadTeamMe();
+    }
     if(!adminTpinStatus&&!adminTpinLoading&&!adminTpinError){
       loadAdminTpinStatus();
     }
@@ -6601,6 +6945,9 @@ async function openAdminTicketDetails(ticketId){
     }).join('');
   }
 
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const canMutate=perms.canMutateTickets;
+
   let chatBoxHtml='';
   if(chatActive){
     chatBoxHtml='<div class="ticket-chat-toggle-box" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
@@ -6608,14 +6955,14 @@ async function openAdminTicketDetails(ticketId){
         '<div style="font-weight:700;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:6px">● Chat Active with Customer</div>'+
         countdownText+
       '</div>'+
-      '<button type="button" class="ghost" style="color:#dc2626;padding:4px 10px;font-size:12px" onclick="handleAdminChatToggle(\''+tid+'\',false)">Disable Chat</button>'+
+      (canMutate?'<button type="button" class="ghost" style="color:#dc2626;padding:4px 10px;font-size:12px" onclick="handleAdminChatToggle(\''+tid+'\',false)">Disable Chat</button>':'<button type="button" class="ghost" disabled style="color:#94a3b8;padding:4px 10px;font-size:12px" title="Auditor mode: mutations disabled">Disable Chat</button>')+
     '</div>';
   }else{
     chatBoxHtml='<div class="ticket-chat-toggle-box">'+
       '<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#0f172a">💬 Customer Chat Window (48h Window)</div>'+
-      '<p class="muted" style="margin:0 0 8px 0;font-size:12px">Enabling chat opens a 48-hour direct reply window in the customer\'s Help tab.</p>'+
-      '<textarea id="adminEnableChatMsg" rows="2" placeholder="Optional initial message to customer (e.g. Please reply with your odometer photo)..." style="width:100%;font-size:12.5px;border-radius:6px;border:1px solid #cbd5e1;padding:6px;box-sizing:border-box;margin-bottom:8px"></textarea>'+
-      '<button type="button" class="primary" id="btnAdminEnableChat" style="padding:6px 14px;font-size:12.5px" onclick="handleAdminEnableChatWithMsg(\''+tid+'\')">Enable Chat (48h Window)</button>'+
+      '<p class="muted" style="margin:0 0 8px 0;font-size:12px">Enabling chat opens a 48-hour direct reply window in the customer\'s Help tab.'+(canMutate?'':' (Auditor view: read-only)')+'</p>'+
+      (canMutate?('<textarea id="adminEnableChatMsg" rows="2" placeholder="Optional initial message to customer (e.g. Please reply with your odometer photo)..." style="width:100%;font-size:12.5px;border-radius:6px;border:1px solid #cbd5e1;padding:6px;box-sizing:border-box;margin-bottom:8px"></textarea>'+
+      '<button type="button" class="primary" id="btnAdminEnableChat" style="padding:6px 14px;font-size:12.5px" onclick="handleAdminEnableChatWithMsg(\''+tid+'\')">Enable Chat (48h Window)</button>'):'<button type="button" class="primary" disabled style="padding:6px 14px;font-size:12.5px;opacity:0.6;cursor:not-allowed">Enable Chat (Restricted)</button>')+
     '</div>';
   }
 
@@ -6650,38 +6997,38 @@ async function openAdminTicketDetails(ticketId){
       '<div>'+
         '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">STATUS WORKFLOW</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<select id="adminTicketStatusSelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+transitionOptions+'</select>'+
-          '<button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="handleAdminStatusChange(\''+tid+'\')">Update</button>'+
+          '<select id="adminTicketStatusSelect" '+(canMutate?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+transitionOptions+'</select>'+
+          '<button type="button" class="primary" '+(canMutate?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminStatusChange(\''+tid+'\')">Update</button>'+
         '</div>'+
       '</div>'+
       '<div>'+
         '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">ASSIGN SPECIALIST</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<select id="adminTicketAssigneeSelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+          '<select id="adminTicketAssigneeSelect" '+(canMutate?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
             '<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
             '<option value="'+esc(user?.id||'me')+'" '+(ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>'+
             rosterOptions+
             (adminRosterBlocked?'<option disabled>(Team roster unavailable - BLOCKED: GET /api/admin/team missing)</option>':'')+
           '</select>'+
-          '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')">Save</button>'+
+          '<button type="button" class="ghost" '+(canMutate?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')">Save</button>'+
         '</div>'+
       '</div>'+
       '<div>'+
         '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">PRIORITY</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<select id="adminTicketPrioritySelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+          '<select id="adminTicketPrioritySelect" '+(canMutate?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
             '<option value="low" '+(ticket.priority==='low'?'selected':'')+'>Low</option>'+
             '<option value="normal" '+(ticket.priority==='normal'?'selected':'')+'>Normal</option>'+
             '<option value="high" '+(ticket.priority==='high'?'selected':'')+'>High</option>'+
             '<option value="urgent" '+(ticket.priority==='urgent'?'selected':'')+'>Urgent</option>'+
           '</select>'+
-          '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="handleAdminPriorityChange(\''+tid+'\')">Save</button>'+
+          '<button type="button" class="ghost" '+(canMutate?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminPriorityChange(\''+tid+'\')">Save</button>'+
         '</div>'+
       '</div>'+
     '</div>'+
     chatBoxHtml+
     '<div style="margin:8px 0;display:flex;align-items:center;gap:8px">'+
-      '<input type="checkbox" id="adminTicketShowNameToggle" '+(showNameActive?'checked':'')+' onchange="handleAdminShowNameToggle(\''+tid+'\',this.checked)">'+
+      '<input type="checkbox" id="adminTicketShowNameToggle" '+(showNameActive?'checked':'')+' '+(canMutate?'':'disabled')+' onchange="handleAdminShowNameToggle(\''+tid+'\',this.checked)">'+
       '<label for="adminTicketShowNameToggle" style="font-size:12.5px;cursor:pointer">Show my specialist name to customer</label>'+
     '</div>'+
     '<div>'+
@@ -6696,7 +7043,7 @@ async function openAdminTicketDetails(ticketId){
       '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Audit Timeline &amp; Messages</div>'+
       '<div class="ticket-timeline-container" id="adminTicketTimeline"></div>'+
     '</div>'+
-    '<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px">'+
+    (canMutate ? ('<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px">'+
       '<div style="display:flex;gap:16px;margin-bottom:8px;font-size:12.5px;font-weight:600">'+
         '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="adminMsgTarget" value="public" checked> Public Message (Customer sees in Help)</label>'+
         '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="adminMsgTarget" value="internal"> Internal Note (Staff only)</label>'+
@@ -6705,7 +7052,7 @@ async function openAdminTicketDetails(ticketId){
       '<div style="display:flex;justify-content:flex-end;margin-top:8px">'+
         '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Send Update</button>'+
       '</div>'+
-    '</div>'+
+    '</div>') : ('<div class="admin-auditor-notice">👁️ <b>Read-Only Auditor Mode</b>: You have inspection clearance. Status transitions, assignee changes, priority modifications, and message sending are restricted to Support Specialists and Super Admins.</div>'))+
     '<div class="ticket-action-bar">'+
       '<button type="button" class="ghost" id="btnAdminViewAsUser" style="color:'+(adminViewAsUserBlocked?'#94a3b8':'#b45309')+'" '+(adminViewAsUserBlocked?'disabled title="Backend endpoint not available"':'')+' onclick="openAdminTicketViewAsUser(\''+tid+'\')">'+(adminViewAsUserBlocked?'Not available yet':'👁️ View As User (Audit Logged)')+'</button>'+
       '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
@@ -6797,6 +7144,11 @@ function populateAdminModalEvents(ticket){
 }
 
 async function handleAdminStatusChange(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   const sel=$('adminTicketStatusSelect');
   if(!sel)return;
   const nextStatus=sel.value;
@@ -6815,6 +7167,11 @@ async function handleAdminStatusChange(ticketId){
 }
 
 async function handleAdminAssigneeChange(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   const sel=$('adminTicketAssigneeSelect');
   if(!sel)return;
   const assignee=sel.value||null;
@@ -6830,6 +7187,11 @@ async function handleAdminAssigneeChange(ticketId){
 }
 
 async function handleAdminPriorityChange(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   const sel=$('adminTicketPrioritySelect');
   if(!sel)return;
   const pri=sel.value;
@@ -6845,6 +7207,11 @@ async function handleAdminPriorityChange(ticketId){
 }
 
 async function handleAdminChatToggle(ticketId,enabled){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   try{
     const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{chat_enabled:enabled});
     if(!res?.ok) throw new Error(res?.error?.message||'Failed to toggle chat.');
@@ -6857,6 +7224,11 @@ async function handleAdminChatToggle(ticketId,enabled){
 }
 
 async function handleAdminShowNameToggle(ticketId,enabled){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   try{
     const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{show_agent_name:enabled});
     if(!res?.ok) throw new Error(res?.error?.message||'Failed to update name visibility.');
@@ -6868,6 +7240,11 @@ async function handleAdminShowNameToggle(ticketId,enabled){
 }
 
 async function handleAdminSendReply(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   const textEl=$('adminReplyText');
   const btn=$('adminSendReplyBtn');
   if(!textEl||!btn)return;
@@ -6928,6 +7305,11 @@ async function loadAdminSupportRoster(){
 }
 
 async function handleAdminEnableChatWithMsg(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
   const msgInput=$('adminEnableChatMsg');
   const btn=$('btnAdminEnableChat');
   const optionalMsg=msgInput?.value?.trim()||'';
@@ -6947,7 +7329,6 @@ async function handleAdminEnableChatWithMsg(ticketId){
     await loadAdminTickets(true);
     openAdminTicketDetails(ticketId);
   }catch(err){
-    console.error('Failed to enable chat:',err);
     toast(err?.message||'Failed to enable chat.','error');
   }finally{
     if(btn&&document.body.contains(btn)){
@@ -7193,6 +7574,11 @@ function closeAdminUserDetails(){
 }
 
 async function saveUserPlanDraft(userId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify user plans.','error');
+    return;
+  }
   const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
   const plan=document.getElementById('adminUserPlanSelect')?.value||'lite';
   const duration=document.getElementById('adminUserDurationSelect')?.value||'365';
@@ -7211,6 +7597,11 @@ async function saveUserPlanDraft(userId){
 }
 
 async function extendUserGrace(userId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot extend user grace period.','error');
+    return;
+  }
   const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
   const btn=document.getElementById('btnExtendUserGrace');
   if(btn){btn.disabled=true;btn.textContent='Extending...';}
@@ -7226,6 +7617,11 @@ async function extendUserGrace(userId){
 }
 
 async function suspendUserAccount(userId,currentStatus){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify user suspension status.','error');
+    return;
+  }
   const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
   const isSuspended=(currentStatus==='suspended');
   const newStatus=isSuspended?'active':'suspended';
@@ -7252,6 +7648,11 @@ async function suspendUserAccount(userId,currentStatus){
 }
 
 function openTokenGenModal(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTokens){
+    toast('Permission denied: Role "'+perms.label+'" cannot generate tokens.','error');
+    return;
+  }
   let old=document.getElementById('adminTokenGenModal');
   if(old)old.remove();
 
@@ -7303,6 +7704,11 @@ function closeTokenGenModal(){
 }
 
 function generateAdminToken(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTokens){
+    toast('Permission denied: Role "'+perms.label+'" cannot generate tokens.','error');
+    return;
+  }
   const planEl=document.getElementById('tokenGenPlan');
   const durationEl=document.getElementById('tokenGenDuration');
   const usageEl=document.getElementById('tokenGenUsage');
@@ -7377,6 +7783,11 @@ function closeTokenRevealModal(){
 }
 
 async function revokeAdminToken(tokenStr){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTokens){
+    toast('Permission denied: Role "'+perms.label+'" cannot revoke tokens.','error');
+    return;
+  }
   if(!tokenStr)return;
   if(!confirm('Revoke activation token '+tokenStr+'?'))return;
   try{
@@ -7389,6 +7800,11 @@ async function revokeAdminToken(tokenStr){
 }
 
 function openCreateCouponModal(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot create coupons.','error');
+    return;
+  }
   let old=document.getElementById('adminCouponModal');
   if(old)old.remove();
 
@@ -7440,6 +7856,11 @@ function closeCreateCouponModal(){
 }
 
 async function submitCreateCoupon(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot create coupons.','error');
+    return;
+  }
   const code=document.getElementById('couponCodeInput')?.value?.trim()?.toUpperCase()||'';
   const discount=Number(document.getElementById('couponDiscountInput')?.value||0);
   const maxUses=Number(document.getElementById('couponMaxUsesInput')?.value)||null;
@@ -7466,6 +7887,11 @@ async function submitCreateCoupon(){
 }
 
 async function deleteAdminCoupon(couponId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot delete coupons.','error');
+    return;
+  }
   if(!confirm('Deactivate and delete this promotional coupon?'))return;
   try{
     await workerDelete('/api/admin/coupons/'+encodeURIComponent(couponId));
@@ -7477,6 +7903,11 @@ async function deleteAdminCoupon(couponId){
 }
 
 function openTeamInviteModal(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTeam){
+    toast('Permission denied: Role "'+perms.label+'" cannot invite team members.','error');
+    return;
+  }
   let old=document.getElementById('adminTeamInviteModal');
   if(old)old.remove();
 
@@ -7521,6 +7952,11 @@ function closeTeamInviteModal(){
 }
 
 async function sendTeamInvite(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTeam){
+    toast('Permission denied: Role "'+perms.label+'" cannot invite team members.','error');
+    return;
+  }
   const email=document.getElementById('teamInviteEmail')?.value.trim().toLowerCase()||'';
   const role=document.getElementById('teamInviteRole')?.value||'support_lead';
   const status=document.getElementById('teamInviteStatus');
@@ -7535,7 +7971,7 @@ async function sendTeamInvite(){
   try{
     const result=await workerPost('/api/admin/team/members',{email,role});
     if(status){
-      status.style.background='rgba(22,163,74,.08)';status.style.color='#166534';
+      status.style.background='rgba(220,38,38,.08)';status.style.color='#166534';
       if(result?.temp_password){
         status.innerHTML='Invitation sent. One-time temporary password: <code style="font-weight:700">'+esc(result.temp_password)+'</code> (Copy now; never stored).';
       }else{
@@ -7555,6 +7991,11 @@ async function sendTeamInvite(){
 }
 
 async function revokeTeamMember(memberId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTeam){
+    toast('Permission denied: Role "'+perms.label+'" cannot revoke team members.','error');
+    return;
+  }
   if(!confirm('Revoke access for this administrative team member?'))return;
   try{
     await workerDelete('/api/admin/team/members/'+encodeURIComponent(memberId));
@@ -7566,6 +8007,11 @@ async function revokeTeamMember(memberId){
 }
 
 async function handleUpgradeAction(id,action){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot triage upgrade requests.','error');
+    return;
+  }
   const noteEl=document.getElementById('upgradeNote_'+id);
   const note=noteEl?.value?.trim()||'';
   try{
@@ -7582,6 +8028,11 @@ function updateUpgradeStatus(reqId,status){
 }
 
 async function exportUsersCsv(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot export users CSV.','error');
+    return;
+  }
   executeProtectedAdminAction('Export User Directory CSV',async ()=>{
     try{
       toast('Exporting Users CSV...','info');
@@ -7594,6 +8045,11 @@ async function exportUsersCsv(){
 }
 
 async function exportTicketsCsv(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets && !perms.canViewAudit){
+    toast('Permission denied: Role "'+perms.label+'" cannot export tickets CSV.','error');
+    return;
+  }
   executeProtectedAdminAction('Export Support Tickets CSV',async ()=>{
     try{
       toast('Exporting Tickets CSV...','info');
@@ -7606,6 +8062,11 @@ async function exportTicketsCsv(){
 }
 
 async function exportAuditCsv(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canViewAudit){
+    toast('Permission denied: Role "'+perms.label+'" cannot export audit CSV.','error');
+    return;
+  }
   executeProtectedAdminAction('Export Security Audit CSV',async ()=>{
     try{
       toast('Exporting Security Audit CSV...','info');
@@ -7628,8 +8089,17 @@ async function adminView(){
     nav('dashboard');
     return;
   }
+  await loadTeamMe();
+  checkForcedPasswordChange();
+  checkForcedProfileCompletion();
+  checkForcedTpinSetup();
+
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.allowedScreens.includes(currentAdminScreen)){
+    currentAdminScreen=perms.defaultScreen;
+  }
   renderAdminViewContent();
-  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
+  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError&&perms.allowedScreens.includes('tickets')){
     await loadAdminTickets();
   }
 }
@@ -7703,6 +8173,25 @@ window.normalizeTicketStatus=normalizeTicketStatus;
 window.renderStatusBadge=renderStatusBadge;
 window.renderPriorityBadge=renderPriorityBadge;
 window.renderAdminListContent=renderAdminListContent;
+window.loadTeamMe=loadTeamMe;
+window.getAdminRolePermissions=getAdminRolePermissions;
+window.checkForcedPasswordChange=checkForcedPasswordChange;
+window.submitForcedPasswordChange=submitForcedPasswordChange;
+window.checkForcedProfileCompletion=checkForcedProfileCompletion;
+window.submitForcedProfileCompletion=submitForcedProfileCompletion;
+function setCurrentAdminRole(r){
+  currentAdminRole=r;
+  renderAdminViewContent();
+}
+function getCurrentAdminRole(){
+  return currentAdminRole;
+}
+function getCurrentAdminProfile(){
+  return currentAdminProfile;
+}
+window.setCurrentAdminRole=setCurrentAdminRole;
+window.getCurrentAdminRole=getCurrentAdminRole;
+window.getCurrentAdminProfile=getCurrentAdminProfile;
 
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();

@@ -255,4 +255,13 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Zero backend/Worker edits, zero DB migrations/SQL changes.
 - Test suites: `npm.cmd test` passed 160/160; `node --test tests/garage-redesign.test.mjs` passed 5/5; `node --check js/app.js` passed with zero errors.
 - Cache buster updated to `?v=2026.10.19-phase5-garage`.
+ 
+ 
+## 2026-10-19 — Phase 6: Multi-Role Team Support & First-Login Security
+- Scope: Frontend-only RBAC multi-role team console shells, live API loader `GET /api/team/me` with `.admin-blocked-card` on 404, role permission matrices (`super_admin`, `support_lead`, `billing_admin`, `auditor`), non-dismissable first-login forced password change overlay, forced specialist profile completion overlay, and auditor read-only inspection enforcement.
+- Branch: `feat/frontend-roadmap`.
+- Zero backend/Worker edits, zero DB migrations/SQL changes.
+- Test suites: `npm.cmd test` passed 166/166; `node --check js/app.js` passed with zero errors.
+- Cache buster updated to `?v=2026.10.19-phase6-team`.
+
 

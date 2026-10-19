@@ -883,6 +883,44 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - `node --test tests/garage-redesign.test.mjs`: 5/5 tests passing (100% green).
 
 
+## 2026-10-19 — Phase 6: Multi-Role Team Support & First-Login Security
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only RBAC multi-role team console shells, authoritative profile loader `GET /api/team/me` with `.admin-blocked-card` on 404, role permission matrices, non-dismissable first-login forced password change overlay, forced specialist profile completion overlay, and auditor read-only inspection enforcement.
+- **Implemented Changes:**
+  - **Authoritative Identity & Role Clearance (`loadTeamMe`, `getAdminRolePermissions`):**
+    - Authoritative admin identity and role loaded via `GET /api/team/me`.
+    - Supports 4 role tiers:
+      * `super_admin` / `owner`: All 13 screens allowed; full administrative and mutation clearance.
+      * `support_lead`: Screens `['home', 'tickets', 'account']`; ticket status/assignee/priority/chat mutations enabled; user, token, plan, garage, team management blocked; defaultScreen `'tickets'`.
+      * `billing_admin`: Screens `['home', 'plans', 'tokens', 'upgrades', 'account']`; token generation/revocation, plan updates, coupon creation, and upgrade request triage enabled; tickets, garages, team management blocked; defaultScreen `'plans'`.
+      * `auditor`: Screens `['home', 'audit', 'tickets', 'account']`; full read-only inspection across tickets and audit trails; all mutation actions blocked; defaultScreen `'audit'`.
+    - Handles endpoint failure/404 on `GET /api/team/me` by rendering `.admin-blocked-card` containing HTTP method and target route.
+    - Profile card renders authoritative profile metadata and dynamic role badge (`.team-role-badge.role-*`).
+  - **Dynamic Console & Navigation Shells (`renderAdminViewContent`, `switchAdminScreen`, `renderAdminCurrentScreen`):**
+    - Dynamic sidebar filtering: Core and Operations screen buttons filtered strictly by `perms.allowedScreens`.
+    - Mobile bottom nav tabs and "More" sheet filtered dynamically according to role permissions.
+    - Console header dynamically reflects active role label in the title (`{Role} Console`) and security pill (`🔒 {Role}`).
+    - `switchAdminScreen` enforces access control: blocks navigation to disallowed screens and toasts permission errors.
+    - `renderAdminCurrentScreen` renders Access Restricted warning card if unauthorized screen is requested.
+  - **Auditor Read-Only Mode (`openAdminTicketDetails`):**
+    - Disables ticket status workflow, assignee select, priority dropdown, and chat controls.
+    - Replaces staff reply composer with `.admin-auditor-notice` warning that status transitions and replies are restricted.
+    - Enforces permission guards across all administrative action handlers (`handleAdminStatusChange`, `saveUserPlanDraft`, `generateAdminToken`, etc.).
+  - **First-Login Security Overlays (`checkForcedPasswordChange`, `checkForcedProfileCompletion`):**
+    - Blocking, non-dismissable modal overlay `#forcedPasswordOverlay` if `password_change_required` or `temp_password_active` is flagged.
+    - Enforces minimum 8 characters, password confirmation match, live meter feedback, and calls Supabase auth / Worker password update.
+    - Clears memory and input values upon successful update and removes overlay.
+    - Blocking `#forcedProfileOverlay` if `profile_incomplete` is flagged, validating specialist name and 10-digit mobile number before permitting workspace access.
+  - **CSS Styling:** Appended `.team-role-badge`, `.team-role-badge.role-*`, `.admin-auditor-notice`, `.admin-forced-overlay`, `.admin-forced-box` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase6-team`.
+  - **Automated Tests:** Added 6 new regression tests in `tests/customer-portal-regression.test.mjs` covering `loadTeamMe` profile fetching, 404 blocked card rendering, `support_lead` restricted shell, `billing_admin` shell, `auditor` read-only mode & mutation blocking, and first-login forced password change overlay.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 166/166 tests passing (100% green, 0 failures, 0 skips).
+
+
+
 
 
 

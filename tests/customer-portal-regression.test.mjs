@@ -3804,6 +3804,228 @@ test("Super Admin Garages Phase 5: Status filter and search filter directory row
   assert.ok(!html.includes("Shimla Auto Works"), "Search must hide unmatched garages");
 });
 
+test("Multi-Role Team Phase 6: loadTeamMe calls GET /api/team/me and sets currentAdminRole & currentAdminProfile", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        return {
+          role: 'support_lead',
+          profile: {
+            id: 'mem_123',
+            name: 'Sarah Specialist',
+            email: 'sarah@carmy.internal',
+            role: 'support_lead'
+          }
+        };
+      }
+      throw new Error('Not found: ' + path);
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), "support_lead");
+  assert.equal(h.eval("getCurrentAdminProfile().name"), "Sarah Specialist");
+});
+
+test("Multi-Role Team Phase 6: 404 response on GET /api/team/me renders .admin-blocked-card in Administrator Profile card", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    currentAdminProfile = null;
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        const err = new Error('Route not found');
+        err.status = 404;
+        throw err;
+      }
+      throw new Error('Not found');
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  const cardHtml = h.eval("renderAdminProfileCardInner()");
+  assert.ok(cardHtml.includes("admin-blocked-card"), "Must render admin-blocked-card on 404");
+  assert.ok(cardHtml.includes("/api/team/me"), "Must specify route /api/team/me");
+  assert.ok(cardHtml.includes("GET"), "Must specify HTTP method GET");
+});
+
+test("Multi-Role Team Phase 6: support_lead role shell restricts sidebar and navigation to allowed screens and hides tokens, plans, garages, team, audit", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setCurrentAdminRole('support_lead');
+    currentAdminScreen = 'tickets';
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+
+  const perms = h.eval("getAdminRolePermissions('support_lead')");
+  assert.deepEqual([...perms.allowedScreens], ['home', 'tickets', 'account']);
+  assert.equal(perms.canMutateTickets, true);
+  assert.equal(perms.canManageUsers, false);
+  assert.equal(perms.canManageTokens, false);
+  assert.equal(perms.canManageGarages, false);
+  assert.equal(perms.canManageTeam, false);
+
+  const sidebarHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(sidebarHtml.includes("Support Lead Console"), "Must display Support Lead Console in topbar");
+  assert.ok(sidebarHtml.includes("Support Tickets"), "Must include Support Tickets in sidebar");
+  assert.ok(!sidebarHtml.includes("Activation Tokens"), "Must hide Activation Tokens from sidebar");
+  assert.ok(!sidebarHtml.includes("Garage Network"), "Must hide Garage Network from sidebar");
+  assert.ok(!sidebarHtml.includes("Team &amp; Access"), "Must hide Team & Access from sidebar");
+  assert.ok(!sidebarHtml.includes("Audit Trail"), "Must hide Audit Trail from sidebar");
+
+  // Attempt to switch to disallowed screen
+  h.eval("switchAdminScreen('garages')");
+  assert.equal(h.eval("currentAdminScreen"), "tickets", "currentAdminScreen must not switch to disallowed screen");
+});
+
+test("Multi-Role Team Phase 6: billing_admin role shell allows plans, tokens, upgrades and restricts tickets/team navigation", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setCurrentAdminRole('billing_admin');
+    currentAdminScreen = 'plans';
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+
+  const perms = h.eval("getAdminRolePermissions('billing_admin')");
+  assert.deepEqual([...perms.allowedScreens], ['home', 'plans', 'tokens', 'upgrades', 'account']);
+  assert.equal(perms.canManageTokens, true);
+  assert.equal(perms.canManagePlans, true);
+  assert.equal(perms.canMutateTickets, false);
+  assert.equal(perms.canManageTeam, false);
+  assert.equal(perms.canManageGarages, false);
+
+  const html = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(html.includes("Billing Admin Console"), "Must display Billing Admin Console");
+  assert.ok(html.includes("Plans &amp; Limits"), "Must include Plans & Limits");
+  assert.ok(html.includes("Activation Tokens"), "Must include Activation Tokens");
+  assert.ok(html.includes("Upgrade Requests"), "Must include Upgrade Requests");
+  assert.ok(!html.includes("Support Tickets"), "Must hide Support Tickets");
+  assert.ok(!html.includes("Team &amp; Access"), "Must hide Team & Access");
+
+  // Attempt disallowed navigation
+  h.eval("switchAdminScreen('team')");
+  assert.equal(h.eval("currentAdminScreen"), "plans", "currentAdminScreen must remain on allowed screen");
+});
+
+test("Multi-Role Team Phase 6: auditor role enables read-only inspection, renders .admin-auditor-notice, and blocks mutation actions", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setCurrentAdminRole('auditor');
+    adminTickets = [{
+      id: 't-audit-1',
+      subject: 'Suspicious login check',
+      category: 'account',
+      status: 'open',
+      priority: 'normal',
+      email: 'user@example.com',
+      message: 'Please check recent activities.',
+      created_at: new Date().toISOString(),
+      events: []
+    }];
+  `);
+
+  const perms = h.eval("getAdminRolePermissions('auditor')");
+  assert.equal(perms.canMutateTickets, false);
+  assert.equal(perms.canViewAudit, true);
+  assert.equal(perms.canManageUsers, false);
+  assert.equal(perms.canManageTokens, false);
+  assert.equal(perms.canManagePlans, false);
+  assert.equal(perms.canManageGarages, false);
+  assert.equal(perms.canManageTeam, false);
+
+  await h.eval("openAdminTicketDetails('t-audit-1')");
+  const modal = h.elements.get('adminTicketDetailModal');
+  assert.ok(modal, "Detail modal should be rendered");
+  assert.ok(modal.innerHTML.includes("admin-auditor-notice"), "Must render .admin-auditor-notice");
+  assert.ok(modal.innerHTML.includes("Read-Only Auditor Mode"), "Must state Read-Only Auditor Mode");
+  assert.ok(modal.innerHTML.includes("disabled"), "Status / priority controls must be disabled");
+
+  // Verify mutation is blocked
+  h.eval(`
+    toast = (msg, type) => { globalThis.__lastToast = { msg, type }; };
+  `);
+  await h.eval("handleAdminStatusChange('t-audit-1')");
+  const lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Mutation action must be blocked with permission toast");
+});
+
+test("Multi-Role Team Phase 6: Forced first-login password change overlay blocks access when password_change_required is flagged, enforces new password, and clears flag upon submission", async (t) => {
+  let updatedPassword = null;
+  const h = createAppHarness({
+    db: {
+      auth: {
+        updateUser: async ({ password }) => {
+          updatedPassword = password;
+          return { data: { user: { id: "admin-1" } }, error: null };
+        }
+      }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    currentAdminProfile = {
+      id: 'admin-1',
+      email: 'newadmin@carmy.internal',
+      password_change_required: true,
+      temp_password_active: true
+    };
+    checkForcedPasswordChange();
+  `);
+
+  assert.ok(h.elements.get('forcedPasswordOverlay'), "Forced password overlay must be rendered");
+
+  // Attempt short password
+  h.eval(`
+    document.getElementById('forcedNewPassword').value = 'short';
+    document.getElementById('forcedConfirmPassword').value = 'short';
+  `);
+  await h.eval("submitForcedPasswordChange()");
+  assert.equal(updatedPassword, null, "Should not update password if too short");
+  assert.equal(h.eval("document.getElementById('forcedPasswordError').textContent"), "Password must be at least 8 characters.");
+
+  // Attempt mismatch
+  h.eval(`
+    document.getElementById('forcedNewPassword').value = 'ValidPass123!';
+    document.getElementById('forcedConfirmPassword').value = 'MismatchPass123!';
+  `);
+  await h.eval("submitForcedPasswordChange()");
+  assert.equal(updatedPassword, null, "Should not update password on mismatch");
+  assert.equal(h.eval("document.getElementById('forcedPasswordError').textContent"), "Passwords do not match.");
+
+  // Submit valid password
+  h.eval(`
+    document.getElementById('forcedNewPassword').value = 'NewPermanentPassword2026!';
+    document.getElementById('forcedConfirmPassword').value = 'NewPermanentPassword2026!';
+  `);
+  await h.eval("submitForcedPasswordChange()");
+  assert.equal(updatedPassword, "NewPermanentPassword2026!", "auth.updateUser must receive new permanent password");
+  assert.ok(!h.elements.get('forcedPasswordOverlay'), "Overlay must be dismissed after success");
+  assert.equal(h.eval("currentAdminProfile.password_change_required"), false, "password_change_required flag must be cleared");
+  assert.equal(h.eval("currentAdminProfile.temp_password_active"), false, "temp_password_active flag must be cleared");
+});
+
+
 
 
 
