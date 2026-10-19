@@ -205,3 +205,7 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Supabase connector exposes project metadata and publishable keys but no Management API call or Auth Admin user-provisioning action/access token. No test users were created and no user credentials were fabricated. Do not substitute a publishable key for `SUPABASE_SECRET_KEY`.
 - Staging D1 aggregate counts remain 4 tickets, 2 events, 0 reads, 0 audit rows, 1 migration ledger row. Authenticated E2E remains blocked. Production rollout remains on hold because staging E2E and the production backup/baseline/impact/bundle gates are not satisfied.
 - Antigravity local changes remain unverified. No production ticket content was read; no production database, Worker, Supabase project, Vault secret, or GitHub Pages deployment was modified.
+
+
+### Staging-only deployment correction — 19 Oct 2026
+- A partial Cloudflare settings PATCH briefly deployed Worker version 25 with only the `ALLOWED_ORIGIN` binding. It was immediately replaced by the previously verified isolated version 24, then by complete version 27. No request or ticket mutation was sent to version 25; that version had no D1, R2, rate-limit, or Supabase binding. Active version 27 was re-verified with the complete staging-only binding set. No production resource was deployed by this correction.
