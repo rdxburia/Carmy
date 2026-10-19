@@ -326,3 +326,346 @@ The user was given an Antigravity prompt to:
 - **Backend Restrictions Maintained:**
   - Zero backend/Worker/migration edits.
   - No changes to Cloudflare Workers, production D1, database schemas, Supabase auth/RLS, or secrets.
+
+
+---
+
+## 2026-10-19 — Autonomous backend rollout audit: Phase 0–1
+- **User instruction summary:** Verify access first, audit branches/PRs and CI read-only, record findings in `docs/audit-branches.md`, preserve both logs append-only, isolate staging, and do not touch production until the explicit `APPROVE PRODUCTION` message after Phase 4.
+- **Access check:** GitHub repo/file/branch/PR APIs responded; Cloudflare authenticated identity and Worker settings responded; Supabase project and branch inventory responded. Local Antigravity workspace access is unverified.
+- **Branch audit:** enumerated 142 remote branches and queried main-vs-branch comparisons. The complete per-branch metrics and all-time PR pagination are not fully serialized/verified in the report; the audit artifact explicitly records this limitation and does not claim exhaustive completion.
+- **Saved artifact:** `docs/audit-branches.md` on branch `audit/phase0-phase1-2026-10-19`, commit `644fb7b4a8a5cca5d74833ad68cddc8a42c7bb16`.
+- **CI re-verification:** [39116991832](https://github.com/rdxburia/Carmy/actions/runs/39116991832) SUCCESS; [39116991799](https://github.com/rdxburia/Carmy/actions/runs/39116991799) SUCCESS; [39116991766](https://github.com/rdxburia/Carmy/actions/runs/39116991766) SUCCESS.
+- **PR evidence:** PR #155 is merged/closed; PR #161 remains open/unmerged. No merge performed.
+- **Critical staging finding:** live `carmy-api-staging` Worker DB binding points at production D1 UUID `57c85007-1cf7-470f-bb4d-3b28cbb555b7`, not staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`. No mutation tests or deploy were run.
+- **Staging Supabase STOP:** accessible inventory showed only the existing `Carmy` project and no dedicated staging project/credentials; its listed development branch status is `MIGRATIONS_FAILED`. Stop before staging Worker deploy or authenticated E2E; do not reuse production secrets.
+- **Safety:** production ticket content not read; no D1 mutation, migration 0007, production Worker deploy, branch deletion, or force-push.
+- **Next action:** finish/serialize full branch and PR delta inventory; staging config PR may be prepared, but no staging deploy/E2E until a dedicated staging Supabase project and safe credentials are available. Production stays HOLD until Phase 4 report and explicit `APPROVE PRODUCTION`.
+
+
+## 2026-10-19 — Audit PR and explicit Phase 2 stop
+- Opened PR #162: https://github.com/rdxburia/Carmy/pull/162. PR metadata was rechecked as open/unmerged; combined commit status returned no statuses at check time, so CI is pending/unverified.
+- Supabase inventory recheck still shows only project `Carmy`; no dedicated staging project/safe credentials were available. The listed development branch status is `MIGRATIONS_FAILED`.
+- Reached the user's explicit Phase 2 STOP condition. No staging config mutation, Worker deploy, or authenticated ticket E2E was attempted; live staging Worker remains bound to production D1 and must not be used for mutation tests.
+- Production ticket contents were not read; production migration/deploy and all D1 writes remain untouched. Resume only after dedicated staging Supabase is provisioned and safe staging credentials are available.
+
+
+---
+
+## 2026-10-19 — Verified staging D1 UUID correction and branch audit chunk 1/6
+- Verified from Cloudflare D1 inventory: staging DB `carmy-ticket-workflow-staging` = `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`; production DB `carmy-cache` = `57c85007-1cf7-470f-bb4d-3b28cbb555b7`. Corrected earlier UUID transcription error by appending this note; history preserved.
+- Added first 24 branch comparison rows to `docs/audit-branches.md` in one commit with synchronized append-only updates to `AGENT.md` and `PROGRESS.md`.
+- PR #162 merged; PR #163 remains open while required checks are pending. No staging deploy, Supabase secret change, migration, ticket test, production read/write, branch deletion, or force-push.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 2/6
+- Added branches 25–48 (24 rows) with ahead/behind, GitHub compare status, changed file names returned, and classification. This was committed together with append-only updates to `AGENT.md` and `PROGRESS.md`.
+- No branches merged/deleted/force-pushed; no production ticket contents read; no D1 writes or Worker deployment.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 3/6
+- Added branches 49–72 (24 rows) to `docs/audit-branches.md` and appended synchronized entries to `AGENT.md` and `PROGRESS.md`.
+- No merges/deletions/force-pushes for audited branches; no production or staging database mutation, migration, or Worker deployment.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 4/6
+- Added branches 73–96 (24 rows) to the audit table and appended this work to both logs. The branch classification is triage only and does not approve merging.
+- No staging E2E, no migrations, no production D1 reads beyond allowed schema/aggregate scope, no Worker deploy yet.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 5/6
+- Added branches 97–120 (24 rows) to `docs/audit-branches.md` and appended matching notes to both logs. Auth, grants, SQL, Worker, and workflow diffs are marked risky for manual review.
+- No branch merges/deletions/force-pushes; no staging E2E or database mutations; production remains untouched.
+
+
+---
+
+## 2026-10-19 — Branch audit chunk 6/6 completed
+- Added final 22 rows (branches 121–142), completing the branch comparison table for all 142 enumerated remote branches. Per-file lists are limited to filenames returned by GitHub compare responses; any unreturned data remains unverified.
+- No branch merges/deletions/force-pushes, no DB mutation, no staging E2E, no production D1 ticket content read, and no production deploy.
+
+
+---
+
+## 2026-10-19 — All-time PR inventory appended
+- Appended all 154 pull requests returned by GitHub's `state=all` REST collection (pages 1–2) to `docs/audit-branches.md`. The inventory includes PR state, head/base branch, changed-file count, creation date, and link; full changed-file lists for every PR remain unverified unless separately inspected.
+- Completed six branch-comparison chunks covering 142 remote branches. This commit updates both `AGENT.md` and `PROGRESS.md` append-only.
+- Production ticket content not read; production migration/deploy not performed; staging Supabase/E2E remain STOP.
+
+
+---
+
+## 2026-10-19 — Staging D1 isolation deployment and audit inventory correction
+- PR #163 merged after green Worker build and policy checks. Deployed staging-only Worker settings; active version 16 `45e2bdb5-ca58-481c-b3f6-00515eca978e`, deployment `9369670c-639d-4b8a-8b54-2a6f01e81d67`, 100% traffic. Cloudflare GET settings verified DB binding `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`.
+- Staging config no longer defines production `SUPABASE_URL`; the secret binding itself was inherited unchanged. No secret values read or changed. No E2E/ticket mutation.
+- Read-only staging D1 counts: 4 support_tickets, 2 ticket_events, 0 ticket_reads, 0 audit_log. Workflow schema exists; `d1_migrations` ledger table is absent, so migration ledger verification is unverified. Migration 0007 was not rerun.
+- PR #164 merged; appended a correction to `docs/audit-branches.md` for PR #164, created after the original 154-record inventory snapshot. Correct staging UUID also appended as a correction without removing old history.
+- Production ticket content not read. No production migration or Worker deployment. Dedicated staging Supabase and authenticated E2E remain STOP until user provisions the project.
+
+
+---
+
+## 2026-10-19 — Autonomous staging isolation, migration recovery, and deploy verification
+
+### User prompt (verbatim)
+```text
+AUTONOMOUS MODE: FULL AUTHORITY GRANTED
+
+Tum Torq Desk / Carmy ke Principal Full-Stack + DevOps engineer ho (50 saal ka experience). Tumhare paas GitHub, Cloudflare (Workers, D1, secrets), Supabase aur source code ka full access hai. Main owner hoon aur in sab ki permission pehle se meri taraf se di hui hai: PR merge, staging/production deploy, Supabase project/branch create, D1 migration, secrets set/rotate. Mujhse permission, confirmation ya "kya aage badhun?" mat poochho. Khud fix karo, deploy karo, verify karo, phir report do.
+
+Standing docs protocol lagu hai: pehle AGENT.md + PROGRESS.md read, kaam ke baad append-only entry (no code, no secrets), commit aur push.
+
+WORK RULES
+- "Blocked" tabhi bolo jab tumne apne saare tools se khud try kar liya ho. Sirf Antigravity local files jaisi cheezein tumhare access ke bahar hain.
+- Failure aaye to root cause dhundo, fix PR banao, retest karo. Har step ka evidence do.
+- Order: staging pehle, production baad mein.
+
+TASKS (is order mein, ek flow mein)
+
+A. Staging secret cleanup (URGENT)
+carmy-api-staging par SUPABASE_SECRET_KEY inherited hai. Value print kiye bina verify karo ki wo kis project ki hai. Production ki ho ya verify na ho sake to staging se remove/replace karo. Production Supabase credentials staging mein kisi halat mein nahi rahenge.
+
+B. Staging Supabase khud banao
+- Carmy ki dev branch MIGRATIONS_FAILED hai: pehle root cause diagnose karo. Fix ho sake to fix karke use staging banao, warna naya dedicated project carmy-staging khud create karo.
+- Production ka sirf schema/migrations staging par apply karo. Production user data copy mat karo.
+- URL aur keys seedha Cloudflare staging secrets mein set karo. Kabhi print/log/commit mat karo.
+- wrangler.staging.toml complete karo: SUPABASE_URL, aur R2 + rate-limit ke staging-dedicated resources (production wale share nahi). PR, CI green, merge, staging deploy, live binding verify.
+
+C. Staging D1 ledger
+d1_migrations absent hai. Pehle read-only verify karo ki schema 0007 se match karta hai. Phir ledger table banao aur applied migrations record karo. Migration dobara run mat karo, existing rows modify mat karo. Production ke liye bhi ledger check plan mein rakho.
+
+D. Full staging E2E (sirf synthetic data)
+Customer ticket create, detail + replies, public vs internal messages, non-admin authorization failure, admin assignment (Supabase auth), ticket_events/ticket_reads/audit_log atomic writes. Existing 4 tickets + 2 events preserve, cleanup sirf apne synthetic rows ka. Fail ho to fix PR, CI, merge, redeploy, retest jab tak sab pass.
+
+E. PR cleanup
+- PR #165: CI green hote hi merge.
+- PR #161 (ticket frontend): E2E pass ke baad review, conflicts fix, merge.
+- Diverged branches (fix/ticket-workflow-route-dispatch 28 ahead / 6 behind) blind merge nahi. Unique commits review karke sirf zaroori cheez lo.
+- Audit report mein PR #165 aur baad ke PRs add karo.
+
+F. Production rollout (PRE-APPROVED, in conditions ke saath)
+APPROVE PRODUCTION di ja chuki hai. Tab tak mat chalo jab tak ye sab true na ho:
+1. Staging E2E fully pass.
+2. Production D1 ka verified backup: Time Travel bookmark + export, restore point recorded.
+3. Production schema baseline + row counts (4 tickets). Ticket content kabhi read nahi, sirf aggregate counts.
+4. Migration 0007 ka impact analysis: kaunse ALTER chalenge, kitne statuses/priorities normalize honge (counts), failure points.
+5. Deploy commit aur Worker bundle ka exact mapping.
+Phir: fresh backup, migration apply (ledger ke saath), schema + 4 rows verify, Worker deploy, smoke tests (health, read-only checks, ya ek synthetic ticket jise sirf wahi delete karo), live version verify. Koi bhi step fail ho to turant restore/rollback, previous Worker version par wapas, aur root cause report.
+Condition 1-5 mein se koi verify na ho to production mat chhuo aur batao kyun.
+
+NEVER (permission ka sawaal nahi, safety hai)
+- Secrets/tokens/keys ko output, log, commit ya docs mein likhna.
+- Production ticket row content padhna ya print karna.
+- Branch delete, force-push, applied migration file edit, production data par DROP/DELETE/TRUNCATE.
+- Production resources (D1, R2, Supabase) staging ke saath share karna.
+- Antigravity local changes ke baare mein guess karna. Unhe "unverified" likho.
+
+REPORTING
+Beech mein approval wale messages mat bhejna. Sirf final report: Done / Evidence (IDs, versions, PR numbers, test results) / Risks / Next. Jo verify nahi hua wo "unverified".
+
+Abhi Task A se shuru karo aur F tak khud poora karo.
+
+ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase connector se project create karna tumhare access mein hai, khud karo"
+```
+
+### A. Secret cleanup
+- Cloudflare GET secret inventory listed `SUPABASE_SECRET_KEY` by name only; no value was read. DELETE returned HTTP 200. Follow-up inventory returned an empty list and `SUPABASE_SECRET_KEY present=false`.
+- Original secret's project could not be verified without reading its value or access to the source metadata. Per safety rule, removed rather than risk production credential reuse.
+
+### B. Dedicated Supabase staging and schema
+- Created project `carmy-staging`, ref `vejccahjrlwhaniajgez`, region `ap-south-1`, status `ACTIVE_HEALTHY`. Supabase cost query returned $0/month. API URL configured in staging Worker settings and `wrangler.staging.toml`; URL is not a credential.
+- New project's publishable-key inventory returns only publishable/anon keys. The connector has no action to retrieve a privileged server-side secret key. Did not substitute an anon/publishable key and did not set a fake `SUPABASE_SECRET_KEY`.
+- Applied schema-only SQL scripts to the empty staging project. No production data was copied. Staging tables listed by Supabase all report 0 rows. Staging schema contains the production table names returned by the metadata inventory plus the additive `ws_*` tables and staging Super Admin registry.
+- Existing `Carmy` project branch inventory returned only `main` marked `MIGRATIONS_FAILED`; no separate development branch was returned. Querying recent PostgreSQL logs did not surface a matching migration error. Root cause for the original failed branch remains **unverified**; new dedicated staging project was created as fallback.
+- Migration source/ledger parity remains incomplete: the production migration inventory has 12 records. Staging applied the available source scripts `schema.sql`, `step5_profile_history_sale.sql`, `historical_import_final.sql`, `rc_insurance_extraction_lifecycle.sql`, `puc_extraction_lifecycle.sql`, `carmy_idle_session_enforcement`, `check_registration_duplicate`, `security_hardening`, a `user_security` baseline, `ws_001_core`, and staging-only Super Admin registry/grants. Cache webhook/Vault migrations were not applied because the staging-only Vault + Worker secret pair is not provisioned; the two duplicate-contact migration sources from the production ledger could not be verified in current main. Do not claim exact migration parity.
+- Security advisors for the new project returned zero lints after the initial schema applications; this does not prove end-to-end correctness.
+
+### C. Staging D1 migration ledger
+- Read-only SQLite schema inspection confirmed migration 0007 workflow objects: seven `support_tickets` workflow columns, ticket indexes, `ticket_events`, `ticket_reads`, `audit_log`, public-only view, and append-only triggers.
+- Aggregate-only existing staging ticket state already matches normalized vocabulary: statuses `closed=1`, `pending=2`, `working=1`; priorities `low=1`, `normal=2`, `urgent=1`. No ticket content was selected.
+- Created `d1_migrations` with unique `name` and `applied_at`, recorded `0007_support_ticket_workflow.sql` only after verifying schema/aggregate state. Migration 0007 was not rerun.
+- Post-check counts: `support_tickets=4`, `ticket_events=2`, `ticket_reads=0`, `audit_log=0`. No existing rows inserted/updated/deleted. Production ledger/backup was not touched because production rollout gates were not met.
+
+### D. Staging resource/config work and CI evidence
+- Created R2 bucket `carmy-staging-files`, region hint `apac`.
+- PR #165 merged at `95cf69dbcc7b1f4df5e25069f20a360a6f3aaadd`; docs-only, with successful Policy extraction run 39157553373 and Pages run 39157553392.
+- PR #166 merged at `ffbb41fb68401df0007311bcaff90399a6ab9ce4`; changes only `wrangler.staging.toml`. CI Policy extraction run 39159427175 and Pages run 39159427180 passed.
+- PR #167 merged at `42106ac39d8675aacb71f3eb707d39687dd1f1da`; corrected `AS $` to `AS $$` in `supabase/ws_001_core.sql`. Root cause was a PostgreSQL syntax error at line 96 because the opening function delimiter did not match its closing `$$;`. WS-A idle-session tests run 39159572470 and Policy extraction run 39159572407 passed; Pages run 39159572421 succeeded.
+- Live staging Worker final verified deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`, version 19 ID `21d40a41-0d77-49b7-be06-4e80d69d4842`, 100% traffic. Bindings: D1 staging UUID `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, R2 `carmy-staging-files`, rate-limit namespace `2601019`, staging Supabase URL; secret inventory empty.
+- **Critical caveat:** after PR #166 merge, Cloudflare Git integration deployed version 20 `4a79a1fd-df66-4896-80fb-6b403f5229e9` with root `wrangler.toml` bindings (production D1/R2/rate limit). No request or mutation was sent while that version was active. We immediately restored version 19 through deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`. Future automatic staging builds can repeat this until Cloudflare's build config selects `wrangler.staging.toml`; the available Cloudflare API tools do not expose that build-command setting, so its permanent correction is unverified.
+
+### E. PRs / E2E status
+- PR #161 remains open and unmerged. Authenticated ticket E2E was not run: no privileged staging Supabase key is available through the connected Supabase actions, and using a publishable key for server authorization would be incorrect.
+- No synthetic ticket was created; no existing staging ticket/event was modified or deleted. Public/internal reply visibility, non-admin rejection, admin assignment, and atomic event/read/audit writes remain unverified.
+- PR #165, #166, and #167 are merged. Addendum records these PRs in `docs/audit-branches.md`.
+- Diverged branch `fix/ticket-workflow-route-dispatch` was not merged or modified; its 28-ahead/6-behind diff still requires unique-commit review. No branches deleted or force-pushed.
+- Antigravity local files remain unverified.
+
+### F. Production gate
+- No production D1 migration, production Worker deployment, production Supabase schema change, or production resource modification occurred.
+- Production ticket row contents were never read. The production table metadata was used only for schema/aggregate inventory; no production ticket query was issued.
+- Production conditions 1–5 are not all satisfied: staging E2E has not passed; production backup/bookmark/export and restore point were not created; production baseline/aggregate migration impact was not prepared for rollout; exact deployment mapping for a production release was not approved/verified. Production remains HOLD.
+
+
+---
+
+## 2026-10-19 — PR #168 merge confirmation
+- PR #168 merged at `3e050234079df6157dc718e625be0339584ed3f4`.
+- The staging isolation and production HOLD notes are now on `main`. No additional infrastructure changes in this documentation-only follow-up.
+- Active staging deployment remains version 19, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`; secret inventory empty. Staging E2E is still not run because privileged staging Supabase credentials are unavailable through the connector.
+- No production data read or mutation; no production migration or Worker deployment.
+
+
+## 2026-10-19 — Staging real-JWT E2E harness
+- Added `tests/staging-ticket-e2e.mjs` and `.github/workflows/staging-e2e-harness.yml` on branch `test/staging-ticket-e2e-v4`. The script accepts all credentials only from environment variables, never prints passwords/JWTs, exercises password-grant auth, missing/tampered JWT rejection, ticket create/detail/reply, internal visibility, customer isolation/IDOR, non-admin 403, admin assignment, and aggregate event/read/audit row checks. It retains synthetic ticket history because ticket/audit tables are append-only; it does not delete any rows.
+- Real E2E execution is not complete: staging QA users are absent. Direct auth.users SQL insertion and Auth signup through the available connector were blocked by safety checks; public Auth settings fetch returned HTTP 403 from the tool runtime. The connected Supabase tool catalog has no Management API key-reveal/create or auth-admin user-creation action. No QA passwords or keys recorded in project docs.
+- Staging frontend/API URLs are configured in Cloudflare (`ALLOWED_ORIGIN=https://carmy-ticket-staging.pages.dev`), but this runtime cannot fetch the public Pages/Workers URLs: outbound requests returned `403 Forbidden: requests to <host> are not allowed`, so public login page reachability and authenticated browser E2E are not established. Production remains HOLD.
+
+
+## 2026-10-19 — Staging unauthenticated smoke harness
+- Added `tests/staging-auth-smoke.mjs` and `.github/workflows/staging-auth-smoke.yml` on PR #171 to test the public staging Worker root, missing-token 401, tampered-token 401, and CORS preflight from `https://carmy-ticket-staging.pages.dev` without any credentials. This lets non-authenticated checks run even while QA users are blocked.
+- Workflow is configured to execute against the staging Worker URL only. It does not read/write ticket rows and contains no secrets. Awaiting GitHub Actions result before treating these checks as PASS.
+
+
+## 2026-10-19 — Staging Pages smoke failure fixed
+- GitHub Actions found that `https://carmy-ticket-staging.pages.dev/js/config.js` was being redirected to production GitHub Pages by the staging branch `_redirects` rule. Removed that rule only on `staging/ticket-e2e-frontend`; staging Pages deployment `e7d4689f-af88-4937-850a-a8fc9489304b` is now active for commit `acc363475dab2113a3f251d1407532d9000bd882`. Production GitHub Pages and main `_redirects` were untouched.
+- Re-running the staging smoke suite against the stable staging URL to verify it now serves the staging Supabase config rather than the production config. Previous Worker root, no-token 401, tampered-token 401, and CORS checks passed; the config check exposed and drove this fix.
+
+
+## 2026-10-19 — Staging URL smoke PASS
+- After removing the production redirect from the staging Pages branch, GitHub Actions run `39185379833` passed all five live smoke checks: stable Pages login UI, staging-only `js/config.js`, Worker root, missing bearer token 401, tampered JWT 401, and CORS preflight (the report has five named checks; the auth/CORS checks are individually PASS).
+- Live stable URL `https://carmy-ticket-staging.pages.dev/js/config.js` now returns `application/javascript`, contains the staging Supabase URL and staging Worker URL, and does not contain the production Supabase URL. The old immutable deployment URL `https://a0b362e6.carmy-ticket-staging.pages.dev` still serves the earlier redirected build; do not use it. Use only the stable Pages alias.
+
+
+---
+
+## 2026-10-19 — Autonomous execution v5: W1–W3 audit and staging binding guard
+
+### W1 — QA user verification (staging project only)
+- Verified project ref `vejccahjrlwhaniajgez` is `carmy-staging`, region `ap-south-1`, status `ACTIVE_HEALTHY`; URL and publishable key are staging-scoped.
+- Read-only SQL against `auth.users` returned **0 users total**. Target QA email query returned no rows. Therefore the owner's stated three accounts are not present in this connected staging project's Auth database at the time checked.
+- Read-only schema inspection confirmed `auth.users` and `auth.identities` tables exist. Super Admin registry table `public.super_admins` exists with `user_id`, `active`, `created_at`, `created_by`, `note`.
+- The connected Supabase actions expose SQL, project metadata, migrations and publishable keys, but no Auth Admin user-create operation and no password-grant HTTP client. Directly inserting Auth rows would bypass the supported Auth Admin flow; no such insert was attempted.
+- Password-grant sign-in/JWT verification and admin registry assignment are not completed. Do not create user records by hand or claim login PASS without actual Auth API verification.
+
+### W2 — Staging Worker privileged secret
+- Cloudflare secret inventory for `carmy-api-staging` contains `CACHE_INVALIDATION_SECRET` only. `SUPABASE_SECRET_KEY` is absent. Secret values were not read or printed.
+- Supabase project details confirm the correct staging project. The available `get_publishable_keys` action returns only anon/publishable keys; these are not a valid substitute for a privileged server-side secret.
+- The connected tool inventory has no Supabase Management API key reveal/create action. Cloudflare connector can mutate Cloudflare resources but does not provide a generic authenticated Supabase Management API client. No fake key or publishable key was installed.
+- Worker remains without `SUPABASE_SECRET_KEY`; protected Worker routes depending on it cannot be considered operational. Do not expose key material in logs/docs.
+
+### W3 — Cloudflare Workers Builds and isolation guard
+- Resolved the Worker script tag through Cloudflare script inventory: `ca37e48aa3b74432954ce6e4a2d9a0b3` (not the Worker name).
+- Verified the existing build trigger: `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`, GitHub repo ID `1405551318`, branch `staging-worker-cors`, deploy command `npx wrangler deploy --config wrangler.staging.toml`.
+- Latest Workers Build `c67646ef-3f63-4137-9a20-4e21e454f5d5` completed with `build_outcome=success` for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721`.
+- Verified active staging Worker version 28 (`130bfe07-5f43-4d90-afd0-3954d5ba3058)) bindings are isolated: staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, R2 `carmy-staging-files`, rate-limit namespace `2601019`, and Supabase ref `vejccahjrlwhaniajgez`. No production IDs in that version's returned bindings.
+- First trigger lookup by Worker name failed because the Builds API requires the system-generated script tag. Retried using the tag and successfully retrieved the trigger/build.
+- Added `tests/staging-worker-bindings.test.mjs` and `.github/workflows/staging-worker-bindings.yml` on branch `ci/staging-worker-bindings-20261019` to fail on production D1 ID `57c85007-...`, rate-limit namespace `2601008`, or R2 bucket `carmy-files`, and assert the expected staging IDs. PR/CI and staging-branch trigger verification are pending.
+- Do not change the Cloudflare build command to run this guard until the guarded test file is present on the trigger's watched branch; otherwise the build would fail due to a missing file.
+- No production resource was modified.
+
+### Execution status and blockers
+- The user-specified QA password was not copied into code, SQL, logs, or documentation.
+- W1 sign-in and W2 privileged secret remain blocked by missing Auth Admin/Management API capabilities in the connected tools; the next steps must continue using available independent approaches and record exact results. No production rollout is authorized unless every gate in the existing production plan is proven.
+
+
+---
+
+# 2026-10-19 — AUTONOMOUS MODE v5 execution record (credential redacted)
+
+## Scope and security rules received
+- User authorized staging-only QA verification, staging secret provisioning, Workers Builds verification, staging frontend/E2E work, staging migration parity, and production read-only gates.
+- QA account emails are `qa-customer-a@carmy-staging.test`, `qa-customer-b@carmy-staging.test`, and `qa-admin@carmy-staging.test`. The owner-set password is intentionally **not recorded** here, in source, or in logs.
+- Mandatory restrictions: never log/commit credentials; use only the staging Worker and Supabase ref; never use QA credentials against production; no production ticket content reads; no production DROP/DELETE/TRUNCATE; do not merge PR #161 into `main`; no production rollout unless all five gates pass.
+- Full v5 request was summarized here with the credential redacted. It covered W1 QA users/JWTs/admin registry, W2 privileged staging key, W3 Workers Builds trigger and binding guard, W4 staging login UI, W5 real-JWT E2E, W6 duplicate-contact/cache-secret parity, W7 production backup/schema/impact/version gates.
+
+## W1 — QA Auth users
+- Confirmed Supabase project ref `vejccahjrlwhaniajgez` is `carmy-staging`, `ACTIVE_HEALTHY`, region `ap-south-1`; `list_projects` independently showed the same project.
+- Read-only SQL: `auth.users=0`, `auth.identities=0`, `public.super_admins=0`. Target-email query returned no rows. The owner-reported accounts are not present in this connected project's Auth tables at the time of inspection.
+- The available Supabase connector exposes SQL, project metadata, migrations and publishable keys, but no Auth Admin create-user action and no password-grant HTTP client. No unsupported manual inserts into Auth system tables were attempted.
+- Independent access attempt: web open of the Supabase Management API endpoint returned: `URL https://api.supabase.com/v1/projects/vejccahjrlwhaniajgez/api-keys is not accessible via this tool.`
+- Result: no real JWT sign-ins; no Super Admin registry insert; W1 is not PASS. Do not claim otherwise.
+
+## W2 — Privileged staging Worker secret
+- Cloudflare secret inventory for `carmy-api-staging` contains `CACHE_INVALIDATION_SECRET`; `SUPABASE_SECRET_KEY` is absent. Secret values were never read.
+- Exact Cloudflare GET attempt for the missing binding returned: `10056: Binding 'SUPABASE_SECRET_KEY' not found. Please use a different name and try again.`
+- Supabase `get_publishable_keys` returns only public anon/publishable keys; neither is a valid privileged server key. The connector has no Supabase Management API reveal/create-key action. Management API web access failed with the error above.
+- No fake/publishable key was installed. W2 is not PASS; server-side protected routes requiring this key remain unavailable.
+
+## W3 — Workers Builds and staging resource guard
+- Resolved the actual Cloudflare Worker script tag: `ca37e48aa3b74432954ce6e4a2d9a0b3`.
+- Existing trigger: `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`; watches `staging-worker-cors`; repository `rdxburia/Carmy`; deploy command is `npx wrangler deploy --config wrangler.staging.toml`.
+- A documentation-only push created build `c9692199-e4f0-4a0b-b048-a5d87b7cbdcd`, outcome `success`, commit `9e05cb687b81c5f8d3cfb826338f009c69c73a85`.
+- Added `tests/staging-worker-bindings.test.mjs` and `.github/workflows/staging-worker-bindings.yml` via PR #173; guard rejects production D1 prefix `57c85007-`, rate-limit namespace `2601008`, and bucket `carmy-files`, and asserts staging D1/R2/rate-limit/Supabase IDs.
+- PR #173 merged at `4549ac3f7f50a9ef6d0c89ba8bf799122bc61390`. Guard workflow passed: https://github.com/rdxburia/Carmy/actions/runs/39188587246. Pages validation passed: https://github.com/rdxburia/Carmy/actions/runs/39188587251.
+- Guard was copied to the staging build branch. Cloudflare trigger build command now runs `npm run build && node --test tests/staging-worker-bindings.test.mjs`; deploy command remains the staging Wrangler config.
+- Manual staging build `c9433d84-ccb7-4d9a-b46b-cf8b74781a2b` completed with `build_outcome=success`; it deployed Worker version 30, ID `09d68d44-3f3f-4f7a-a245-93d343663b06`, deployment `1f054de0-7738-4ae9-a400-83116af0780e`, 100% traffic.
+- Independently verified version 30 bindings: staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, R2 `carmy-staging-files`, rate-limit namespace `2601019`, Supabase ref `vejccahjrlwhaniajgez`. No production resource IDs were present. W3 is PASS for current staging build/guard evidence.
+
+## W4 — Staging login URL
+- Cloudflare Pages project `carmy-ticket-staging` (`92c811e7-5f42-43f1-b2cc-b7a66e578c26`) has a successful canonical deployment `13bcd224-aaad-42b1-85cf-1f4744e79f59` from branch `staging/ticket-e2e-frontend`.
+- Staging login UI URL: https://carmy-ticket-staging.pages.dev
+- Staging API URL: https://carmy-api-staging.mr-rny-buria.workers.dev
+- Branch config `js/config.js` points to the staging Supabase URL, its publishable key, and the staging Worker. Worker CORS `ALLOWED_ORIGIN` is `https://carmy-ticket-staging.pages.dev`.
+- The browser retrieval tool could not open the Pages URL directly (`URL https://carmy-ticket-staging.pages.dev/ is not accessible via this tool`), so deployment metadata is verified but browser-based login is not.
+- PR #161 remains open and unmerged. Do not merge it to `main`.
+
+## W5 — Real-JWT E2E
+- Not run: prerequisite Auth users are absent and `SUPABASE_SECRET_KEY` is missing. No synthetic ticket was created, and no existing staging ticket/event was modified.
+- Do not mark any of the 8 workflow tests or extra auth tests PASS without actual execution. Also note a cleanup design constraint: `ticket_events` and `audit_log` are append-only; cleanup must not bypass their triggers or delete other users' rows.
+
+## W6 — Staging parity
+- Staging migration ledger includes `prevent_duplicate_user_profile_contacts`, `v4_reconstructed_add_registration_duplicate_check`, and `v4_reconstructed_block_duplicate_contacts_during_auth_signup`.
+- Staging Vault contains secret name `carmy_cache_invalidation_webhook_secret`; Worker secret inventory contains `CACHE_INVALIDATION_SECRET`. Only names were inspected, never values.
+- These checks confirm the duplicate-contact migrations and cache-invalidation secret names exist on staging; do not infer that real-JWT E2E passed.
+
+## W7 — Production gates 2–5 evidence (read-only except backup export)
+### Gate 2: production D1 bookmark/export
+- Production D1 is `carmy-cache`, ID `57c85007-1cf7-470f-bb4d-3b28cbb555b7`.
+- Time Travel bookmark retrieved: `00000116-00000000-00005109-916f2f63c047e3e5079a9e81bf28bae9`.
+- D1 export completed successfully at that bookmark; API status `complete`, message reported one part uploaded, filename `57c85007-1cf7-470f-bb4d-3b28cbb555b7-00000116-00000000-00005109-916f2f63c047e3e5079a9e81bf28bae9.sql`.
+- Export contents were not read or printed. The connector response did not provide export file size or checksum; these required fields remain unavailable, so Gate 2 is incomplete.
+
+### Gate 3: production schema + aggregates
+- Production Worker `carmy-api` currently binds D1 `57c85007-1cf7-470f-bb4d-3b28cbb555b7`, R2 `carmy-files`, rate-limit namespace `2601008`, and production Supabase ref `hlrmuvzmaegnbgzvvfsn`.
+- Read-only schema inspection showed `support_tickets` has only the legacy fields and does not yet contain the 0007 workflow columns; `ticket_events`, `ticket_reads`, and `audit_log` are absent.
+- Aggregate-only query results: `support_tickets=4`, `cache_entries=18`, `session_activity=192`, `revoked_sessions=0`; status/priority aggregates: `open / Normal = 3`, `open / Urgent = 1`. No ticket content was selected.
+- Gate 3 baseline is captured; no production rows were changed.
+
+### Gate 4: migration 0007 impact
+- Based only on migration SQL and aggregate counts, expected status normalization: 4 `open` tickets -> `pending`; priority normalization: 3 `Normal` -> `normal`, 1 `Urgent` -> `urgent`.
+- Migration adds 7 columns, 3 indexes, tables `ticket_events`, `ticket_reads`, `audit_log`, view `public_ticket_events`, and append-only triggers.
+- Failure risks: non-idempotent `ALTER TABLE ADD COLUMN` if a partial application exists; a failed partial migration could make retry fail on already-added columns; trigger/view/table creation is guarded by `IF NOT EXISTS`, but column additions are not. Existing legacy indexes on created_at/user_id are not duplicates of the three new workflow indexes.
+- Gate 4 impact analysis is documented; no production migration was applied.
+
+### Gate 5: production deploy commit ↔ Worker bundle
+- Current production Worker version 248 ID `acb0ceaa-e783-4106-825f-4cb20b57c776`, deployment `562221b2-d019-47a0-85c6-0ef473e9620a`, 100% traffic.
+- Cloudflare metadata reports source `wrangler` but does not expose the exact Git commit SHA for this version. The exact commit-to-bundle mapping could not be proven; Gate 5 is incomplete.
+
+## Production release decision
+- **Production HOLD.** Gate 1 failed prerequisites (no QA Auth users, no privileged staging key, no E2E PASS); Gate 2 lacks export size/checksum; Gate 5 exact bundle/commit mapping is unverified.
+- No production migration, production Worker deployment, production Supabase mutation, or production ticket-content read occurred.
+- Next actions are to provision Auth users through supported Supabase Auth Admin, obtain a real privileged key through authenticated Supabase Management API, run staging real-JWT E2E, capture export size/checksum from a supported backup artifact route, and prove the production Worker commit mapping before considering production.
+
+
+## 2026-10-19 — Staging QA users provisioned and verified (retry)
+- Owner confirmed the QA users were created in the correct staging Supabase project `vejccahjrlwhaniajgez`, not production `hlrmuvzmaegnbgzvvfsn`.
+- Read-only Auth verification found all three staging users and confirmed each email is confirmed: `qa-customer-a@carmy-staging.test`, `qa-customer-b@carmy-staging.test`, and `qa-admin@carmy-staging.test`. No production Auth users or records were queried in this step.
+- Staging-only `public.super_admins` registry now has the QA admin UUID `d291dbaf-c147-43c5-a27f-25abc4c016f4` with `active=true`; verified by the successful `INSERT ... ON CONFLICT ... RETURNING` result. `created_by` remains NULL because no separate staging owner actor was identified.
+- Rechecked Cloudflare secret inventory for `carmy-api-staging`: `CACHE_INVALIDATION_SECRET` is present; `SUPABASE_SECRET_KEY` remains absent. Secret values were not read. Owner has the privileged `sb_secret_...` key locally but did not provide it through a secure secret-entry mechanism, so it was not copied into chat/docs/source and was not set by this run.
+- Authenticated password-grant sign-in/JWT E2E remains blocked until the privileged key is set on the staging Worker and a supported staging-only HTTP/auth execution route is available. No ticket was created; no existing staging ticket/event was modified. Production remains untouched and PR #161 remains unmerged.
+
+
+## 2026-10-19 — Staging secret inventory retry
+- Cloudflare API read-only inventory for Worker `carmy-api-staging` succeeded (HTTP 200). Secret binding names returned: `CACHE_INVALIDATION_SECRET`, `SUPABASE_SECRET_KEY`. Secret values were not requested, returned, logged, or copied.
+- This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
+- Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
+- Production remains HOLD and untouched. PR #161 remains open/unmerged.

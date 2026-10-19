@@ -1,20 +1,32 @@
-# Isolated staging Worker config for PR #155 E2E verification.
-# Do not use this config for production deployment.
+# Isolated staging Worker config for ticket workflow E2E.
+# Never use this config for production deployment or production resources.
+# Staging Supabase project: carmy-staging (created 2026-10-19, ap-south-1).
+# Staging D1 UUID verified against Cloudflare inventory on 2026-10-19.
 name = "carmy-api-staging"
 main = "worker/src/index.js"
 compatibility_date = "2026-10-07"
 workers_dev = true
 
 [vars]
-SUPABASE_URL = "https://hlrmuvzmaegnbgzvvfsn.supabase.co"
+SUPABASE_URL = "https://vejccahjrlwhaniajgez.supabase.co"
 ADMIN_INVITE_REDIRECT_URL = "https://rdxburia.github.io/Carmy/?admin_invite=1"
 ALLOWED_ORIGIN = "https://rdxburia.github.io"
+R2_S3_ENDPOINT = "https://1bdda74ff7f93e7d176660d0e329b5ce.r2.cloudflarestorage.com"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "carmy-ticket-workflow-staging"
 database_id = "803810b8-77d0-42bb-bdd6-7e8b1cc4afdb"
 
-# Intentionally no R2 or RATE_LIMITER binding here:
-# staging ticket workflow tests must not write to production carmy-files,
-# and must not share the production IP rate-limit namespace.
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "carmy-staging-files"
+
+# Dedicated staging rate-limit namespace; production uses namespace_id 2601008.
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "2601019"
+
+[ratelimits.simple]
+limit = 120
+period = 60
