@@ -3162,7 +3162,7 @@ function helpView(){
       }else{
         wireTicketForm();
         wireCustomerTicketList();
-        if(!ticketsLoaded&&typeof workerGet==='function'){
+        if((!ticketsLoaded||String(userSupportTicketsOwnerId||'')!==String(user?.id||''))&&typeof workerGet==='function'){
           loadUserSupportTickets().then(()=>{
             if(currentHelpTab==='ticket'&&!viewingCustomerTicketId){
               const pastCont=$('ticketPastContainer');
