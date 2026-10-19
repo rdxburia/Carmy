@@ -522,3 +522,35 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - The staging isolation and production HOLD notes are now on `main`. No additional infrastructure changes in this documentation-only follow-up.
 - Active staging deployment remains version 19, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`; secret inventory empty. Staging E2E is still not run because privileged staging Supabase credentials are unavailable through the connector.
 - No production data read or mutation; no production migration or Worker deployment.
+
+
+---
+
+## 2026-10-19 — Autonomous execution v5: W1–W3 audit and staging binding guard
+
+### W1 — QA user verification (staging project only)
+- Verified project ref `vejccahjrlwhaniajgez` is `carmy-staging`, region `ap-south-1`, status `ACTIVE_HEALTHY`; URL and publishable key are staging-scoped.
+- Read-only SQL against `auth.users` returned **0 users total**. Target QA email query returned no rows. Therefore the owner's stated three accounts are not present in this connected staging project's Auth database at the time checked.
+- Read-only schema inspection confirmed `auth.users` and `auth.identities` tables exist. Super Admin registry table `public.super_admins` exists with `user_id`, `active`, `created_at`, `created_by`, `note`.
+- The connected Supabase actions expose SQL, project metadata, migrations and publishable keys, but no Auth Admin user-create operation and no password-grant HTTP client. Directly inserting Auth rows would bypass the supported Auth Admin flow; no such insert was attempted.
+- Password-grant sign-in/JWT verification and admin registry assignment are not completed. Do not create user records by hand or claim login PASS without actual Auth API verification.
+
+### W2 — Staging Worker privileged secret
+- Cloudflare secret inventory for `carmy-api-staging` contains `CACHE_INVALIDATION_SECRET` only. `SUPABASE_SECRET_KEY` is absent. Secret values were not read or printed.
+- Supabase project details confirm the correct staging project. The available `get_publishable_keys` action returns only anon/publishable keys; these are not a valid substitute for a privileged server-side secret.
+- The connected tool inventory has no Supabase Management API key reveal/create action. Cloudflare connector can mutate Cloudflare resources but does not provide a generic authenticated Supabase Management API client. No fake key or publishable key was installed.
+- Worker remains without `SUPABASE_SECRET_KEY`; protected Worker routes depending on it cannot be considered operational. Do not expose key material in logs/docs.
+
+### W3 — Cloudflare Workers Builds and isolation guard
+- Resolved the Worker script tag through Cloudflare script inventory: `ca37e48aa3b74432954ce6e4a2d9a0b3` (not the Worker name).
+- Verified the existing build trigger: `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`, GitHub repo ID `1405551318`, branch `staging-worker-cors`, deploy command `npx wrangler deploy --config wrangler.staging.toml`.
+- Latest Workers Build `c67646ef-3f63-4137-9a20-4e21e454f5d5` completed with `build_outcome=success` for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721`.
+- Verified active staging Worker version 28 (`130bfe07-5f43-4d90-afd0-3954d5ba3058)) bindings are isolated: staging D1 `803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`, R2 `carmy-staging-files`, rate-limit namespace `2601019`, and Supabase ref `vejccahjrlwhaniajgez`. No production IDs in that version's returned bindings.
+- First trigger lookup by Worker name failed because the Builds API requires the system-generated script tag. Retried using the tag and successfully retrieved the trigger/build.
+- Added `tests/staging-worker-bindings.test.mjs` and `.github/workflows/staging-worker-bindings.yml` on branch `ci/staging-worker-bindings-20261019` to fail on production D1 ID `57c85007-...`, rate-limit namespace `2601008`, or R2 bucket `carmy-files`, and assert the expected staging IDs. PR/CI and staging-branch trigger verification are pending.
+- Do not change the Cloudflare build command to run this guard until the guarded test file is present on the trigger's watched branch; otherwise the build would fail due to a missing file.
+- No production resource was modified.
+
+### Execution status and blockers
+- The user-specified QA password was not copied into code, SQL, logs, or documentation.
+- W1 sign-in and W2 privileged secret remain blocked by missing Auth Admin/Management API capabilities in the connected tools; the next steps must continue using available independent approaches and record exact results. No production rollout is authorized unless every gate in the existing production plan is proven.
