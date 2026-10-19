@@ -1087,8 +1087,9 @@ test("Client Production: help view renders in-app tabs and supports ticket submi
   `);
   await h.eval("document.getElementById('ticketSubmitBtn').click();");
 
-  const tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
-  assert.equal(tickets.length, 1, "Submitted ticket must be saved to localStorage");
+  const tickets = JSON.parse(JSON.stringify(h.eval("userSupportTickets")));
+  assert.equal(tickets.length, 1, "Submitted ticket must remain in the current account memory");
+  assert.equal(h.store.has("carmy_support_tickets"), false, "Ticket data must not be persisted under a shared localStorage key");
   assert.equal(tickets[0].id, "TD-TEST9999", "Ticket ID must match server response");
   assert.equal(tickets[0].subject, "Odometer query");
   assert.equal(tickets[0].email, "driver@example.com");
@@ -2663,6 +2664,7 @@ test("Support Ticket Workflow: Customer ticket list renders accessible items wit
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [
       { id: 'TD-TEST-001', subject: 'Transfer assistance', status: 'working', priority: 'high', has_unread: true, created_at: '2026-10-18T10:00:00Z' },
       { id: 'TD-TEST-002', subject: 'Billing inquiry', status: 'need_info', priority: 'normal', has_unread: false, created_at: '2026-10-17T10:00:00Z' }
@@ -2703,6 +2705,7 @@ test("Support Ticket Workflow: Customer ticket stepper progression across status
   for (const s of statuses) {
     h.eval(`
       user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
       userSupportTickets = [{ id: 'TD-ST-' + '${s.st}', subject: 'Status test', status: '${s.st}', priority: 'normal', created_at: '2026-10-18T10:00:00Z' }];
       openCustomerTicketDetail('TD-ST-' + '${s.st}');
     `);
@@ -2712,6 +2715,7 @@ test("Support Ticket Workflow: Customer ticket stepper progression across status
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-NEEDINFO',
       subject: 'Missing RC page',
@@ -2740,6 +2744,7 @@ test("Support Ticket Workflow: Customer chat enabled shows reply box; disabled s
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-NO-CHAT',
       subject: 'General feedback',
@@ -2757,6 +2762,7 @@ test("Support Ticket Workflow: Customer chat enabled shows reply box; disabled s
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-CHAT-ACTIVE',
       subject: 'Live support thread',
@@ -2780,6 +2786,7 @@ test("Support Ticket Workflow: Strict XSS protection renders user and admin cont
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-XSS-TEST',
       subject: ${JSON.stringify(xssPayload)},
