@@ -655,3 +655,8 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - Manual verification commands: npm test; then npx wrangler d1 migrations list carmy-ticket-workflow-staging --remote --config wrangler.staging.toml --directory worker/migrations; review tracking before applying; if staging migration is approved, npx wrangler d1 migrations apply carmy-ticket-workflow-staging --remote --config wrangler.staging.toml --directory worker/migrations. Staging database is carmy-ticket-workflow-staging (UUID 803810b8-77d0-42bb-bdd6-7e8b1cc4afdb) from wrangler.staging.toml. Do not use production wrangler.toml or run any production migration.
 - Known decision/blocker: support is the only non-super-admin role authorized to manage tickets and view the team roster; viewer, sales, and finance are denied. Team POST is super-admin-only. User should confirm whether this role policy is intended before staging rollout.
 - Merge recommendation: DO NOT MERGE until tests and staging migration/E2E are verified and user says go.
+
+
+## 2026-10-19 — Follow-up permission hardening
+- Updated ticket assignment eligibility so an unavailable Super Admin lookup does not automatically deny an active support roster member; it checks the active support roster and only allows a confirmed match. If neither lookup establishes eligibility, assignment fails closed. Changed file: worker/src/ticket-workflow.js.
+- Commit: ba65d46b48504fd699ba47b30ba9fcf49a2f945e. Automated tests remain NOT RUN in this environment. No staging migration, deploy, or production action performed.
