@@ -1,0 +1,30 @@
+name: Staging Worker Binding Guard
+
+on:
+  pull_request:
+    paths:
+      - "wrangler.staging.toml"
+      - "tests/staging-worker-bindings.test.mjs"
+      - ".github/workflows/staging-worker-bindings.yml"
+  push:
+    branches:
+      - main
+      - staging-worker-cors
+    paths:
+      - "wrangler.staging.toml"
+      - "tests/staging-worker-bindings.test.mjs"
+      - ".github/workflows/staging-worker-bindings.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  staging-binding-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assert staging resources are isolated from production
+        run: node --test tests/staging-worker-bindings.test.mjs
