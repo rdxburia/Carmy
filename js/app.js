@@ -77,6 +77,7 @@ function clearUserMemory(){
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;garageLoadingState='idle';
   isSuperAdmin=false;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
+  userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -1248,6 +1249,7 @@ async function start(u,force=false){
      setAppLoadingProgress(100);
      hideAppLoading();
      ensureSecurityPassword();
+     startTicketUnreadPolling();
      if(!user||user.id===u.id){
        startedUserId=u.id;
        startupFailed=false;
@@ -3001,16 +3003,131 @@ let currentHelpTab='faqs';
 let userSupportTickets=[];
 let ticketsLoaded=false;
 let ticketSubmitting=false;
+let ticketUnreadCount=0;
+let ticketUnreadTimer=null;
+let viewingCustomerTicketId=null;
+let customerTicketDetailLoading=false;
+
+const TICKET_STATUS_LABELS={
+  pending:'Pending',
+  assigned:'Assigned',
+  working:'Working on it',
+  need_info:'Required other information',
+  solved:'Solved',
+  closed:'Closed'
+};
+const TICKET_TRANSITIONS={
+  pending:['assigned'],
+  assigned:['working'],
+  working:['need_info','solved'],
+  need_info:['working'],
+  solved:['working','closed'],
+  closed:['working']
+};
+
+function normalizeTicketStatus(st){
+  const s=String(st||'pending').toLowerCase().replace(/\s+/g,'_');
+  if(s==='open')return 'pending';
+  if(s==='in_progress')return 'working';
+  if(s==='resolved')return 'solved';
+  return s;
+}
+
+function updateHelpUnreadBadge(count){
+  ticketUnreadCount=Number(count)||0;
+  const badgeText=ticketUnreadCount>99?'99+':String(ticketUnreadCount);
+  const selectors=[
+    '#mobileNav button[data-view="help"]',
+    'aside button[data-view="help"]',
+    '#sideMenu .drawer-link[data-view="help"]',
+    '.drawer-link[data-view="help"]',
+    'button[data-view="help"]',
+    '[data-view="help"]'
+  ];
+  const matched=new Set();
+  selectors.forEach(sel=>{
+    document.querySelectorAll?.(sel)?.forEach?.(btn=>{
+      if(btn && !matched.has(btn)){
+        matched.add(btn);
+        let badge=btn.querySelector?.('.ticket-unread-badge');
+        if(ticketUnreadCount>0){
+          if(!badge){
+            badge=document.createElement('span');
+            badge.className='ticket-unread-badge';
+            badge.setAttribute('aria-label',badgeText+' unread support updates');
+            btn.appendChild(badge);
+          }
+          badge.textContent=badgeText;
+          badge.style.display='inline-flex';
+        }else if(badge){
+          badge.remove();
+        }
+      }
+    });
+  });
+}
+
+async function checkTicketUnreadCount(){
+  if(!user||typeof workerGet!=='function')return 0;
+  try{
+    const res=await workerGet('/api/tickets/unread-count');
+    if(res&&res.ok&&typeof res.count==='number'){
+      updateHelpUnreadBadge(res.count);
+      return res.count;
+    }
+  }catch(_){}
+  return 0;
+}
+
+function startTicketUnreadPolling(){
+  stopTicketUnreadPolling();
+  checkTicketUnreadCount();
+  ticketUnreadTimer=setInterval(()=>{
+    if(typeof document!=='undefined'&&document.visibilityState==='visible'){
+      checkTicketUnreadCount();
+    }
+  },60000);
+}
+
+function stopTicketUnreadPolling(){
+  if(ticketUnreadTimer){
+    clearInterval(ticketUnreadTimer);
+    ticketUnreadTimer=null;
+  }
+}
+
+if(typeof document!=='undefined'&&document.addEventListener){
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      checkTicketUnreadCount();
+    }
+  });
+}
 
 async function loadUserSupportTickets(){
   if(typeof workerGet==='function'){
+    try{
+      const res=await workerGet('/api/tickets');
+      if(res&&res.ok&&Array.isArray(res.data)){
+        userSupportTickets=res.data.map(t=>({
+          ...t,
+          status:normalizeTicketStatus(t.status),
+          created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
+          car_reg:(Array.isArray(cars)?cars:[]).find(c=>c.id===t.car_id)?.registration_no||null
+        }));
+        try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
+        ticketsLoaded=true;
+        return userSupportTickets;
+      }
+    }catch(_){}
     try{
       const res=await workerGet('/api/support-tickets');
       if(Array.isArray(res?.data)){
         userSupportTickets=res.data.map(t=>({
           ...t,
-          created_at: typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
-          car_reg: cars.find(c=>c.id===t.car_id)?.registration_no||null
+          status:normalizeTicketStatus(t.status),
+          created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
+          car_reg:(Array.isArray(cars)?cars:[]).find(c=>c.id===t.car_id)?.registration_no||null
         }));
         try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
         ticketsLoaded=true;
@@ -3050,19 +3167,28 @@ function helpView(){
       window.scrollTo({top:0,behavior:'smooth'});
     };
   });
+  checkTicketUnreadCount();
   try{
     if(currentHelpTab==='faqs'){
       container.innerHTML=renderFaqsContent();
     }else if(currentHelpTab==='ticket'){
       container.innerHTML=renderTicketContent();
-      wireTicketForm();
-      if(!ticketsLoaded&&typeof workerGet==='function'){
-        loadUserSupportTickets().then(()=>{
-          if(currentHelpTab==='ticket'){
-            const pastCont=$('ticketPastContainer');
-            if(pastCont) pastCont.innerHTML=renderTicketPastList();
-          }
-        });
+      if(viewingCustomerTicketId){
+        wireCustomerTicketDetailView(viewingCustomerTicketId);
+      }else{
+        wireTicketForm();
+        wireCustomerTicketList();
+        if(!ticketsLoaded&&typeof workerGet==='function'){
+          loadUserSupportTickets().then(()=>{
+            if(currentHelpTab==='ticket'&&!viewingCustomerTicketId){
+              const pastCont=$('ticketPastContainer');
+              if(pastCont){
+                pastCont.innerHTML=renderTicketPastList();
+                wireCustomerTicketList();
+              }
+            }
+          });
+        }
       }
     }else if(currentHelpTab==='about'){
       container.innerHTML=renderAboutContent();
@@ -3082,6 +3208,22 @@ function helpView(){
   }
 }
 
+function openCustomerTicketDetail(ticketId){
+  currentHelpTab='ticket';
+  viewingCustomerTicketId=String(ticketId);
+  helpView();
+  const t=(Array.isArray(userSupportTickets)?userSupportTickets:[]).find(x=>String(x.id)===viewingCustomerTicketId);
+  if(t&&t.has_unread){
+    t.has_unread=false;
+    checkTicketUnreadCount();
+  }
+}
+
+function closeCustomerTicketDetail(){
+  viewingCustomerTicketId=null;
+  helpView();
+}
+
 function renderTicketPastList(){
   let existing=userSupportTickets;
   if(!Array.isArray(existing)||!existing.length){
@@ -3090,11 +3232,238 @@ function renderTicketPastList(){
       existing=Array.isArray(parsed)?parsed:[];
     }catch(_){ existing=[]; }
   }
-  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||t.user_id===user.id||t.email===user.email);
+  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
   if(!userTickets.length)return '';
   return '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
-    userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id||'TD-TICKET')+'</b> <span class="ticket-badge">'+esc(t.category||'General')+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject||'No Subject')+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
+    userTickets.map(t=>{
+      const tid=esc(t.id||'TD-TICKET');
+      const unreadBadge=t.has_unread?'<span class="ticket-unread-pill">● New reply</span>':'';
+      const reg=t.car_reg?'<span class="muted">· '+esc(t.car_reg)+'</span>':'';
+      const timeStr=esc(formatTimestamp(t.updated_at||t.created_at));
+      return '<div class="ticket-row-accessible" tabindex="0" role="button" aria-label="View ticket '+tid+'" onclick="openCustomerTicketDetail(\''+tid+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCustomerTicketDetail(\''+tid+'\');}">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
+            '<code style="font-weight:700;color:#2563eb">'+tid+'</code> '+
+            renderStatusBadge(t.status)+' '+
+            renderPriorityBadge(t.priority)+' '+
+            unreadBadge+' '+
+            reg+
+          '</div>'+
+          '<small class="muted">'+timeStr+'</small>'+
+        '</div>'+
+        '<div class="ticket-customer-row-subject" style="font-weight:600;color:#0f172a;font-size:14px;margin-top:4px"></div>'+
+      '</div>';
+    }).join('')+
     '</div></div>';
+}
+
+function wireCustomerTicketList(){
+  const rows=document.querySelectorAll('.ticket-row-accessible');
+  let existing=userSupportTickets;
+  if(!Array.isArray(existing)||!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
+  }
+  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
+  rows.forEach((row,i)=>{
+    const subEl=row.querySelector('.ticket-customer-row-subject');
+    if(subEl&&userTickets[i]){
+      subEl.textContent=userTickets[i].subject||'No Subject';
+    }
+  });
+}
+
+function renderCustomerTicketDetailView(ticketId){
+  let existing=userSupportTickets;
+  if(!Array.isArray(existing)||!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
+  }
+  const ticket=(Array.isArray(existing)?existing:[]).find(t=>String(t.id)===String(ticketId))||{
+    id:ticketId,
+    subject:'Support Ticket '+ticketId,
+    status:'pending',
+    priority:'normal',
+    created_at:new Date().toISOString()
+  };
+
+  const statusKey=normalizeTicketStatus(ticket.status);
+  const steps=[
+    {key:'pending',label:'Submitted'},
+    {key:'assigned',label:'Assigned'},
+    {key:'working',label:'Working on it'},
+    {key:'solved',label:'Solved'},
+    {key:'closed',label:'Closed'}
+  ];
+
+  let activeIndex=0;
+  if(statusKey==='assigned') activeIndex=1;
+  else if(statusKey==='working'||statusKey==='need_info') activeIndex=2;
+  else if(statusKey==='solved') activeIndex=3;
+  else if(statusKey==='closed') activeIndex=4;
+
+  const stepperHtml='<div class="ticket-stepper-container">'+
+    '<div class="ticket-stepper">'+
+      steps.map((st,idx)=>{
+        const isCompleted=idx<activeIndex||(idx===activeIndex&&statusKey==='closed');
+        const isActive=idx===activeIndex&&statusKey!=='closed';
+        const cls=isCompleted?'ticket-step-completed':(isActive?'ticket-step-active':'');
+        return '<div class="ticket-step-item '+cls+'">'+
+          '<div class="ticket-step-circle">'+(isCompleted?'✓':(idx+1))+'</div>'+
+          '<span class="ticket-step-label">'+esc(st.label)+'</span>'+
+        '</div>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+
+  const needInfoBanner=statusKey==='need_info'
+    ? '<div class="ticket-warning-banner" id="customerTicketNeedInfoBanner"><div class="ticket-warning-title">⚠️ Action Required: Additional Information Needed</div><div class="ticket-warning-msg" id="customerTicketNeedInfoMsg"></div></div>'
+    : '';
+
+  const agentName=ticket.show_agent_name&&ticket.agent_name?esc(ticket.agent_name):'Our support team';
+  const chatActive=Boolean(ticket.chat_enabled)&&statusKey!=='closed';
+
+  return '<div class="card">'+
+    '<button type="button" class="ticket-back-btn" onclick="closeCustomerTicketDetail()">← Back to Support Tickets</button>'+
+    '<div class="card-head-row" style="margin-top:6px">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+
+          '<code style="font-size:15px;font-weight:700;color:#2563eb">'+esc(ticket.id)+'</code>'+
+          renderStatusBadge(ticket.status)+
+          renderPriorityBadge(ticket.priority)+
+        '</div>'+
+        '<h3 id="customerTicketDetailSubject" style="margin:0 0 4px 0"></h3>'+
+        '<p class="muted" style="margin:0;font-size:12.5px">Submitted '+esc(formatTimestamp(ticket.created_at))+(ticket.car_reg?' · Vehicle: '+esc(ticket.car_reg):'')+'</p>'+
+      '</div>'+
+    '</div>'+
+    stepperHtml+
+    needInfoBanner+
+    '<div class="ticket-agent-row"><span>Assigned Specialist:</span> <b>'+agentName+'</b></div>'+
+    '<div class="ticket-thread-container" id="customerTicketThread"></div>'+
+    (chatActive
+      ? '<div class="ticket-reply-box-sticky"><form class="ticket-reply-form" onsubmit="return false;"><textarea id="customerTicketReplyInput" class="ticket-reply-input" placeholder="Type your reply to the support team..." rows="2"></textarea><div class="ticket-reply-actions"><button type="button" class="primary" id="customerTicketSendReplyBtn" onclick="sendCustomerTicketReply(\''+esc(ticket.id)+'\')">Send Reply</button></div></form></div>'
+      : '<div class="ticket-chat-disabled-banner">Our team will reply here.</div>')+
+  '</div>';
+}
+
+function wireCustomerTicketDetailView(ticketId){
+  const subEl=$('customerTicketDetailSubject');
+  let existing=userSupportTickets;
+  if(!Array.isArray(existing)||!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
+  }
+  const ticket=(Array.isArray(existing)?existing:[]).find(t=>String(t.id)===String(ticketId));
+  if(subEl&&ticket){
+    subEl.textContent=ticket.subject||'Support Inquiry';
+  }
+  const thread=$('customerTicketThread');
+  if(thread&&ticket){
+    thread.innerHTML='';
+    const events=Array.isArray(ticket.events)?ticket.events:[];
+    const threadList=events.length?events:(ticket.message?[{actor_type:'user',message:ticket.message,created_at:ticket.created_at}]:[]);
+
+    if(normalizeTicketStatus(ticket.status)==='need_info'){
+      const bannerMsgEl=$('customerTicketNeedInfoMsg');
+      if(bannerMsgEl){
+        const lastAdmin=[...threadList].reverse().find(e=>e.actor_type==='admin'||e.actor_type==='team');
+        bannerMsgEl.textContent=lastAdmin?.message||'Support team has requested additional details to proceed with your ticket. Please reply below.';
+      }
+    }
+
+    threadList.forEach(e=>{
+      const isUser=e.actor_type==='user';
+      const bubble=document.createElement('div');
+      bubble.className='ticket-message-bubble '+(isUser?'ticket-message-user':'ticket-message-admin');
+
+      const header=document.createElement('div');
+      header.className='ticket-message-header';
+
+      const sender=document.createElement('span');
+      sender.className='ticket-message-sender';
+      sender.textContent=isUser?'You':(ticket.show_agent_name&&ticket.agent_name?ticket.agent_name:'Support Specialist');
+
+      const time=document.createElement('span');
+      time.className='ticket-message-time';
+      time.textContent=formatTimestamp(e.created_at);
+
+      header.appendChild(sender);
+      header.appendChild(time);
+
+      const text=document.createElement('div');
+      text.className='ticket-message-text';
+      text.textContent=e.message||'';
+
+      bubble.appendChild(header);
+      bubble.appendChild(text);
+      thread.appendChild(bubble);
+    });
+  }
+
+  if(typeof workerGet==='function'){
+    loadCustomerTicketDetails(ticketId);
+  }
+}
+
+async function loadCustomerTicketDetails(ticketId){
+  if(customerTicketDetailLoading)return;
+  customerTicketDetailLoading=true;
+  try{
+    const res=await workerGet('/api/tickets/'+encodeURIComponent(ticketId));
+    if(res&&res.ok&&res.data){
+      const updated=res.data;
+      let existing=(Array.isArray(userSupportTickets)?userSupportTickets:[]).find(t=>String(t.id)===String(ticketId));
+      if(existing){
+        Object.assign(existing,updated);
+      }else{
+        userSupportTickets.push(updated);
+      }
+      if(viewingCustomerTicketId===String(ticketId)){
+        wireCustomerTicketDetailView(ticketId);
+      }
+    }
+  }catch(err){
+    console.warn('Could not load authoritative customer ticket details (likely 404 from backend routing bug in worker/src/ticket-workflow.js):',err);
+  }finally{
+    customerTicketDetailLoading=false;
+  }
+}
+
+async function sendCustomerTicketReply(ticketId){
+  const input=$('customerTicketReplyInput');
+  const btn=$('customerTicketSendReplyBtn');
+  if(!input||!btn)return;
+  const message=input.value.trim();
+  if(!message){
+    toast('Please enter a reply message.','error');
+    input.focus();
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Sending...';
+  try{
+    const res=await workerPost('/api/tickets/'+encodeURIComponent(ticketId)+'/messages',{message});
+    if(!res?.ok){
+      if(res?.error?.code==='CHAT_DISABLED'||res?.status===403){
+        throw new Error('Replies are currently disabled for this ticket.');
+      }
+      throw new Error(res?.error?.message||'Failed to send reply.');
+    }
+    input.value='';
+    toast('Reply submitted successfully!','ok');
+    await loadCustomerTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to send reply:',err);
+    if(err?.status===403||err?.code==='CHAT_DISABLED'){
+      toast('Replies are currently disabled for this ticket.','error');
+    }else if(err?.status===404||err?.code==='NOT_FOUND'){
+      toast('Failed to send message: Server route unavailable (404). Backend bug detected in worker route dispatch.','error');
+    }else{
+      toast(err?.message||'Failed to send reply.','error');
+    }
+  }finally{
+    if(document.body.contains(btn)){
+      btn.disabled=false;
+      btn.textContent='Send Reply';
+    }
+  }
 }
 
 function renderFaqsContent(){
@@ -3112,6 +3481,9 @@ function renderFaqsContent(){
 }
 
 function renderTicketContent(){
+  if(viewingCustomerTicketId){
+    return renderCustomerTicketDetailView(viewingCustomerTicketId);
+  }
   const carList = Array.isArray(cars) ? cars : [];
   const carOptions=['<option value="">General (No specific vehicle)</option>'].concat(
     carList.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
@@ -3190,6 +3562,7 @@ function wireTicketForm(){
 
       toast('Support ticket '+ticketId+' created successfully!');
       currentHelpTab='ticket';
+      viewingCustomerTicketId=null;
       helpView();
     }catch(err){
       console.error('Ticket submission error:',err);
@@ -3317,24 +3690,53 @@ function formatAdminDate(ts){
   }
 }
 
+let adminAssigneeFilter='all';
+let adminPriorityFilter='all';
+let adminSlaFilter='all';
+
 function renderStatusBadge(status){
-  const s=String(status||'open').toLowerCase();
-  if(s==='in_progress')return '<span class="admin-badge status-in-progress">In Progress</span>';
-  if(s==='resolved')return '<span class="admin-badge status-resolved">Resolved</span>';
-  if(s==='closed')return '<span class="admin-badge status-closed">Closed</span>';
+  const s=normalizeTicketStatus(status);
+  if(s==='pending')return '<span class="ticket-status-badge status-pending">Pending</span>';
+  if(s==='assigned')return '<span class="ticket-status-badge status-assigned">Assigned</span>';
+  if(s==='working')return '<span class="ticket-status-badge status-working">Working on it</span>';
+  if(s==='need_info')return '<span class="ticket-status-badge status-need-info">Required other information</span>';
+  if(s==='solved')return '<span class="ticket-status-badge status-solved">Solved</span>';
+  if(s==='closed')return '<span class="ticket-status-badge status-closed">Closed</span>';
   if(s==='active')return '<span class="admin-badge status-active">Active</span>';
   if(s==='trial')return '<span class="admin-badge status-trial">Trial</span>';
   if(s==='grace')return '<span class="admin-badge status-grace">Grace</span>';
   if(s==='suspended')return '<span class="admin-badge status-suspended">Suspended</span>';
-  return '<span class="admin-badge status-open">Open</span>';
+  return '<span class="ticket-status-badge status-pending">'+esc(status||'Pending')+'</span>';
 }
 
 function renderPriorityBadge(priority){
   const p=String(priority||'normal').toLowerCase();
-  if(p==='urgent')return '<span class="admin-badge prio-urgent">Urgent</span>';
-  if(p==='high')return '<span class="admin-badge prio-high">High</span>';
-  if(p==='low')return '<span class="admin-badge prio-low">Low</span>';
-  return '<span class="admin-badge prio-normal">Normal</span>';
+  if(p==='urgent')return '<span class="ticket-priority-badge priority-urgent">Urgent</span>';
+  if(p==='high')return '<span class="ticket-priority-badge priority-high">High</span>';
+  if(p==='low')return '<span class="ticket-priority-badge priority-low">Low</span>';
+  return '<span class="ticket-priority-badge priority-normal">Normal</span>';
+}
+
+function isTicketSlaBreached(t){
+  if(!t)return false;
+  const s=normalizeTicketStatus(t.status);
+  if(s==='solved'||s==='closed')return false;
+  if(t.sla_due_at){
+    const dueSec=Number(t.sla_due_at);
+    if(dueSec>0&&Math.floor(Date.now()/1000)>dueSec)return true;
+  }
+  if(s==='pending'){
+    const createdMs=typeof t.created_at==='number'?t.created_at*1000:new Date(t.created_at||0).getTime();
+    if(createdMs>0&&(Date.now()-createdMs)>24*3600*1000)return true;
+  }
+  return false;
+}
+
+function renderSlaBadge(t){
+  if(isTicketSlaBreached(t)){
+    return '<span class="ticket-sla-badge" title="First-response or resolution SLA breached">⚠️ SLA Breach</span>';
+  }
+  return '';
 }
 
 function formatCategory(cat){
@@ -3349,10 +3751,19 @@ function formatCategory(cat){
 
 function getFilteredAdminTickets(){
   return adminTickets.filter(t=>{
-    if(adminStatusFilter!=='all'){
-      const s=(t.status||'open').toLowerCase();
-      if(adminStatusFilter==='in_progress'&&s!=='in_progress')return false;
-      else if(adminStatusFilter!=='in_progress'&&s!==adminStatusFilter)return false;
+    const s=normalizeTicketStatus(t.status);
+    if(adminStatusFilter!=='all'&&s!==adminStatusFilter)return false;
+    if(adminAssigneeFilter==='me'){
+      const myId=user?.id||user?.email;
+      if(!t.assignee_id||(t.assignee_id!==myId&&t.assignee_id!==user?.email))return false;
+    }else if(adminAssigneeFilter==='unassigned'){
+      if(t.assignee_id)return false;
+    }
+    if(adminPriorityFilter!=='all'){
+      if(String(t.priority||'normal').toLowerCase()!==adminPriorityFilter)return false;
+    }
+    if(adminSlaFilter==='breached'){
+      if(!isTicketSlaBreached(t))return false;
     }
     if(adminSearchQuery.trim()){
       const q=adminSearchQuery.toLowerCase();
@@ -3369,15 +3780,17 @@ function getFilteredAdminTickets(){
 
 function renderAdminStatsHtml(){
   const totalCount=adminTickets.length;
-  const openCount=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
-  const inProgressCount=adminTickets.filter(t=>(t.status||'').toLowerCase()==='in_progress').length;
-  const resolvedCount=adminTickets.filter(t=>['resolved','closed'].includes((t.status||'').toLowerCase())).length;
+  const pendingCount=adminTickets.filter(t=>normalizeTicketStatus(t.status)==='pending').length;
+  const workingCount=adminTickets.filter(t=>['assigned','working','need_info'].includes(normalizeTicketStatus(t.status))).length;
+  const slaBreachedCount=adminTickets.filter(isTicketSlaBreached).length;
+  const solvedCount=adminTickets.filter(t=>['solved','closed'].includes(normalizeTicketStatus(t.status))).length;
 
   return '<div class="admin-stats-grid">'+
     '<div class="admin-stat-card"><span class="admin-stat-val">'+totalCount+'</span><span class="admin-stat-label">Total Tickets</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#2563eb">'+openCount+'</span><span class="admin-stat-label">Open / Unresolved</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+inProgressCount+'</span><span class="admin-stat-label">In Progress</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+resolvedCount+'</span><span class="admin-stat-label">Resolved / Closed</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#b91c1c">'+slaBreachedCount+'</span><span class="admin-stat-label">⚠️ SLA Breached</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#2563eb">'+pendingCount+'</span><span class="admin-stat-label">Pending Triage</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+workingCount+'</span><span class="admin-stat-label">In Progress / Working</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+solvedCount+'</span><span class="admin-stat-label">Solved / Closed</span></div>'+
   '</div>';
 }
 
@@ -3397,6 +3810,11 @@ function renderAdminTicketDiagnosticCard(){
       '<button type="button" class="primary" onclick="loadAdminTickets(true)">Retry Connection</button>'+
     '</div>'+
   '</div>';
+}
+
+function renderAdminListContent(){
+  const listCont=$('adminListContainer');
+  if(listCont)listCont.innerHTML=renderAdminListHtml();
 }
 
 function renderAdminListHtml(){
@@ -3419,11 +3837,43 @@ function renderAdminListHtml(){
       '<div class="admin-state-icon">🎫</div>'+
       '<h3>No Support Tickets Found</h3>'+
       '<p>'+(adminTickets.length===0?'No customer support tickets have been submitted yet.':'No tickets match the selected filters.')+'</p>'+
-      (adminStatusFilter!=='all'||adminSearchQuery?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
+      (adminStatusFilter!=='all'||adminAssigneeFilter!=='all'||adminPriorityFilter!=='all'||adminSlaFilter!=='all'||adminSearchQuery?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
     '</div>';
   }
 
-  return '<div class="admin-table-container">'+
+  const tableRows = displayed.map(t=>{
+    const tid=esc(t.id||'—');
+    const sla=renderSlaBadge(t);
+    return '<tr onclick="openAdminTicketDetails(\''+tid+'\')" style="cursor:pointer">'+
+      '<td><div style="display:flex;align-items:center;gap:6px"><code style="font-weight:700;color:#2563eb">'+tid+'</code> '+sla+'</div></td>'+
+      '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(t.created_at))+'</td>'+
+      '<td><div style="font-weight:600">'+esc(t.email||'Anonymous')+'</div><small class="muted" style="font-size:11px">'+esc((t.user_id||'').slice(0,8))+'...</small></td>'+
+      '<td><span class="admin-badge" style="background:#f1f5f9;color:#334155">'+esc(formatCategory(t.category))+'</span></td>'+
+      '<td class="ticket-subject-cell"><div class="ticket-subject-title">'+esc(t.subject||'No Subject')+'</div><small class="ticket-subject-desc">'+esc(t.message||'')+'</small></td>'+
+      '<td>'+renderPriorityBadge(t.priority)+'</td>'+
+      '<td>'+renderStatusBadge(t.status)+'</td>'+
+      '<td style="text-align:right" onclick="event.stopPropagation()"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminTicketDetails(\''+tid+'\')">View</button></td>'+
+    '</tr>';
+  }).join('');
+
+  const mobileCards = displayed.map(t=>{
+    const tid=esc(t.id||'—');
+    const sla=renderSlaBadge(t);
+    return '<div class="ticket-card-mobile" onclick="openAdminTicketDetails(\''+tid+'\')" style="cursor:pointer">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><code style="font-weight:700;color:#2563eb">'+tid+'</code> '+sla+' '+renderStatusBadge(t.status)+'</div>'+
+        '<small class="muted">'+esc(formatAdminDate(t.created_at))+'</small>'+
+      '</div>'+
+      '<div style="font-weight:700;font-size:14px;color:#0f172a;margin-top:4px">'+esc(t.subject||'No Subject')+'</div>'+
+      '<p class="muted" style="font-size:12px;margin:2px 0 6px 0;line-height:1.4">'+esc((t.message||'').slice(0,120))+'</p>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;border-top:1px solid #f1f5f9;padding-top:6px">'+
+        '<span>'+esc(t.email||'Anonymous')+'</span>'+
+        renderPriorityBadge(t.priority)+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  return '<div class="ticket-table-desktop admin-table-container">'+
     '<table class="admin-data-table">'+
       '<thead>'+
         '<tr>'+
@@ -3437,20 +3887,10 @@ function renderAdminListHtml(){
           '<th style="text-align:right">Action</th>'+
         '</tr>'+
       '</thead>'+
-      '<tbody>'+
-        displayed.map(t=>'<tr onclick="openAdminTicketDetails(\''+esc(t.id)+'\')" style="cursor:pointer">'+
-          '<td><code style="font-weight:700;color:#2563eb">'+esc(t.id||'—')+'</code></td>'+
-          '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(t.created_at))+'</td>'+
-          '<td><div style="font-weight:600">'+esc(t.email||'Anonymous')+'</div><small class="muted" style="font-size:11px">'+esc((t.user_id||'').slice(0,8))+'...</small></td>'+
-          '<td><span class="admin-badge" style="background:#f1f5f9;color:#334155">'+esc(formatCategory(t.category))+'</span></td>'+
-          '<td><div style="font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.subject||'No Subject')+'</div><small class="muted" style="display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.message||'')+'</small></td>'+
-          '<td>'+renderPriorityBadge(t.priority)+'</td>'+
-          '<td>'+renderStatusBadge(t.status)+'</td>'+
-          '<td style="text-align:right" onclick="event.stopPropagation()"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminTicketDetails(\''+esc(t.id)+'\')">View</button></td>'+
-        '</tr>').join('')+
-      '</tbody>'+
+      '<tbody>'+tableRows+'</tbody>'+
     '</table>'+
-  '</div>';
+  '</div>'+
+  '<div class="ticket-mobile-card-list">'+mobileCards+'</div>';
 }
 
 /* Individual Screen Renderers */
@@ -3746,11 +4186,13 @@ function renderScreenUpgrades(){
 }
 
 function renderScreenTickets(){
-  const filters=[
+  const statusFilters=[
     {id:'all',label:'All'},
-    {id:'open',label:'Open'},
-    {id:'in_progress',label:'In Progress'},
-    {id:'resolved',label:'Resolved'},
+    {id:'pending',label:'Pending'},
+    {id:'assigned',label:'Assigned'},
+    {id:'working',label:'Working on it'},
+    {id:'need_info',label:'Required other info'},
+    {id:'solved',label:'Solved'},
     {id:'closed',label:'Closed'}
   ];
 
@@ -3773,9 +4215,24 @@ function renderScreenTickets(){
     '<div id="adminStatsContainer">'+renderAdminStatsHtml()+'</div>'+
     '<div class="admin-controls-bar">'+
       '<div class="admin-filter-tabs" id="adminFilterGroup">'+
-        filters.map(f=>'<button type="button" class="admin-filter-pill '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+f.label+'</button>').join('')+
+        statusFilters.map(f=>'<button type="button" class="admin-filter-pill '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+esc(f.label)+'</button>').join('')+
       '</div>'+
-      '<div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<select class="ticket-filter-select" id="adminAssigneeSelect" onchange="adminAssigneeFilter=this.value;renderAdminListContent()">'+
+          '<option value="all" '+(adminAssigneeFilter==='all'?'selected':'')+'>All Assignees</option>'+
+          '<option value="me" '+(adminAssigneeFilter==='me'?'selected':'')+'>Assigned to Me</option>'+
+          '<option value="unassigned" '+(adminAssigneeFilter==='unassigned'?'selected':'')+'>Unassigned</option>'+
+        '</select>'+
+        '<select class="ticket-filter-select" id="adminPrioritySelect" onchange="adminPriorityFilter=this.value;renderAdminListContent()">'+
+          '<option value="all" '+(adminPriorityFilter==='all'?'selected':'')+'>All Priorities</option>'+
+          '<option value="urgent" '+(adminPriorityFilter==='urgent'?'selected':'')+'>Urgent</option>'+
+          '<option value="high" '+(adminPriorityFilter==='high'?'selected':'')+'>High</option>'+
+          '<option value="normal" '+(adminPriorityFilter==='normal'?'selected':'')+'>Normal</option>'+
+          '<option value="low" '+(adminPriorityFilter==='low'?'selected':'')+'>Low</option>'+
+        '</select>'+
+        '<button type="button" class="ticket-filter-pill '+(adminSlaFilter==='breached'?'active':'')+'" onclick="adminSlaFilter=(adminSlaFilter===\'breached\'?\'all\':\'breached\');renderAdminViewContent()">'+
+          '⚠️ SLA Breach Only'+
+        '</button>'+
         '<input type="text" id="adminSearchInput" class="admin-search-input" placeholder="Search ID, email, subject..." value="'+esc(adminSearchQuery)+'" oninput="handleAdminSearch(this.value)">'+
       '</div>'+
     '</div>'+
@@ -4267,10 +4724,10 @@ function resetAdminFilters(){
 
 /* Modals & Dialogs */
 
-function openAdminTicketDetails(ticketId){
-  const ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
-  if(!ticket)return;
+async function openAdminTicketDetails(ticketId){
   closeAdminTicketDetails();
+  let ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
+  if(!ticket)return;
 
   const modal=document.createElement('div');
   modal.id='adminTicketDetailModal';
@@ -4278,47 +4735,127 @@ function openAdminTicketDetails(ticketId){
   modal.setAttribute('role','dialog');
   modal.setAttribute('aria-modal','true');
 
-  modal.innerHTML='<div class="admin-modal-box">'+
+  const tid=esc(ticket.id);
+  const statusKey=normalizeTicketStatus(ticket.status);
+  const allowedTransitions=TICKET_TRANSITIONS[statusKey]||[];
+  const transitionOptions=['<option value="'+esc(statusKey)+'" selected>Current: '+esc(TICKET_STATUS_LABELS[statusKey]||statusKey)+'</option>'].concat(
+    allowedTransitions.map(s=>'<option value="'+esc(s)+'">Transition to: '+esc(TICKET_STATUS_LABELS[s]||s)+'</option>')
+  ).join('');
+
+  const slaBadge=renderSlaBadge(ticket);
+  const chatActive=Boolean(ticket.chat_enabled);
+  const showNameActive=Boolean(ticket.show_agent_name);
+
+  let countdownText='';
+  if(chatActive&&ticket.chat_enabled_until){
+    const leftSec=Number(ticket.chat_enabled_until)-Math.floor(Date.now()/1000);
+    if(leftSec>0){
+      const hrs=Math.floor(leftSec/3600);
+      const mins=Math.floor((leftSec%3600)/60);
+      countdownText='<span class="ticket-expiry-countdown">Chat Active: '+hrs+'h '+mins+'m remaining</span>';
+    }else{
+      countdownText='<span class="ticket-expiry-countdown" style="background:#fee2e2;color:#991b1b">Chat Expired</span>';
+    }
+  }
+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:760px">'+
     '<div class="admin-modal-head">'+
       '<div>'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
-          '<code style="font-size:16px;font-weight:800;color:#2563eb">'+esc(ticket.id)+'</code>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+
+          '<code style="font-size:16px;font-weight:800;color:#2563eb">'+tid+'</code>'+
+          slaBadge+
           renderStatusBadge(ticket.status)+
           renderPriorityBadge(ticket.priority)+
         '</div>'+
-        '<h3 style="margin:0;font-size:18px;font-weight:700">'+esc(ticket.subject||'No Subject')+'</h3>'+
+        '<h3 id="adminModalSubject" style="margin:0;font-size:18px;font-weight:700"></h3>'+
       '</div>'+
       '<button type="button" class="ghost" onclick="closeAdminTicketDetails()" style="font-size:18px;line-height:1;padding:6px 10px">✕</button>'+
     '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;font-size:13px">'+
+    '<div class="ticket-detail-grid">'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Submitter Email</span><b>'+esc(ticket.email||'Anonymous')+'</b></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">User UUID</span><code style="font-size:11px">'+esc(ticket.user_id||'—')+'</code></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Category</span><b>'+esc(formatCategory(ticket.category))+'</b></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Vehicle ID</span><code style="font-size:11px">'+esc(ticket.car_id||'None')+'</code></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Created Timestamp</span><span>'+esc(formatAdminDate(ticket.created_at))+'</span></div>'+
-      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Last Updated</span><span>'+esc(formatAdminDate(ticket.updated_at))+'</span></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Customer Phone</span><span class="ticket-contact-masked">+91 ••••• •••••</span></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;align-items:center;margin:10px 0;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;flex-wrap:wrap">'+
+      '<span class="muted">Customer Direct Actions:</span>'+
+      '<button type="button" class="ticket-contact-action-btn" disabled title="Audited contact integration pending backend implementation">📞 Call</button>'+
+      '<button type="button" class="ticket-contact-action-btn" disabled title="Audited contact integration pending backend implementation">💬 WhatsApp</button>'+
+      '<small class="muted" style="display:block;width:100%">Phone unmasking and direct customer calling requires audited backend route implementation.</small>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">'+
+      '<div>'+
+        '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">STATUS WORKFLOW</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<select id="adminTicketStatusSelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+transitionOptions+'</select>'+
+          '<button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="handleAdminStatusChange(\''+tid+'\')">Update</button>'+
+        '</div>'+
+      '</div>'+
+      '<div>'+
+        '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">ASSIGN SPECIALIST</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<select id="adminTicketAssigneeSelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+            '<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
+            '<option value="'+esc(user?.id||'me')+'" '+(ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>'+
+          '</select>'+
+          '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')">Save</button>'+
+        '</div>'+
+      '</div>'+
+      '<div>'+
+        '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">PRIORITY</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<select id="adminTicketPrioritySelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+            '<option value="low" '+(ticket.priority==='low'?'selected':'')+'>Low</option>'+
+            '<option value="normal" '+(ticket.priority==='normal'?'selected':'')+'>Normal</option>'+
+            '<option value="high" '+(ticket.priority==='high'?'selected':'')+'>High</option>'+
+            '<option value="urgent" '+(ticket.priority==='urgent'?'selected':'')+'>Urgent</option>'+
+          '</select>'+
+          '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="handleAdminPriorityChange(\''+tid+'\')">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="ticket-chat-toggle-box">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<input type="checkbox" id="adminTicketChatToggle" '+(chatActive?'checked':'')+' onchange="handleAdminChatToggle(\''+tid+'\',this.checked)">'+
+        '<label for="adminTicketChatToggle" style="font-weight:600;font-size:13px;cursor:pointer">Enable Customer Chat Window (48-hour window)</label>'+
+      '</div>'+
+      countdownText+
+    '</div>'+
+    '<div style="margin:8px 0;display:flex;align-items:center;gap:8px">'+
+      '<input type="checkbox" id="adminTicketShowNameToggle" '+(showNameActive?'checked':'')+' onchange="handleAdminShowNameToggle(\''+tid+'\',this.checked)">'+
+      '<label for="adminTicketShowNameToggle" style="font-size:12.5px;cursor:pointer">Show my specialist name to customer</label>'+
     '</div>'+
     '<div>'+
-      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Customer Message</div>'+
-      '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:240px;overflow-y:auto">'+esc(ticket.message||'(Empty message content)')+'</div>'+
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Customer Inquiry Message</div>'+
+      '<div id="adminTicketOriginalMsg" style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:160px;overflow-y:auto"></div>'+
     '</div>'+
-    '<div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:14px">'+
-      '<b style="font-size:12px;color:#854d0e;text-transform:uppercase;display:block;margin-bottom:6px">Internal Administrative Notes</b>'+
-      '<textarea id="adminTicketInternalNotes" rows="2" placeholder="Private internal note for support staff..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #fef08a;padding:8px;background:#fff"></textarea>'+
+    '<div class="ticket-internal-panel">'+
+      '<div class="ticket-internal-title">Internal, not visible to user</div>'+
+      '<div id="adminTicketInternalNotesContainer"><span class="muted" style="font-size:12.5px">No internal notes yet.</span></div>'+
     '</div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1px solid var(--c-line,#e2e8f0);padding-top:14px">'+
-      '<button type="button" class="ghost" style="color:#b45309" onclick="promptViewAsUser(\''+esc(ticket.user_id||'')+'\')">👁️ View As User (Audit Logged)</button>'+
-      '<div style="display:flex;gap:10px">'+
-        '<button type="button" class="ghost" onclick="toast(\'Status update queued.\',\'ok\')">Update Status</button>'+
-        '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
+    '<div>'+
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Audit Timeline &amp; Messages</div>'+
+      '<div class="ticket-timeline-container" id="adminTicketTimeline"></div>'+
+    '</div>'+
+    '<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px">'+
+      '<div style="display:flex;gap:16px;margin-bottom:8px;font-size:12.5px;font-weight:600">'+
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="adminMsgTarget" value="public" checked> Public Message (Customer sees in Help)</label>'+
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="adminMsgTarget" value="internal"> Internal Note (Staff only)</label>'+
       '</div>'+
+      '<textarea id="adminReplyText" rows="3" placeholder="Compose public response or private staff note..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #cbd5e1;padding:8px;box-sizing:border-box"></textarea>'+
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px">'+
+        '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Send Update</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="ticket-action-bar">'+
+      '<button type="button" class="ghost" style="color:#b45309" onclick="promptViewAsUser(\''+esc(ticket.user_id||'')+'\')">👁️ View As User (Audit Logged)</button>'+
+      '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
     '</div>'+
   '</div>';
 
-  modal.onclick=e=>{
-    if(e.target===modal)closeAdminTicketDetails();
-  };
-
+  modal.onclick=e=>{ if(e.target===modal)closeAdminTicketDetails(); };
   const onKey=e=>{
     if(e.key==='Escape'){
       closeAdminTicketDetails();
@@ -4326,13 +4863,185 @@ function openAdminTicketDetails(ticketId){
     }
   };
   document.addEventListener('keydown',onKey);
-
   document.body.appendChild(modal);
+
+  const subEl=$('adminModalSubject');
+  if(subEl) subEl.textContent=ticket.subject||'No Subject';
+  const origMsgEl=$('adminTicketOriginalMsg');
+  if(origMsgEl) origMsgEl.textContent=ticket.message||'(Empty message content)';
+
+  populateAdminModalEvents(ticket);
+
+  if(typeof workerGet==='function'){
+    try{
+      const res=await workerGet('/api/admin/tickets/'+encodeURIComponent(ticketId));
+      if(res&&res.ok&&res.data){
+        Object.assign(ticket,res.data);
+        populateAdminModalEvents(ticket);
+      }
+    }catch(err){
+      console.warn('Authoritative admin ticket detail fetch failed (expected if backend route bug in worker is not yet merged):',err);
+    }
+  }
 }
 
 function closeAdminTicketDetails(){
   const modal=document.getElementById('adminTicketDetailModal');
   if(modal)modal.remove();
+}
+
+function populateAdminModalEvents(ticket){
+  const internalContainer=$('adminTicketInternalNotesContainer');
+  const timelineContainer=$('adminTicketTimeline');
+  if(!internalContainer||!timelineContainer)return;
+
+  const events=Array.isArray(ticket.events)?ticket.events:[];
+  const internalNotes=events.filter(e=>e.visibility==='internal'||e.event_type==='internal_note');
+
+  if(internalNotes.length){
+    internalContainer.innerHTML='';
+    internalNotes.forEach(note=>{
+      const item=document.createElement('div');
+      item.className='ticket-internal-note-item';
+      const meta=document.createElement('div');
+      meta.style.fontSize='11px';
+      meta.style.color='#854d0e';
+      meta.style.fontWeight='600';
+      meta.textContent=(note.actor_user_id||'Staff')+' · '+formatTimestamp(note.created_at);
+      const body=document.createElement('div');
+      body.textContent=note.message||'';
+      item.appendChild(meta);
+      item.appendChild(body);
+      internalContainer.appendChild(item);
+    });
+  }
+
+  timelineContainer.innerHTML='';
+  events.forEach(e=>{
+    const item=document.createElement('div');
+    item.className='ticket-timeline-item';
+
+    let textDesc='';
+    if(e.event_type==='status_changed'){
+      textDesc='Status changed: '+(e.metadata_json?.to||e.message||'');
+    }else if(e.event_type==='assignment_changed'){
+      textDesc='Assignee changed: '+(e.metadata_json?.assignee_id||'Unassigned');
+    }else if(e.event_type==='chat_toggled'){
+      textDesc='Chat toggled '+(e.metadata_json?.enabled?'ON':'OFF');
+    }else if(e.visibility==='internal'||e.event_type==='internal_note'){
+      textDesc='[Internal Note] '+(e.message||'');
+    }else{
+      textDesc=(e.actor_type==='user'?'Customer: ':'Staff: ')+(e.message||'');
+    }
+
+    item.textContent=textDesc+' ('+formatTimestamp(e.created_at)+')';
+    timelineContainer.appendChild(item);
+  });
+}
+
+async function handleAdminStatusChange(ticketId){
+  const sel=$('adminTicketStatusSelect');
+  if(!sel)return;
+  const nextStatus=sel.value;
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{status:nextStatus});
+    if(!res?.ok){
+      throw new Error(res?.error?.message||'Failed to update status.');
+    }
+    toast('Ticket status updated to '+nextStatus,'ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to change status:',err);
+    toast(err?.message||'409 INVALID_TRANSITION: Status change rejected by server.','error');
+  }
+}
+
+async function handleAdminAssigneeChange(ticketId){
+  const sel=$('adminTicketAssigneeSelect');
+  if(!sel)return;
+  const assignee=sel.value||null;
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{assignee_id:assignee});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to update assignee.');
+    toast('Assignee updated.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to update assignee.','error');
+  }
+}
+
+async function handleAdminPriorityChange(ticketId){
+  const sel=$('adminTicketPrioritySelect');
+  if(!sel)return;
+  const pri=sel.value;
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{priority:pri});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to update priority.');
+    toast('Priority updated.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to update priority.','error');
+  }
+}
+
+async function handleAdminChatToggle(ticketId,enabled){
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{chat_enabled:enabled});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to toggle chat.');
+    toast('Customer chat '+(enabled?'enabled for 48 hours':'disabled')+'.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to toggle chat.','error');
+  }
+}
+
+async function handleAdminShowNameToggle(ticketId,enabled){
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{show_agent_name:enabled});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to update name visibility.');
+    toast('Specialist name visibility updated.','ok');
+    await loadAdminTickets(true);
+  }catch(err){
+    toast(err?.message||'Failed to update name visibility.','error');
+  }
+}
+
+async function handleAdminSendReply(ticketId){
+  const textEl=$('adminReplyText');
+  const btn=$('adminSendReplyBtn');
+  if(!textEl||!btn)return;
+  const message=textEl.value.trim();
+  if(!message){
+    toast('Please enter a message.','error');
+    textEl.focus();
+    return;
+  }
+  const isInternal=document.querySelector('input[name="adminMsgTarget"]:checked')?.value==='internal';
+  btn.disabled=true;
+  btn.textContent='Submitting...';
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{
+      message,
+      internal:isInternal
+    });
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to submit message.');
+    textEl.value='';
+    toast(isInternal?'Internal note recorded.':'Public response sent to customer.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to submit message:',err);
+    toast(err?.message||'Failed to submit message.','error');
+  }finally{
+    if(document.body.contains(btn)){
+      btn.disabled=false;
+      btn.textContent='Send Update';
+    }
+  }
 }
 
 function promptViewAsUser(userId){
@@ -4646,6 +5355,28 @@ window.exportTicketsCsv=exportTicketsCsv;
 window.exportAuditCsv=exportAuditCsv;
 window.saveFestivalBanner=saveFestivalBanner;
 window.formatAdminDate=formatAdminDate;
+window.updateHelpUnreadBadge=updateHelpUnreadBadge;
+window.checkTicketUnreadCount=checkTicketUnreadCount;
+window.startTicketUnreadPolling=startTicketUnreadPolling;
+window.stopTicketUnreadPolling=stopTicketUnreadPolling;
+window.openCustomerTicketDetail=openCustomerTicketDetail;
+window.closeCustomerTicketDetail=closeCustomerTicketDetail;
+window.sendCustomerTicketReply=sendCustomerTicketReply;
+window.loadCustomerTicketDetails=loadCustomerTicketDetails;
+window.openAdminTicketDetails=openAdminTicketDetails;
+window.closeAdminTicketDetails=closeAdminTicketDetails;
+window.handleAdminStatusChange=handleAdminStatusChange;
+window.handleAdminAssigneeChange=handleAdminAssigneeChange;
+window.handleAdminPriorityChange=handleAdminPriorityChange;
+window.handleAdminChatToggle=handleAdminChatToggle;
+window.handleAdminShowNameToggle=handleAdminShowNameToggle;
+window.handleAdminSendReply=handleAdminSendReply;
+window.isTicketSlaBreached=isTicketSlaBreached;
+window.renderSlaBadge=renderSlaBadge;
+window.normalizeTicketStatus=normalizeTicketStatus;
+window.renderStatusBadge=renderStatusBadge;
+window.renderPriorityBadge=renderPriorityBadge;
+window.renderAdminListContent=renderAdminListContent;
 
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();

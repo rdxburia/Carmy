@@ -82,6 +82,8 @@ function createMockEnv(initialLastSeen = Math.floor(Date.now() / 1000) - 10) {
 
 function createAppHarness(overrides = {}) {
   const store = new Map();
+  store.set('carmy_last_activity', String(Date.now()));
+  store.set('carmy_last_activity_force', String(Date.now()));
   const elements = new Map();
   const removedSet = new Set();
   function makeStyle() {
@@ -114,6 +116,11 @@ function createAppHarness(overrides = {}) {
           },
           contains(c) { return this._classes.has(c); }
         },
+        get className() { return [...this.classList._classes].join(' '); },
+        set className(v) {
+          this.classList._classes.clear();
+          if (v) String(v).split(/\s+/).filter(Boolean).forEach(c => this.classList._classes.add(c));
+        },
         style: makeStyle(),
         dataset: {},
         get innerHTML() { return this._innerHTML || ''; },
@@ -136,7 +143,13 @@ function createAppHarness(overrides = {}) {
         removeEventListener: () => {},
         focus: () => {},
         blur: () => {},
-        appendChild: (child) => child,
+        _children: [],
+        appendChild(child) {
+          if (!this._children) this._children = [];
+          if (child) child._parent = this;
+          this._children.push(child);
+          return child;
+        },
         insertAdjacentHTML: () => {},
         click() {
           if (typeof this.onclick === 'function') return this.onclick();
@@ -144,11 +157,27 @@ function createAppHarness(overrides = {}) {
         remove() {
           elements.delete(currentId);
           removedSet.add(currentId);
+          if (this._parent && this._parent._children) {
+            this._parent._children = this._parent._children.filter(c => c !== this);
+          }
         },
         closest: () => null,
         contains: () => true,
-        querySelector: (sel) => sel?.startsWith('#') ? (removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1))) : null,
-        querySelectorAll: () => []
+        querySelector(sel) {
+          if (sel?.startsWith('#')) return removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1));
+          if (sel?.startsWith('.')) {
+            const cls = sel.slice(1);
+            return (this._children || []).find(c => c.classList?.contains(cls)) || null;
+          }
+          return null;
+        },
+        querySelectorAll(sel) {
+          if (sel?.startsWith('.')) {
+            const cls = sel.slice(1);
+            return (this._children || []).filter(c => c.classList?.contains(cls));
+          }
+          return [];
+        }
       };
       elements.set(id, el);
     }
@@ -225,7 +254,18 @@ function createAppHarness(overrides = {}) {
     },
     getElementById: (id) => removedSet.has(id) ? null : makeEl(id),
     querySelector: (sel) => sel?.startsWith('#') ? (removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1))) : null,
-    querySelectorAll: () => [],
+    querySelectorAll: (sel) => {
+      const results = [];
+      for (const [key, el] of elements.entries()) {
+        if (removedSet.has(key)) continue;
+        if (sel?.includes?.('[data-view="help"]') && el.dataset?.view === 'help') {
+          results.push(el);
+        } else if (sel?.startsWith?.('.') && el.classList?.contains(sel.slice(1))) {
+          results.push(el);
+        }
+      }
+      return results;
+    },
     head: { ...makeEl('head'), appendChild: () => {} },
     body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, contains: () => true }
   };
@@ -347,6 +387,8 @@ function createAppHarness(overrides = {}) {
   vm.runInContext(code, context);
   return { context, store, elements, makeEl, mockDb, teardown, eval: (expr) => vm.runInContext(expr, context) };
 }
+
+export { createAppHarness };
 
 // -------------------------------------------------------------
 // 1. Worker API & D1 Cache Tests (Executing Production Worker)
@@ -2558,5 +2600,318 @@ test("Super Admin Workspace: Token generator creates one-time reveal modal and c
 
   h.eval("closeTokenRevealModal()");
   assert.equal(h.eval("adminRevealedToken"), null, "Token secret must be wiped from memory upon closing the modal");
+});
+
+test("Support Ticket Workflow: Unread badge appears for count > 0 and clears when count is 0 or user signs out", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'test-user', email: 'owner@example.com' };
+    const helpBtn = document.createElement('button');
+    helpBtn.id = 'helpBtn';
+    helpBtn.dataset.view = 'help';
+    document.body.appendChild(helpBtn);
+
+    updateHelpUnreadBadge(3);
+  `);
+
+  const badgeCount = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      const badge = btn.querySelector('.ticket-unread-badge');
+      return badge ? badge.textContent : null;
+    })()
+  `);
+  assert.equal(badgeCount, "3", "Unread badge must display count 3");
+
+  h.eval("updateHelpUnreadBadge(0);");
+  const clearedBadge = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      return btn.querySelector('.ticket-unread-badge');
+    })()
+  `);
+  assert.equal(clearedBadge, null, "Unread badge must be removed when count is 0");
+
+  h.eval("updateHelpUnreadBadge(150);");
+  const cappedBadge = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      const badge = btn.querySelector('.ticket-unread-badge');
+      return badge ? badge.textContent : null;
+    })()
+  `);
+  assert.equal(cappedBadge, "99+", "Counts over 99 must format as 99+");
+
+  h.eval("clearUserMemory();");
+  const afterLogoutBadge = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      return btn.querySelector('.ticket-unread-badge');
+    })()
+  `);
+  assert.equal(afterLogoutBadge, null, "Logout / clearUserMemory must clean up unread badges");
+});
+
+test("Support Ticket Workflow: Customer ticket list renders accessible items with keyboard navigation and unread pills", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [
+      { id: 'TD-TEST-001', subject: 'Transfer assistance', status: 'working', priority: 'high', has_unread: true, created_at: '2026-10-18T10:00:00Z' },
+      { id: 'TD-TEST-002', subject: 'Billing inquiry', status: 'need_info', priority: 'normal', has_unread: false, created_at: '2026-10-17T10:00:00Z' }
+    ];
+    currentHelpTab = 'ticket';
+    helpView();
+  `);
+
+  const html = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(html.includes("TD-TEST-001"), "List must render first ticket ID");
+  assert.ok(html.includes("ticket-unread-pill"), "Ticket with has_unread must show unread pill");
+  assert.ok(html.includes("Working on it"), "Must show human readable status Working on it");
+  assert.ok(html.includes("Required other information"), "Must show human readable status Required other information");
+  assert.ok(html.includes("tabindex=\"0\""), "Ticket rows must be keyboard accessible with tabindex 0");
+
+  h.eval("openCustomerTicketDetail('TD-TEST-001');");
+  assert.equal(h.eval("viewingCustomerTicketId"), "TD-TEST-001", "Opening ticket must set viewingCustomerTicketId");
+  const detailHtml = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(detailHtml.includes("ticket-stepper"), "Detail view must display stepper");
+  assert.ok(detailHtml.includes("ticket-back-btn"), "Detail view must display Back button");
+
+  h.eval("closeCustomerTicketDetail();");
+  assert.equal(h.eval("viewingCustomerTicketId"), null, "Closing ticket detail must reset viewingCustomerTicketId to null");
+});
+
+test("Support Ticket Workflow: Customer ticket stepper progression across statuses and need_info warning banner", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const statuses = [
+    { st: 'pending', expectedStep: 'Submitted' },
+    { st: 'assigned', expectedStep: 'Assigned' },
+    { st: 'working', expectedStep: 'Working on it' },
+    { st: 'solved', expectedStep: 'Solved' },
+    { st: 'closed', expectedStep: 'Closed' }
+  ];
+
+  for (const s of statuses) {
+    h.eval(`
+      user = { id: 'u1', email: 'tester@example.com' };
+      userSupportTickets = [{ id: 'TD-ST-' + '${s.st}', subject: 'Status test', status: '${s.st}', priority: 'normal', created_at: '2026-10-18T10:00:00Z' }];
+      openCustomerTicketDetail('TD-ST-' + '${s.st}');
+    `);
+    const detailHtml = h.elements.get('helpTabContent').innerHTML;
+    assert.ok(detailHtml.includes("ticket-stepper"), `Stepper must be rendered for status ${s.st}`);
+  }
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-NEEDINFO',
+      subject: 'Missing RC page',
+      status: 'need_info',
+      priority: 'high',
+      created_at: '2026-10-18T10:00:00Z',
+      events: [
+        { actor_type: 'user', message: 'I uploaded my RC', created_at: '2026-10-18T10:05:00Z' },
+        { actor_type: 'admin', message: 'Please upload the back side of the RC card.', created_at: '2026-10-18T10:10:00Z' }
+      ]
+    }];
+    openCustomerTicketDetail('TD-NEEDINFO');
+  `);
+
+  const needInfoHtml = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(needInfoHtml.includes("ticket-warning-banner"), "need_info ticket must render distinct warning banner");
+  assert.ok(needInfoHtml.includes("Additional Information Needed"), "Warning title must prompt user action");
+
+  const warningMsg = h.eval("document.getElementById('customerTicketNeedInfoMsg')?.textContent");
+  assert.equal(warningMsg, "Please upload the back side of the RC card.", "Warning text must match latest admin message via textContent");
+});
+
+test("Support Ticket Workflow: Customer chat enabled shows reply box; disabled shows 'Our team will reply here.'", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-NO-CHAT',
+      subject: 'General feedback',
+      status: 'working',
+      chat_enabled: false,
+      created_at: '2026-10-18T10:00:00Z'
+    }];
+    openCustomerTicketDetail('TD-NO-CHAT');
+  `);
+
+  let html = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(html.includes("ticket-chat-disabled-banner"), "Must show disabled chat banner when chat_enabled is false");
+  assert.ok(html.includes("Our team will reply here."), "Disabled banner must display 'Our team will reply here.'");
+  assert.ok(!html.includes("customerTicketReplyInput"), "Reply input must NOT be present when chat is disabled");
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-CHAT-ACTIVE',
+      subject: 'Live support thread',
+      status: 'working',
+      chat_enabled: true,
+      created_at: '2026-10-18T10:00:00Z'
+    }];
+    openCustomerTicketDetail('TD-CHAT-ACTIVE');
+  `);
+
+  html = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(html.includes("ticket-reply-box-sticky"), "Must render sticky reply box when chat is enabled");
+  assert.ok(html.includes("customerTicketReplyInput"), "Textarea for reply must be present");
+});
+
+test("Support Ticket Workflow: Strict XSS protection renders user and admin content via textContent without HTML parsing", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const xssPayload = '<img src="x" onerror="alert(1)"><script>window.__xss=1</script><b>BoldInjected</b>';
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-XSS-TEST',
+      subject: ${JSON.stringify(xssPayload)},
+      status: 'need_info',
+      priority: 'high',
+      created_at: '2026-10-18T10:00:00Z',
+      events: [
+        { actor_type: 'user', message: ${JSON.stringify(xssPayload)}, created_at: '2026-10-18T10:05:00Z' },
+        { actor_type: 'admin', message: ${JSON.stringify(xssPayload)}, created_at: '2026-10-18T10:10:00Z' }
+      ]
+    }];
+    openCustomerTicketDetail('TD-XSS-TEST');
+  `);
+
+  const subjectText = h.eval("document.getElementById('customerTicketDetailSubject')?.textContent");
+  assert.equal(subjectText, xssPayload, "Subject must match exact raw string without HTML interpretation");
+
+  const warningText = h.eval("document.getElementById('customerTicketNeedInfoMsg')?.textContent");
+  assert.equal(warningText, xssPayload, "Warning text must match exact raw string without HTML interpretation");
+
+  const threadBubbles = h.eval(`
+    const bubbles = document.querySelectorAll('.ticket-message-text');
+    Array.from(bubbles).map(b => b.textContent);
+  `);
+  for (const bText of threadBubbles) {
+    assert.equal(bText, xssPayload, "Thread bubbles must store exact raw textContent");
+  }
+});
+
+test("Support Ticket Workflow: Admin SLA breach badge displays for pending tickets > 24 hours", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const oldDate = new Date(Date.now() - 36 * 3600 * 1000).toISOString();
+  const recentDate = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    adminTickets = [
+      { id: 'TD-BREACH-1', email: 'user1@test.com', subject: 'Overdue ticket', status: 'pending', priority: 'high', created_at: '${oldDate}' },
+      { id: 'TD-NORMAL-2', email: 'user2@test.com', subject: 'Fresh ticket', status: 'pending', priority: 'normal', created_at: '${recentDate}' }
+    ];
+  `);
+
+  const breachResult = h.eval("isTicketSlaBreached(adminTickets[0])");
+  assert.equal(breachResult, true, "Ticket pending > 24 hours must be marked as SLA breached");
+
+  const freshResult = h.eval("isTicketSlaBreached(adminTickets[1])");
+  assert.equal(freshResult, false, "Fresh pending ticket (<24h) must not be breached");
+
+  const badgeHtml = h.eval("renderSlaBadge(adminTickets[0])");
+  assert.ok(badgeHtml.includes("ticket-sla-badge"), "Breached ticket must return .ticket-sla-badge markup");
+  assert.ok(badgeHtml.includes("SLA Breach"), "Badge must display 'SLA Breach'");
+});
+
+test("Support Ticket Workflow: Admin filters by status, assignee, priority, and SLA breach", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const oldDate = new Date(Date.now() - 30 * 3600 * 1000).toISOString();
+  const recentDate = new Date().toISOString();
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTickets = [
+      { id: 'T-1', email: 'u1@test.com', subject: 'One', status: 'pending', priority: 'urgent', assignee_id: null, created_at: '${oldDate}' },
+      { id: 'T-2', email: 'u2@test.com', subject: 'Two', status: 'working', priority: 'high', assignee_id: 'admin-1', created_at: '${recentDate}' },
+      { id: 'T-3', email: 'u3@test.com', subject: 'Three', status: 'solved', priority: 'normal', assignee_id: 'other-admin', created_at: '${recentDate}' }
+    ];
+    adminStatusFilter = 'all';
+    adminAssigneeFilter = 'all';
+    adminPriorityFilter = 'all';
+    adminSlaFilter = 'all';
+    adminSearchQuery = '';
+  `);
+
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 3, "All tickets returned by default");
+
+  h.eval("adminStatusFilter = 'pending';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Status pending filter must match 1 ticket");
+  assert.equal(h.eval("getFilteredAdminTickets()[0].id"), "T-1");
+
+  h.eval("adminStatusFilter = 'all'; adminAssigneeFilter = 'me';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Assignee 'me' filter must match 1 ticket");
+  assert.equal(h.eval("getFilteredAdminTickets()[0].id"), "T-2");
+
+  h.eval("adminAssigneeFilter = 'unassigned';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Assignee 'unassigned' filter must match 1 ticket");
+  assert.equal(h.eval("getFilteredAdminTickets()[0].id"), "T-1");
+
+  h.eval("adminAssigneeFilter = 'all'; adminPriorityFilter = 'urgent';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Priority 'urgent' must match 1 ticket");
+
+  h.eval("adminPriorityFilter = 'all'; adminSlaFilter = 'breached';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "SLA breach filter must match only overdue ticket T-1");
+});
+
+test("Support Ticket Workflow: Admin detail modal enforces permitted transitions and handles 409 INVALID_TRANSITION", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTickets = [{
+      id: 'TD-TRANS-1',
+      email: 'customer@test.com',
+      subject: 'Transition test',
+      status: 'pending',
+      priority: 'normal',
+      created_at: new Date().toISOString()
+    }];
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-TRANS-1');");
+
+  const modalHtml = h.elements.get('adminTicketDetailModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("STATUS WORKFLOW"), "Modal must display status workflow control");
+  assert.ok(modalHtml.includes("Transition to: Assigned"), "Pending ticket must offer transition to Assigned");
+  assert.ok(!modalHtml.includes("Transition to: Solved"), "Pending ticket must NOT directly offer transition to Solved");
+
+  assert.ok(modalHtml.includes("Internal, not visible to user"), "Internal notes header must be labeled exactly 'Internal, not visible to user'");
+  assert.ok(modalHtml.includes("+91 ••••• •••••"), "Phone number must be masked by default");
+  assert.ok(modalHtml.includes("disabled"), "Contact buttons must be disabled");
+
+  h.eval(`
+    workerPatch = async (path, body) => {
+      const err = new Error('Invalid ticket status transition.');
+      err.status = 409;
+      err.code = 'INVALID_TRANSITION';
+      throw err;
+    };
+  `);
+
+  await h.eval("handleAdminStatusChange('TD-TRANS-1');");
+  assert.equal(h.eval("adminTickets[0].status"), "pending", "Status must not be locally modified on 409 rejection");
 });
 
