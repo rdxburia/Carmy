@@ -10,12 +10,23 @@ await check("staging Pages login UI and staging-only config are served", async (
   if (pageResponse.status !== 200) throw new Error("staging Pages root returned HTTP " + pageResponse.status);
   const html = await pageResponse.text();
   if (!html.includes('id="auth"') || !html.includes('data-torq-auth="signup"')) throw new Error("login/sign-up UI markers missing");
-  const configResponse = await fetch(origin + "/js/config.js");
-  if (configResponse.status !== 200) throw new Error("staging config returned HTTP " + configResponse.status);
-  const config = await configResponse.text();
-  for (const marker of ["https://vejccahjrlwhaniajgez.supabase.co", "https://carmy-api-staging.mr-rny-buria.workers.dev"]) {
-    if (!config.includes(marker)) throw new Error("staging config marker missing: " + marker);
+  const candidates = [origin, "https://a0b362e6.carmy-ticket-staging.pages.dev"];
+  const configs = [];
+  for (const host of [...new Set(candidates)]) {
+    const response = await fetch(host + "/js/config.js");
+    const body = await response.text();
+    configs.push({
+      host,
+      status: response.status,
+      contentType: response.headers.get("content-type"),
+      hasAppConfig: body.includes("window.APP_CONFIG"),
+      hasStagingSupabase: body.includes("https://vejccahjrlwhaniajgez.supabase.co"),
+      hasStagingWorker: body.includes("https://carmy-api-staging.mr-rny-buria.workers.dev"),
+      hasProductionSupabase: body.includes("https://hlrmuvzmaegnbgzvvfsn.supabase.co"),
+    });
   }
+  const good = configs.find((item) => item.status === 200 && item.hasAppConfig && item.hasStagingSupabase && item.hasStagingWorker && !item.hasProductionSupabase);
+  if (!good) throw new Error("no tested Pages URL serves the staging config: " + JSON.stringify(configs));
 });
 await check("staging Worker root responds", async () => {
   const response = await fetch(worker + "/");
