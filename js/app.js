@@ -843,15 +843,14 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
- const primaryAdminEmail='rnyburia@gmail.com';
- const isPrimaryAdmin=String(user?.email||'').trim().toLowerCase()===primaryAdminEmail;
- document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
+ const isAdminAuthorized=v==='admin'?await checkSuperAdminStatus(true):isSuperAdmin;
+ document.body.classList.toggle('td-admin-mode',Boolean(isAdminAuthorized));
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
- if(v==='admin'&&!isPrimaryAdmin){
-   toast('Page not found.','error');
+ if(v==='admin'&&!isAdminAuthorized){
+   toast('Admin access denied or unavailable.','error');
    v='dashboard';
  }
- if(v==='admin'&&isPrimaryAdmin&&!validViews.includes('admin'))validViews.push('admin');
+ if(v==='admin'&&isAdminAuthorized&&!validViews.includes('admin'))validViews.push('admin');
  if(!validViews.includes(v))v='dashboard';
  try{
    if(v==='add'&&car?.vehicle_status==='sold'){
@@ -1217,14 +1216,12 @@ async function start(u,force=false){
      await loadData();
      setAppLoadingProgress(70);
      updateIdentityUI();
-     const primaryAdminEmail='rnyburia@gmail.com';
-     const isPrimaryAdmin=String(u.email||'').trim().toLowerCase()===primaryAdminEmail;
-     try{await checkSuperAdminStatus();}catch(_){}
+     let isAdminAuthorized=false;
+     try{isAdminAuthorized=await checkSuperAdminStatus(true);}catch(_){}
      setAppLoadingStatus('Preparing your garage...','Rendering your dashboard');
      setAppLoadingProgress(90);
-     // The designated admin lands directly in the console. The Worker still
-     // independently authorizes every admin API request using the registry.
-     let lastView=isPrimaryAdmin?'admin':'dashboard';
+     // Only the Worker-verified role can restore the Admin Console.
+     let lastView=isAdminAuthorized?'admin':'dashboard';
      const validViews=['dashboard','cars','add','history','docs','report','owner','help','admin'];
      if(!validViews.includes(lastView))lastView='dashboard';
      if(lastView!=='dashboard'){
@@ -3253,7 +3250,6 @@ function wireCustomerTicketList(){
 function renderCustomerTicketDetailView(ticketId){
   const existing=getCurrentUserSupportTickets();
   const ticket=existing.find(t=>String(t.id)===String(ticketId))||{id:ticketId,subject:'Ticket unavailable',status:'pending',priority:'normal',created_at:new Date().toISOString()};
-  */
 
   const statusKey=normalizeTicketStatus(ticket.status);
   const steps=[
