@@ -920,6 +920,42 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - `npm.cmd test`: 166/166 tests passing (100% green, 0 failures, 0 skips).
 
 
+## 2026-10-19 — Phase 7: Contract Documentation & Final Polish
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Complete API contract specification, backend handoff documentation, role clearance schemas, `.admin-blocked-card` verification directory, and final roadmap completion.
+- **Implemented Changes:**
+  - **Contract Documentation (`docs/frontend-backend-contract.md`):**
+    - Authored exhaustive API specification covering all frontend loaders, mutations, and fallback behaviors for backend team handoff.
+    - Defined authoritative RBAC permission matrix for `super_admin` / `owner`, `support_lead`, `billing_admin`, `auditor`, and customer vehicle owners.
+    - Documented request headers (`Authorization: Bearer <token>`, `X-Carmy-Last-Activity`), body schemas, success responses, and error response codes across:
+      * Session Heartbeat (`POST /api/session/heartbeat`) & Revocation (`POST /api/session/revoke`)
+      * Team Identity & Profile (`GET /api/team/me`, `POST /api/team/me/profile`, `POST /api/admin/change-password`)
+      * Administrative TPIN Layer (`GET /api/tpin/status`, `POST /api/tpin/setup`, `POST /api/tpin/change`, `POST /api/tpin/verify`, `POST /api/tpin/reset-request`)
+      * Super Admin Operations (`GET /api/admin/overview`, `GET /api/admin/users`, `PATCH /api/admin/users/:id/plan`, `POST /api/admin/users/:id/extend-grace`, `POST /api/admin/users/:id/status`, `GET /api/admin/tokens`, `POST /api/admin/tokens`, `DELETE /api/admin/tokens/:token`, `GET /api/admin/plans`, `POST /api/admin/plans/coupons`, `DELETE /api/admin/plans/coupons/:id`, `GET /api/admin/upgrade-requests`, `POST /api/admin/upgrade-requests/:id/:action`, `GET /api/admin/garages`, `PATCH /api/admin/garages/:id/status`, `GET /api/admin/team`, `POST /api/admin/team/invites`, `DELETE /api/admin/team/members/:id`, `GET /api/admin/audit`, CSV exports)
+      * Customer Dashboard & Quotas (`GET /api/plan/status`, `POST /api/activation/redeem`, `POST /api/upgrade-requests`)
+      * Ticket Workflow & Specialist Operations
+    - Catalogs all 13 DOM locations where `.admin-blocked-card` is rendered with target route and HTTP method on 404/5xx or unrouted states.
+    - Reiterates Zero Mock Data Guarantee and truthful error handling protocol.
+  - **Roadmap Completion Status:**
+    - Phase 0: Baseline test suite & feature inventory (Committed `76cd361`)
+    - Phase 1: Admin Account & Security screen (`account`) (Committed `1f017d4`)
+    - Phase 2: Super Admin real API loaders with `.admin-blocked-card` on 404 (Committed `8dc8fd4`)
+    - Phase 3: User Dashboard subscription card & quotas (Committed `da1cc69`)
+    - Phase 4: Administrative TPIN layer & verification prompts (Committed `7875a6b`)
+    - Phase 5: Super Admin Garages screen & workshop administration (Committed `6c35527`)
+    - Phase 6: Multi-role team RBAC & first-login security overlays (Committed `f3780b9`)
+    - Phase 7: Complete frontend-backend contract documentation & final verification.
+- **Constraints & Governance Maintained:**
+  - Strictly frontend-only: 0 Cloudflare Worker edits, 0 database migrations, 0 SQL edits.
+  - Integration branch `feat/frontend-roadmap` retained without merging to `main` or deploying to production.
+  - 100% test pass rate maintained at every step.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 166/166 tests passing (100% green, 0 failures, 0 skips).
+
+
+
 
 
 
