@@ -2441,6 +2441,7 @@ test("Super Admin Integration: localStorage admin view tampering fails closed fo
     localStorage.setItem('carcare_last_view', 'admin');
     loadCars = async () => {};
     loadData = async () => {};
+    workerGet = async () => { const err = new Error('Super Admin access required.'); err.status = 403; err.code = 'FORBIDDEN'; throw err; };
   `);
 
   await h.eval("start({ id: 'attacker-uuid', email: 'attacker@example.com' }, true)");
