@@ -542,3 +542,7 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - Required manual step: in the `carmy-staging` Supabase dashboard, create a new server-side **Secret API key** under Project Settings → API Keys → Secret keys, then set it directly in Cloudflare Worker `carmy-api-staging` as secret `SUPABASE_SECRET_KEY`. Do not paste the value into chat or commit it. After that, the connected Auth Admin capability/key path must be available to create confirmed staging users; then rerun real-login E2E.
 - Production rollout remains blocked: no verified production Time Travel bookmark/export restore point, aggregate schema baseline, migration 0007 impact analysis, or exact commit-to-production-bundle mapping was completed. Do not touch production until every gate passes.
 - Antigravity local changes remain unverified. No production ticket content was read and production GitHub Pages deployment was not run.
+
+
+### Staging-only deployment correction — 19 Oct 2026
+- A partial Cloudflare settings PATCH briefly deployed Worker version 25 with only the `ALLOWED_ORIGIN` binding. It was immediately replaced by the previously verified isolated version 24, then by complete version 27. No request or ticket mutation was sent to version 25; that version had no D1, R2, rate-limit, or Supabase binding. Active version 27 was re-verified with the complete staging-only binding set. No production resource was deployed by this correction.
