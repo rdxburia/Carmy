@@ -236,3 +236,13 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Follow-up permission hardening
 - Adjusted ticket assignee eligibility to continue checking active support roster members if the Super Admin lookup is unavailable; authorization still fails closed if neither source establishes eligibility.
 - Updated worker/src/ticket-workflow.js on feat/support-ticket-backend-v2. Tests remain NOT RUN; no staging or production database actions were performed.
+
+
+## 2026-10-19 — Independent support-ticket branch verification
+- **Request:** Independently verify Step 1 and perform safe checks that do not require the user's local terminal. No merge, deployment, migration apply, production data access, or frontend-branch changes.
+- **Branch:** `feat/support-ticket-backend-v2`; head at verification: `845eb27affce015805482220ee1ea074ff98c796`; compare against `main` base `3710bc112401a899975c7df5475ee44d4c7937ff`: 21 commits ahead, 0 behind.
+- **Files read:** this guide, `PROGRESS.md`, `package.json`, `wrangler.staging.toml`, `worker/src/index.js`, `worker/src/super-admin.js`, `worker/src/admin-team.js`, `worker/src/ticket-workflow.js`, migration 0007/0008, and both added/updated workflow test files.
+- **Migration integrity:** `worker/migrations/0007_support_ticket_workflow.sql` blob SHA is `475671753bbd202182499201b5a3515184749d14` on both this branch and main; it is unchanged. Migration 0008 adds only the `team_members` table/index.
+- **PR/CI:** GitHub API returned no pull request for this branch and no Actions workflow runs for this branch at verification time. Therefore there is no CI test result to rely on. The GitHub connector has no local Node shell; `npm test` was NOT RUN. Staging D1 migration tracking has NOT been queried in this pass.
+- **Code review note:** route authorization is wired in `worker/src/index.js`: team POST uses Super Admin auth plus audit; team GET and admin ticket routes use `canManageTickets`; view-as-user is routed after ticket permission checks. Static review is not runtime verification.
+- **Safety:** no files other than this append-only log and `PROGRESS.md` were changed by this audit; no merge, deployment, migration apply, or production operation occurred. Next: run `npm test` in a Node-capable checkout, then inspect staging D1 migration tracking before considering any staging apply/E2E. Production remains HOLD.
