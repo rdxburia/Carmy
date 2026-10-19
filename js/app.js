@@ -77,7 +77,7 @@ function clearUserMemory(){
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;garageLoadingState='idle';
   isSuperAdmin=false;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
-  userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
+  userSupportTickets=[];userSupportTicketsOwnerId=null;ticketsLoaded=false;viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -3001,7 +3001,13 @@ function ownerProfileView(){
 
 let currentHelpTab='faqs';
 let userSupportTickets=[];
+let userSupportTicketsOwnerId=null;
 let ticketsLoaded=false;
+
+function getCurrentUserSupportTickets(){
+  if(!user?.id||String(userSupportTicketsOwnerId||'')!==String(user.id))return [];
+  return Array.isArray(userSupportTickets)?userSupportTickets:[];
+}
 let ticketSubmitting=false;
 let ticketUnreadCount=0;
 let ticketUnreadTimer=null;
@@ -3105,43 +3111,24 @@ if(typeof document!=='undefined'&&document.addEventListener){
 }
 
 async function loadUserSupportTickets(){
-  if(typeof workerGet==='function'){
-    try{
-      const res=await workerGet('/api/tickets');
-      if(res&&res.ok&&Array.isArray(res.data)){
-        userSupportTickets=res.data.map(t=>({
-          ...t,
-          status:normalizeTicketStatus(t.status),
-          created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
-          car_reg:(Array.isArray(cars)?cars:[]).find(c=>c.id===t.car_id)?.registration_no||null
-        }));
-        try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
-        ticketsLoaded=true;
-        return userSupportTickets;
-      }
-    }catch(_){}
-    try{
-      const res=await workerGet('/api/support-tickets');
-      if(Array.isArray(res?.data)){
-        userSupportTickets=res.data.map(t=>({
-          ...t,
-          status:normalizeTicketStatus(t.status),
-          created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
-          car_reg:(Array.isArray(cars)?cars:[]).find(c=>c.id===t.car_id)?.registration_no||null
-        }));
-        try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
-        ticketsLoaded=true;
-        return userSupportTickets;
-      }
-    }catch(err){
-      console.warn('Could not fetch support tickets from server:', err);
-    }
-  }
+  // Never reuse a prior account's list while a request is pending or failing.
+  const ownerId=String(user?.id||'');
+  userSupportTickets=[];
+  userSupportTicketsOwnerId=ownerId||null;
+  ticketsLoaded=false;
+  if(!ownerId||typeof workerGet!=='function')return [];
   try{
-    const cached=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]');
-    if(Array.isArray(cached)&&cached.length>0) userSupportTickets=cached;
-  }catch(_){}
-  return userSupportTickets;
+    const res=await workerGet('/api/tickets');
+    if(String(user?.id||'')!==ownerId)return [];
+    if(!res?.ok||!Array.isArray(res.data))throw new Error('Authoritative ticket list unavailable.');
+    userSupportTickets=res.data.filter(t=>!t?.user_id||String(t.user_id)===ownerId).map(t=>({...t,status:normalizeTicketStatus(t.status),created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,car_reg:(Array.isArray(cars)?cars:[]).find(car=>car.id===t.car_id)?.registration_no||null}));
+    userSupportTicketsOwnerId=ownerId;
+    ticketsLoaded=true;
+    return userSupportTickets;
+  }catch(err){
+    if(String(user?.id||'')===ownerId){userSupportTickets=[];userSupportTicketsOwnerId=ownerId;ticketsLoaded=false;console.warn('Could not fetch authoritative support tickets:',err);}
+    return [];
+  }
 }
 
 function helpView(){
@@ -3209,10 +3196,12 @@ function helpView(){
 }
 
 function openCustomerTicketDetail(ticketId){
+  const ownedTicket=getCurrentUserSupportTickets().find(x=>String(x.id)===String(ticketId));
+  if(!ownedTicket){toast('This ticket is not available for the signed-in account.','error');return;}
   currentHelpTab='ticket';
   viewingCustomerTicketId=String(ticketId);
   helpView();
-  const t=(Array.isArray(userSupportTickets)?userSupportTickets:[]).find(x=>String(x.id)===viewingCustomerTicketId);
+  const t=ownedTicket;
   if(t&&t.has_unread){
     t.has_unread=false;
     checkTicketUnreadCount();
@@ -3225,14 +3214,7 @@ function closeCustomerTicketDetail(){
 }
 
 function renderTicketPastList(){
-  let existing=userSupportTickets;
-  if(!Array.isArray(existing)||!existing.length){
-    try{
-      const parsed=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]');
-      existing=Array.isArray(parsed)?parsed:[];
-    }catch(_){ existing=[]; }
-  }
-  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
+  const userTickets=getCurrentUserSupportTickets();
   if(!userTickets.length)return '';
   return '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
     userTickets.map(t=>{
@@ -3259,11 +3241,7 @@ function renderTicketPastList(){
 
 function wireCustomerTicketList(){
   const rows=document.querySelectorAll('.ticket-row-accessible');
-  let existing=userSupportTickets;
-  if(!Array.isArray(existing)||!existing.length){
-    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
-  }
-  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
+  const userTickets=getCurrentUserSupportTickets();
   rows.forEach((row,i)=>{
     const subEl=row.querySelector('.ticket-customer-row-subject');
     if(subEl&&userTickets[i]){
@@ -3273,17 +3251,9 @@ function wireCustomerTicketList(){
 }
 
 function renderCustomerTicketDetailView(ticketId){
-  let existing=userSupportTickets;
-  if(!Array.isArray(existing)||!existing.length){
-    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
-  }
-  const ticket=(Array.isArray(existing)?existing:[]).find(t=>String(t.id)===String(ticketId))||{
-    id:ticketId,
-    subject:'Support Ticket '+ticketId,
-    status:'pending',
-    priority:'normal',
-    created_at:new Date().toISOString()
-  };
+  const existing=getCurrentUserSupportTickets();
+  const ticket=existing.find(t=>String(t.id)===String(ticketId))||{id:ticketId,subject:'Ticket unavailable',status:'pending',priority:'normal',created_at:new Date().toISOString()};
+  */
 
   const statusKey=normalizeTicketStatus(ticket.status);
   const steps=[
@@ -3346,11 +3316,7 @@ function renderCustomerTicketDetailView(ticketId){
 
 function wireCustomerTicketDetailView(ticketId){
   const subEl=$('customerTicketDetailSubject');
-  let existing=userSupportTickets;
-  if(!Array.isArray(existing)||!existing.length){
-    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
-  }
-  const ticket=(Array.isArray(existing)?existing:[]).find(t=>String(t.id)===String(ticketId));
+  const ticket=getCurrentUserSupportTickets().find(t=>String(t.id)===String(ticketId));
   if(subEl&&ticket){
     subEl.textContent=ticket.subject||'Support Inquiry';
   }
@@ -3404,26 +3370,20 @@ function wireCustomerTicketDetailView(ticketId){
 
 async function loadCustomerTicketDetails(ticketId){
   if(customerTicketDetailLoading)return;
+  const ownerId=String(user?.id||'');
+  if(!ownerId||!getCurrentUserSupportTickets().some(t=>String(t.id)===String(ticketId)))return;
   customerTicketDetailLoading=true;
   try{
     const res=await workerGet('/api/tickets/'+encodeURIComponent(ticketId));
+    if(String(user?.id||'')!==ownerId)return;
     if(res&&res.ok&&res.data){
-      const updated=res.data;
-      let existing=(Array.isArray(userSupportTickets)?userSupportTickets:[]).find(t=>String(t.id)===String(ticketId));
-      if(existing){
-        Object.assign(existing,updated);
-      }else{
-        userSupportTickets.push(updated);
-      }
-      if(viewingCustomerTicketId===String(ticketId)){
-        wireCustomerTicketDetailView(ticketId);
-      }
+      const existing=getCurrentUserSupportTickets().find(t=>String(t.id)===String(ticketId));
+      if(!existing)return;
+      Object.assign(existing,res.data);
+      if(viewingCustomerTicketId===String(ticketId))wireCustomerTicketDetailView(ticketId);
     }
-  }catch(err){
-    console.warn('Could not load authoritative customer ticket details (likely 404 from backend routing bug in worker/src/ticket-workflow.js):',err);
-  }finally{
-    customerTicketDetailLoading=false;
-  }
+  }catch(err){console.warn('Could not load authoritative customer ticket details:',err);}
+  finally{customerTicketDetailLoading=false;}
 }
 
 async function sendCustomerTicketReply(ticketId){
@@ -3556,9 +3516,11 @@ function wireTicketForm(){
         created_at: res?.data?.created_at||new Date().toISOString()
       };
 
-      if(!Array.isArray(userSupportTickets)) userSupportTickets=[];
+      if(!Array.isArray(userSupportTickets)||String(userSupportTicketsOwnerId||'')!==String(user?.id||'')){
+        userSupportTickets=[];userSupportTicketsOwnerId=String(user?.id||'')||null;
+      }
       userSupportTickets.unshift(createdRecord);
-      try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
+      ticketsLoaded=true;
 
       toast('Support ticket '+ticketId+' created successfully!');
       currentHelpTab='ticket';
@@ -5311,15 +5273,11 @@ function saveFestivalBanner(){
 }
 
 async function adminView(){
-  const primaryAdminEmail='rnyburia@gmail.com';
-  if(String(user?.email||'').trim().toLowerCase()!==primaryAdminEmail){
-    nav('dashboard');
-    return;
-  }
+  // Only a successful server-side role check may open the Admin Console.
+  const authorized=await checkSuperAdminStatus(true);
+  if(!authorized){nav('dashboard');return;}
   renderAdminViewContent();
-  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
-    await loadAdminTickets();
-  }
+  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError)await loadAdminTickets();
 }
 
 window.adminView=adminView;
