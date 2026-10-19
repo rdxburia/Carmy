@@ -193,3 +193,9 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - PR #168 merged at `3e050234079df6157dc718e625be0339584ed3f4`; append-only staging isolation and production HOLD evidence is now on `main`.
 - Current staging status remains: active Worker version 19/deployment `2a9497bb-a110-457f-aded-5c16b77dd75a` with staging D1/R2/rate-limit/Supabase URL bindings; `SUPABASE_SECRET_KEY` absent. Authenticated E2E remains unverified because the connected Supabase tools cannot retrieve the privileged staging key.
 - Production remains untouched pending passing staging E2E and all production preconditions.
+
+
+## 2026-10-19 — Staging build-trigger check
+- Appended a documentation-only build-trigger test record to `PROGRESS.md` and this file on `staging-worker-cors`; old entries preserved.
+- Trigger `4f8aa961-d0fc-43d1-90f3-b8016e090b5c` watches this branch and deploys via `wrangler.staging.toml`. Prior build `c67646ef-3f63-4137-9a20-4e21e454f5d5` succeeded and version 28 bindings were verified staging-only.
+- Current W1/W2 blockers are documented in main `PROGRESS.md`; never substitute a publishable key for `SUPABASE_SECRET_KEY`.
