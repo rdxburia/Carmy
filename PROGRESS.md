@@ -801,4 +801,48 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - `npm.cmd test`: 150/150 tests passing (100% green, 0 failures, 0 skips).
 
 
+## 2026-10-19 — Phase 4: Administrative TPIN UI & Verification
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Administrative TPIN implementation including Account & Security management card, setup modal, change modal, email reset modal, first-login forced setup overlay, and reusable protected action verification prompt.
+- **Implemented Changes:**
+  - **Account & Security TPIN Card (`renderTpinAccountCardInner`, `loadAdminTpinStatus`):**
+    - Mounted in Admin Account & Security screen (`account`).
+    - Authoritative status loaded via `GET /api/tpin/status`.
+    - Handles endpoint failure/404 by rendering `.admin-blocked-card` containing HTTP method and `/api/tpin/status`.
+    - Shows dynamic status pill (`● TPIN Active`, `⚠️ Not Configured`, `TEMPORARILY LOCKED`).
+    - Displays lockout warning card with expiration timestamp when failed attempt threshold is breached.
+    - Provides action triggers for Setup, Change, and Email Reset.
+  - **TPIN Setup Modal (`openTpinSetupModal`, `submitTpinSetup`):**
+    - 4-digit masked PIN input with show/hide toggle and confirmation.
+    - Validates exactly 4 numeric digits and rejects trivial sequences (e.g. `0000`, `1111`, `1234`).
+    - Submits to `POST /api/tpin/setup` and renders `.admin-blocked-card` on 404.
+    - Zero-storage: Clears input values immediately from memory and DOM.
+  - **TPIN Change Modal (`openTpinChangeModal`, `submitTpinChange`):**
+    - Requires Current TPIN, New TPIN, and Confirmation.
+    - Submits to `POST /api/tpin/change`.
+    - Displays remaining attempts badge (`.tpin-attempts-badge`) on failed attempt before lockout.
+  - **TPIN Reset Request Modal (`openTpinResetModal`, `submitTpinResetRequest`):**
+    - Displays authenticated administrator's registered email (`user.email`).
+    - Submits reset request to `POST /api/tpin/reset-request`.
+  - **Protected Action Prompt (`promptTpinVerification`, `executeProtectedAdminAction`):**
+    - Reusable security gate asking for 4-digit TPIN before executing high-privilege operations:
+      * Token Generation (`generateAdminToken`)
+      * Team Member Invites (`sendTeamInvite`)
+      * Sensitive CSV Exports (`exportUsersCsv`, `exportTicketsCsv`, `exportAuditCsv`)
+      * User Suspension & Reactivation (`suspendUserAccount`)
+    - Submits authorization to `POST /api/tpin/verify` with `{ tpin, action }`.
+    - Dispatches callback strictly on server `ok: true`; fails closed and displays remaining attempts on error; displays `.admin-blocked-card` on 404.
+  - **First-Login Forced Setup Overlay (`checkForcedTpinSetup`, `submitForcedTpinSetup`):**
+    - Renders blocking, non-dismissable full-screen overlay (`#forcedTpinOverlay`) when `tpin_setup_required` or `tpin_change_required` is flagged.
+    - Removes overlay and restores access strictly upon successful `POST /api/tpin/setup`.
+  - **CSS Styling:** Appended `.tpin-card`, `.tpin-status-pill`, `.tpin-input-group`, `.tpin-digit-box`, `.tpin-toggle-btn`, `.tpin-modal-overlay`, `.tpin-modal-box`, `.tpin-attempts-badge`, `.tpin-lockout-card`, `.tpin-forced-overlay`, `.tpin-forced-box` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase4-tpin`.
+  - **Automated Tests:** Added 6 new regression tests in `tests/customer-portal-regression.test.mjs` verifying status card rendering & 404 blocked card, setup modal validation & API submission, change modal remaining attempts, email reset request, protected action verification prompt, and first-login forced overlay.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 156/156 tests passing (100% green, 0 failures, 0 skips).
+
+
+
 

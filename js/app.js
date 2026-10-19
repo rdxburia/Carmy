@@ -67,6 +67,10 @@ let userPlanLoading=false;
 let userPlanError=null;
 let currentComparisonCycle='monthly';
 let isActivationRedeemOpen=false;
+let adminTpinStatus=null;
+let adminTpinLoading=false;
+let adminTpinError=null;
+let pendingTpinActionCallback=null;
 
 function updateAdminNavVisibility(){
   const desktopBtn=document.getElementById('adminNavBtn');
@@ -127,6 +131,7 @@ function clearUserMemory(){
   adminAuditList=null;adminAuditLoading=false;adminAuditError=null;
   userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   userPlanStatus=null;userPlanLoading=false;userPlanError=null;isActivationRedeemOpen=false;
+  adminTpinStatus=null;adminTpinLoading=false;adminTpinError=null;pendingTpinActionCallback=null;
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -5306,18 +5311,8 @@ function renderScreenAdminAccount(){
         '</form>'+
       '</div>'+
 
-      '<div class="admin-account-card">'+
-        '<div class="admin-card-head">'+
-          '<h3>Administrative TPIN (Phase 4)</h3>'+
-          '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
-        '</div>'+
-        '<div style="margin-top:12px;font-size:13px;color:#475569;line-height:1.5">'+
-          '<p>A verified TPIN is required prior to token generation, team access updates, and statutory CSV exports.</p>'+
-          '<div style="margin-top:12px;display:flex;align-items:center;gap:10px">'+
-            '<span class="admin-badge" style="background:#fef3c7;color:#92400e">Phase 4 Specification</span>'+
-            '<button type="button" class="ghost" style="padding:6px 12px;font-size:12px" onclick="toast(\'TPIN management interface is scheduled for Phase 4.\',\'info\')">Configure TPIN</button>'+
-          '</div>'+
-        '</div>'+
+      '<div class="admin-account-card" id="adminTpinCardContainer">'+
+        renderTpinAccountCardInner()+
       '</div>'+
 
       '<div class="admin-account-card">'+
@@ -5519,6 +5514,632 @@ window.handleAdminPasswordChange=handleAdminPasswordChange;
 window.updateAdminPasswordMeter=updateAdminPasswordMeter;
 window.wireAdminAccountSecurityForm=wireAdminAccountSecurityForm;
 
+/* ===== Phase 4: Administrative TPIN UI & Verification ===== */
+
+function renderTpinAccountCardInner(){
+  if(adminTpinLoading){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrative TPIN</h3>'+
+      '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+    '</div>'+
+    '<div style="text-align:center;padding:16px"><span class="spinner-sm"></span> Loading TPIN security status...</div>';
+  }
+  if(adminTpinError){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrative TPIN</h3>'+
+      '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+    '</div>'+
+    renderAdminBlockedCard('/api/tpin/status','GET',adminTpinError.message||'TPIN status endpoint unavailable (404).');
+  }
+  const isSet=Boolean(adminTpinStatus?.is_set);
+  const isLocked=Boolean(adminTpinStatus?.locked_until&&new Date(adminTpinStatus.locked_until)>new Date());
+
+  if(isLocked){
+    const lockedUntilStr=formatAdminDate(adminTpinStatus.locked_until);
+    return '<div class="admin-card-head">'+
+      '<div>'+
+        '<h3>Administrative TPIN</h3>'+
+        '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+      '</div>'+
+      '<span class="tpin-status-pill danger">TEMPORARILY LOCKED</span>'+
+    '</div>'+
+    '<div class="tpin-lockout-card" style="margin-top:12px">'+
+      '<b>Account Security Lockout Active</b>'+
+      '<p style="margin:4px 0 0">Too many failed TPIN attempts. Administrative operations are locked until '+esc(lockedUntilStr)+'. Use email reset or wait for timer expiry.</p>'+
+    '</div>'+
+    '<div style="margin-top:12px;display:flex;gap:10px">'+
+      '<button type="button" class="primary btn-sm" onclick="openTpinResetModal()">Reset TPIN via Email</button>'+
+    '</div>';
+  }
+
+  return '<div class="admin-card-head">'+
+    '<div>'+
+      '<h3>Administrative TPIN</h3>'+
+      '<p class="muted">Cryptographic 4-digit PIN required for token creation, member invites, and data exports.</p>'+
+    '</div>'+
+    '<div style="display:flex;align-items:center;gap:6px">'+
+      '<span class="admin-badge" style="background:#fef3c7;color:#92400e">Phase 4 Specification</span>'+
+      (isSet?'<span class="tpin-status-pill ok">● TPIN Active</span>':'<span class="tpin-status-pill warning">⚠️ Not Configured</span>')+
+    '</div>'+
+  '</div>'+
+  '<div style="margin-top:12px;font-size:13px;color:#475569;line-height:1.5">'+
+    (isSet?
+      '<p>Your 4-digit Administrative TPIN is configured and actively safeguarding high-privilege actions. Never share your TPIN.</p>'+
+      '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">'+
+        '<button type="button" class="ghost btn-sm" id="btnChangeTpin" onclick="openTpinChangeModal()">Change TPIN</button>'+
+        '<button type="button" class="ghost btn-sm" id="btnResetTpin" onclick="openTpinResetModal()">Forgot / Reset TPIN</button>'+
+      '</div>':
+      '<p>A verified 4-digit TPIN is mandatory prior to generating activation tokens, adding team members, or exporting sensitive CSV records.</p>'+
+      '<div style="margin-top:14px;display:flex;gap:10px">'+
+        '<button type="button" class="primary btn-sm" id="btnSetupTpin" onclick="openTpinSetupModal()">Set 4-Digit TPIN</button>'+
+      '</div>'
+    )+
+  '</div>';
+}
+
+async function loadAdminTpinStatus(force=false){
+  if(adminTpinLoading)return;
+  adminTpinLoading=true;
+  adminTpinError=null;
+  const cont=document.getElementById('adminTpinCardContainer');
+  if(cont&&force)cont.innerHTML=renderTpinAccountCardInner();
+  try{
+    const res=await workerGet('/api/tpin/status');
+    adminTpinStatus=res?.data||res||{is_set:false};
+    if(adminTpinStatus?.tpin_setup_required||adminTpinStatus?.tpin_change_required||user?.tpin_change_required){
+      checkForcedTpinSetup();
+    }
+  }catch(err){
+    adminTpinError=err?.status===404?{status:404,message:'Route /api/tpin/status returned 404'}:err;
+  }finally{
+    adminTpinLoading=false;
+    const c=document.getElementById('adminTpinCardContainer');
+    if(c)c.innerHTML=renderTpinAccountCardInner();
+  }
+}
+
+function toggleTpinFieldVisibility(fieldId,btnEl){
+  const field=document.getElementById(fieldId);
+  if(!field)return;
+  if(field.type==='password'){
+    field.type='text';
+    if(btnEl)btnEl.textContent='🙈';
+  }else{
+    field.type='password';
+    if(btnEl)btnEl.textContent='👁️';
+  }
+}
+
+function openTpinSetupModal(){
+  let old=document.getElementById('tpinSetupModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='tpinSetupModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Configure Administrative TPIN</h3>'+
+        '<p class="muted" style="margin:2px 0 0;font-size:12px">Set a secure 4-digit PIN for high-privilege authorizations.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinSetupModal()">✕</button>'+
+    '</div>'+
+    '<form id="tpinSetupForm" onsubmit="event.preventDefault();submitTpinSetup();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="tpinSetupInput">Enter 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinSetupInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinSetupInput\',this)">👁️</button>'+
+        '</div>'+
+        '<small class="muted">4 numbers only (0-9). Avoid sequences like 1234 or repeated digits like 0000.</small>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="tpinSetupConfirm">Confirm 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinSetupConfirm" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinSetupConfirm\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="tpinSetupError" style="display:none"></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px">'+
+        '<button type="button" class="ghost" onclick="closeTpinSetupModal()">Cancel</button>'+
+        '<button type="submit" class="primary" id="btnSubmitTpinSetup">Save TPIN</button>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinSetupModal();};
+  document.body.appendChild(modal);
+  const input=document.getElementById('tpinSetupInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+function closeTpinSetupModal(){
+  const m=document.getElementById('tpinSetupModal');
+  if(m){
+    const inp1=document.getElementById('tpinSetupInput');
+    const inp2=document.getElementById('tpinSetupConfirm');
+    if(inp1)inp1.value='';
+    if(inp2)inp2.value='';
+    m.remove();
+  }
+}
+
+async function submitTpinSetup(){
+  const input1=document.getElementById('tpinSetupInput');
+  const input2=document.getElementById('tpinSetupConfirm');
+  const errEl=document.getElementById('tpinSetupError');
+  const btn=document.getElementById('btnSubmitTpinSetup');
+  const pin=input1?.value?.trim()||'';
+  const confirmPin=input2?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(pin)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN must be exactly 4 numeric digits.</div>');
+    return;
+  }
+  if(pin!==confirmPin){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN confirmation does not match.</div>');
+    return;
+  }
+  if(pin==='0000'||pin==='1111'||pin==='2222'||pin==='3333'||pin==='4444'||pin==='5555'||pin==='6666'||pin==='7777'||pin==='8888'||pin==='9999'||pin==='1234'){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Trivial or easily guessed TPINs are not permitted. Choose a stronger 4-digit combination.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/setup',{tpin:pin});
+    toast('Administrative TPIN configured successfully.','ok');
+    adminTpinStatus={...(adminTpinStatus||{}),is_set:true,tpin_setup_required:false};
+    closeTpinSetupModal();
+    const forced=document.getElementById('forcedTpinOverlay');
+    if(forced)forced.remove();
+    const cont=document.getElementById('adminTpinCardContainer');
+    if(cont)cont.innerHTML=renderTpinAccountCardInner();
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/setup','POST',err.message||'TPIN setup route returned 404.'));
+    }else{
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Failed to save TPIN.')+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Save TPIN';}
+  }finally{
+    if(input1)input1.value='';
+    if(input2)input2.value='';
+  }
+}
+
+function openTpinChangeModal(){
+  let old=document.getElementById('tpinChangeModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='tpinChangeModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Change Administrative TPIN</h3>'+
+        '<p class="muted" style="margin:2px 0 0;font-size:12px">Update your 4-digit security PIN.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinChangeModal()">✕</button>'+
+    '</div>'+
+    '<form id="tpinChangeForm" onsubmit="event.preventDefault();submitTpinChange();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="tpinCurrentInput">Current 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinCurrentInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinCurrentInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="tpinNewInput">New 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinNewInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinNewInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="tpinNewConfirm">Confirm New 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinNewConfirm" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinNewConfirm\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="tpinChangeError" style="display:none"></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px">'+
+        '<button type="button" class="ghost" onclick="closeTpinChangeModal()">Cancel</button>'+
+        '<button type="submit" class="primary" id="btnSubmitTpinChange">Update TPIN</button>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinChangeModal();};
+  document.body.appendChild(modal);
+  const input=document.getElementById('tpinCurrentInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+function closeTpinChangeModal(){
+  const m=document.getElementById('tpinChangeModal');
+  if(m){
+    const i1=document.getElementById('tpinCurrentInput');
+    const i2=document.getElementById('tpinNewInput');
+    const i3=document.getElementById('tpinNewConfirm');
+    if(i1)i1.value='';
+    if(i2)i2.value='';
+    if(i3)i3.value='';
+    m.remove();
+  }
+}
+
+async function submitTpinChange(){
+  const curInp=document.getElementById('tpinCurrentInput');
+  const newInp=document.getElementById('tpinNewInput');
+  const confInp=document.getElementById('tpinNewConfirm');
+  const errEl=document.getElementById('tpinChangeError');
+  const btn=document.getElementById('btnSubmitTpinChange');
+
+  const cur=curInp?.value?.trim()||'';
+  const nxt=newInp?.value?.trim()||'';
+  const conf=confInp?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(cur)||!/^\d{4}$/.test(nxt)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Both current and new TPIN must be exactly 4 digits.</div>');
+    return;
+  }
+  if(nxt!==conf){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">New TPIN confirmation does not match.</div>');
+    return;
+  }
+  if(cur===nxt){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">New TPIN must be different from current TPIN.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Updating...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/change',{current_tpin:cur,new_tpin:nxt});
+    toast('Administrative TPIN updated successfully.','ok');
+    closeTpinChangeModal();
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/change','POST',err.message||'TPIN change route returned 404.'));
+    }else{
+      let attemptsHtml='';
+      if(err?.remaining_attempts!==undefined){
+        attemptsHtml='<div class="tpin-attempts-badge" style="margin-top:6px">⚠️ '+err.remaining_attempts+' attempts remaining before lockout</div>';
+      }
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Failed to update TPIN.')+attemptsHtml+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Update TPIN';}
+  }finally{
+    if(curInp)curInp.value='';
+    if(newInp)newInp.value='';
+    if(confInp)confInp.value='';
+  }
+}
+
+function openTpinResetModal(){
+  let old=document.getElementById('tpinResetModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='tpinResetModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  const adminEmail=user?.email||'your administrator email';
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Reset Administrative TPIN</h3>'+
+        '<p class="muted" style="margin:2px 0 0;font-size:12px">Initiate email-based cryptographic PIN recovery.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinResetModal()">✕</button>'+
+    '</div>'+
+    '<div style="font-size:13.5px;color:#334155;line-height:1.5">'+
+      '<p>A secure reset token will be dispatched to your verified administrator email address:</p>'+
+      '<div style="background:#f1f5f9;padding:10px 14px;border-radius:8px;font-family:monospace;font-weight:700;color:#0f172a;word-break:break-all">'+
+        esc(adminEmail)+
+      '</div>'+
+      '<p class="muted" style="font-size:12px;margin-top:8px">This reset request invalidates existing TPIN sessions across all devices.</p>'+
+      '<div id="tpinResetError" style="display:none;margin-top:10px"></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">'+
+        '<button type="button" class="ghost" onclick="closeTpinResetModal()">Cancel</button>'+
+        '<button type="button" class="primary" id="btnSubmitTpinReset" onclick="submitTpinResetRequest()">Send Reset Email</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinResetModal();};
+  document.body.appendChild(modal);
+}
+
+function closeTpinResetModal(){
+  const m=document.getElementById('tpinResetModal');
+  if(m)m.remove();
+}
+
+async function submitTpinResetRequest(){
+  const btn=document.getElementById('btnSubmitTpinReset');
+  const errEl=document.getElementById('tpinResetError');
+  if(btn){btn.disabled=true;btn.textContent='Dispatching...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/reset-request',{});
+    toast('TPIN reset instructions sent to '+esc(user?.email||'email')+'.','ok');
+    closeTpinResetModal();
+  }catch(err){
+    if(err?.status===404){
+      if(errEl){
+        errEl.style.display='block';
+        errEl.innerHTML=renderAdminBlockedCard('/api/tpin/reset-request','POST',err.message||'TPIN reset request route returned 404.');
+      }
+    }else{
+      toast('Failed to request TPIN reset: '+(err?.message||err),'error');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Send Reset Email';}
+  }
+}
+
+function promptTpinVerification(actionName, onVerified){
+  let old=document.getElementById('tpinVerifyModal');
+  if(old)old.remove();
+
+  pendingTpinActionCallback=onVerified;
+
+  const modal=document.createElement('div');
+  modal.id='tpinVerifyModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:2px">🛡️ Security Verification Required</div>'+
+        '<h3 style="margin:0;font-size:17px">Authorize High-Privilege Action</h3>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinVerifyModal()">✕</button>'+
+    '</div>'+
+    '<div style="font-size:13px;color:#475569">'+
+      '<span>Action to execute:</span> <b style="color:#0f172a">'+esc(actionName)+'</b>'+
+    '</div>'+
+    '<form id="tpinVerifyForm" onsubmit="event.preventDefault();submitTpinVerification(\''+esc(actionName)+'\');" style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label for="tpinVerifyInput">Enter 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinVerifyInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinVerifyInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="tpinVerifyError" style="display:none"></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px">'+
+        '<a href="javascript:void(0)" onclick="closeTpinVerifyModal();openTpinResetModal();" style="font-size:12px;color:#2563eb;text-decoration:none">Forgot TPIN?</a>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button type="button" class="ghost" onclick="closeTpinVerifyModal()">Cancel</button>'+
+          '<button type="submit" class="primary" id="btnSubmitTpinVerify">Authorize Action</button>'+
+        '</div>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinVerifyModal();};
+  document.body.appendChild(modal);
+  const input=document.getElementById('tpinVerifyInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+function closeTpinVerifyModal(){
+  const m=document.getElementById('tpinVerifyModal');
+  if(m){
+    const inp=document.getElementById('tpinVerifyInput');
+    if(inp)inp.value='';
+    m.remove();
+  }
+  pendingTpinActionCallback=null;
+}
+
+async function submitTpinVerification(actionName){
+  const input=document.getElementById('tpinVerifyInput');
+  const errEl=document.getElementById('tpinVerifyError');
+  const btn=document.getElementById('btnSubmitTpinVerify');
+  const pin=input?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(pin)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Please enter all 4 digits of your TPIN.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Verifying...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/verify',{tpin:pin,action:actionName});
+    const cb=pendingTpinActionCallback;
+    closeTpinVerifyModal();
+    if(typeof cb==='function'){
+      await cb();
+    }
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/verify','POST',err.message||'TPIN verification route returned 404. Action blocked.'));
+    }else{
+      let attemptsHtml='';
+      if(err?.remaining_attempts!==undefined){
+        attemptsHtml='<div class="tpin-attempts-badge" style="margin-top:6px">⚠️ '+err.remaining_attempts+' attempts remaining before lockout</div>';
+      }
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Incorrect TPIN. Authorization rejected.')+attemptsHtml+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Authorize Action';}
+  }finally{
+    if(input)input.value='';
+  }
+}
+
+function checkForcedTpinSetup(){
+  const required=Boolean(adminTpinStatus?.tpin_setup_required||adminTpinStatus?.tpin_change_required||user?.tpin_change_required);
+  if(!required)return;
+  if(document.getElementById('forcedTpinOverlay'))return;
+
+  const overlay=document.createElement('div');
+  overlay.id='forcedTpinOverlay';
+  overlay.className='tpin-forced-overlay';
+  overlay.setAttribute('role','dialog');
+  overlay.setAttribute('aria-modal','true');
+
+  overlay.innerHTML='<div class="tpin-forced-box">'+
+    '<div style="text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:8px">🔐</div>'+
+      '<h2 style="margin:0 0 6px">Administrative TPIN Setup Required</h2>'+
+      '<p class="muted" style="margin:0;font-size:13.5px">For SOC-2 / platform security compliance, all administrators must configure a 4-digit TPIN before accessing Torq Desk administration.</p>'+
+    '</div>'+
+    '<form id="forcedTpinForm" onsubmit="event.preventDefault();submitForcedTpinSetup();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="forcedTpinInput">Choose 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="forcedTpinInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'forcedTpinInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="forcedTpinConfirm">Confirm 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="forcedTpinConfirm" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'forcedTpinConfirm\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="forcedTpinError" style="display:none"></div>'+
+      '<div style="margin-top:8px">'+
+        '<button type="submit" class="primary" id="btnSubmitForcedTpin" style="width:100%;padding:12px">Complete TPIN Setup &amp; Enter Console</button>'+
+      '</div>'+
+      '<div style="text-align:center;margin-top:6px">'+
+        '<button type="button" class="ghost" style="color:#64748b;font-size:12.5px" onclick="adminSignOut()">Sign Out</button>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  document.body.appendChild(overlay);
+  const input=document.getElementById('forcedTpinInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+async function submitForcedTpinSetup(){
+  const input1=document.getElementById('forcedTpinInput');
+  const input2=document.getElementById('forcedTpinConfirm');
+  const errEl=document.getElementById('forcedTpinError');
+  const btn=document.getElementById('btnSubmitForcedTpin');
+  const pin=input1?.value?.trim()||'';
+  const confirmPin=input2?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(pin)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN must be exactly 4 numeric digits.</div>');
+    return;
+  }
+  if(pin!==confirmPin){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN confirmation does not match.</div>');
+    return;
+  }
+  if(pin==='0000'||pin==='1111'||pin==='2222'||pin==='3333'||pin==='4444'||pin==='5555'||pin==='6666'||pin==='7777'||pin==='8888'||pin==='9999'||pin==='1234'){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Trivial or easily guessed TPINs are not permitted.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Configuring...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/setup',{tpin:pin});
+    toast('Administrative TPIN configured successfully. Access granted.','ok');
+    adminTpinStatus={...(adminTpinStatus||{}),is_set:true,tpin_setup_required:false};
+    if(user)user.tpin_change_required=false;
+    const forced=document.getElementById('forcedTpinOverlay');
+    if(forced)forced.remove();
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/setup','POST',err.message||'TPIN setup route returned 404.'));
+    }else{
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Failed to save TPIN.')+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Complete TPIN Setup & Enter Console';}
+  }finally{
+    if(input1)input1.value='';
+    if(input2)input2.value='';
+  }
+}
+
+async function executeProtectedAdminAction(actionName, actionFn){
+  if(adminTpinStatus&&adminTpinStatus.is_set){
+    promptTpinVerification(actionName,actionFn);
+  }else{
+    await actionFn();
+  }
+}
+
+window.loadAdminTpinStatus=loadAdminTpinStatus;
+window.renderTpinAccountCardInner=renderTpinAccountCardInner;
+window.openTpinSetupModal=openTpinSetupModal;
+window.closeTpinSetupModal=closeTpinSetupModal;
+window.submitTpinSetup=submitTpinSetup;
+window.openTpinChangeModal=openTpinChangeModal;
+window.closeTpinChangeModal=closeTpinChangeModal;
+window.submitTpinChange=submitTpinChange;
+window.openTpinResetModal=openTpinResetModal;
+window.closeTpinResetModal=closeTpinResetModal;
+window.submitTpinResetRequest=submitTpinResetRequest;
+window.promptTpinVerification=promptTpinVerification;
+window.closeTpinVerifyModal=closeTpinVerifyModal;
+window.submitTpinVerification=submitTpinVerification;
+window.toggleTpinFieldVisibility=toggleTpinFieldVisibility;
+window.checkForcedTpinSetup=checkForcedTpinSetup;
+window.submitForcedTpinSetup=submitForcedTpinSetup;
+window.executeProtectedAdminAction=executeProtectedAdminAction;
+window.getAdminTpinStatus=()=>adminTpinStatus;
+window.setAdminTpinStatus=(val)=>{adminTpinStatus=val;};
+
 function renderAdminCurrentScreen(){
   if(currentAdminScreen==='users')return renderScreenUsers();
   if(currentAdminScreen==='tokens')return renderScreenTokens();
@@ -5684,6 +6305,9 @@ function switchAdminScreen(screenId){
   renderAdminViewContent();
   if(screenId==='account'){
     wireAdminAccountSecurityForm();
+    if(!adminTpinStatus&&!adminTpinLoading&&!adminTpinError){
+      loadAdminTpinStatus();
+    }
   }
   if(screenId==='tickets'&&!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
     loadAdminTickets();
@@ -6486,17 +7110,20 @@ async function suspendUserAccount(userId,currentStatus){
     toast('Status change cancelled.','info');
     return;
   }
-  const btn=document.getElementById('btnSuspendUser');
-  if(btn){btn.disabled=true;btn.textContent='Updating...';}
-  try{
-    await workerPost('/api/admin/users/'+encodeURIComponent(uid)+'/status',{status:newStatus});
-    toast('User status updated to '+newStatus+'.','ok');
-    closeAdminUserDetails();
-    loadAdminUsers(true);
-  }catch(err){
-    toast('Failed to update status: '+(err?.message||err),'error');
-    if(btn){btn.disabled=false;btn.textContent=isSuspended?'Reactivate Account':'Suspend Account';}
-  }
+  const actionLabel=isSuspended?'Reactivate User Account':'Suspend User Account';
+  executeProtectedAdminAction(actionLabel,async ()=>{
+    const btn=document.getElementById('btnSuspendUser');
+    if(btn){btn.disabled=true;btn.textContent='Updating...';}
+    try{
+      await workerPost('/api/admin/users/'+encodeURIComponent(uid)+'/status',{status:newStatus});
+      toast('User status updated to '+newStatus+'.','ok');
+      closeAdminUserDetails();
+      loadAdminUsers(true);
+    }catch(err){
+      toast('Failed to update status: '+(err?.message||err),'error');
+      if(btn){btn.disabled=false;btn.textContent=isSuspended?'Reactivate Account':'Suspend Account';}
+    }
+  });
 }
 
 function openTokenGenModal(){
@@ -6560,22 +7187,24 @@ function generateAdminToken(){
   const usage=usageEl?.value||'single';
   const mobile=mobileEl?.value?.trim()||null;
 
-  closeTokenGenModal();
-  const randHex=Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();
-  const tokenCode='TD-PLUS-'+randHex;
-  adminRevealedToken=tokenCode;
-  openTokenRevealModal(tokenCode);
+  executeProtectedAdminAction('Generate Activation Token',async ()=>{
+    closeTokenGenModal();
+    const randHex=Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();
+    const tokenCode='TD-PLUS-'+randHex;
+    adminRevealedToken=tokenCode;
+    openTokenRevealModal(tokenCode);
 
-  workerPost('/api/admin/tokens',{
-    token:tokenCode,
-    plan:plan,
-    duration_days:duration,
-    max_uses:usage==='multi'?50:1,
-    bound_mobile:mobile
-  }).then(()=>{
-    loadAdminTokens(true);
-  }).catch(err=>{
-    console.error('Failed to register token with backend:',err?.message||err);
+    workerPost('/api/admin/tokens',{
+      token:tokenCode,
+      plan:plan,
+      duration_days:duration,
+      max_uses:usage==='multi'?50:1,
+      bound_mobile:mobile
+    }).then(()=>{
+      loadAdminTokens(true);
+    }).catch(err=>{
+      console.error('Failed to register token with backend:',err?.message||err);
+    });
   });
 }
 
@@ -6775,6 +7404,7 @@ async function sendTeamInvite(){
     toast('Valid member email required.','error');
     return;
   }
+  executeProtectedAdminAction('Invite Administrative Team Member',async ()=>{
   if(status){status.style.display='block';status.style.background='rgba(37,99,235,.08)';status.style.color='#1d4ed8';status.textContent='Submitting invitation to server…';}
   if(button){button.disabled=true;button.textContent='Sending…';}
   try{
@@ -6796,6 +7426,7 @@ async function sendTeamInvite(){
     if(button){button.textContent='Retry Invitation';button.disabled=false;}
     toast('Invitation failed: '+detail,'error');
   }
+  });
 }
 
 async function revokeTeamMember(memberId){
@@ -6826,33 +7457,39 @@ function updateUpgradeStatus(reqId,status){
 }
 
 async function exportUsersCsv(){
-  try{
-    toast('Exporting Users CSV...','info');
-    await workerDownloadCsv('/api/admin/users/export.csv','torq-desk-users.csv');
-    toast('Users CSV downloaded successfully.','ok');
-  }catch(err){
-    toast('Users export failed: '+(err?.message||err),'error');
-  }
+  executeProtectedAdminAction('Export User Directory CSV',async ()=>{
+    try{
+      toast('Exporting Users CSV...','info');
+      await workerDownloadCsv('/api/admin/users/export.csv','torq-desk-users.csv');
+      toast('Users CSV downloaded successfully.','ok');
+    }catch(err){
+      toast('Users export failed: '+(err?.message||err),'error');
+    }
+  });
 }
 
 async function exportTicketsCsv(){
-  try{
-    toast('Exporting Tickets CSV...','info');
-    await workerDownloadCsv('/api/admin/tickets/export.csv','torq-desk-tickets.csv');
-    toast('Tickets CSV downloaded successfully.','ok');
-  }catch(err){
-    toast('Tickets export failed: '+(err?.message||err),'error');
-  }
+  executeProtectedAdminAction('Export Support Tickets CSV',async ()=>{
+    try{
+      toast('Exporting Tickets CSV...','info');
+      await workerDownloadCsv('/api/admin/tickets/export.csv','torq-desk-tickets.csv');
+      toast('Tickets CSV downloaded successfully.','ok');
+    }catch(err){
+      toast('Tickets export failed: '+(err?.message||err),'error');
+    }
+  });
 }
 
 async function exportAuditCsv(){
-  try{
-    toast('Exporting Security Audit CSV...','info');
-    await workerDownloadCsv('/api/admin/audit/export.csv','torq-desk-audit.csv');
-    toast('Audit CSV downloaded successfully.','ok');
-  }catch(err){
-    toast('Audit export failed: '+(err?.message||err),'error');
-  }
+  executeProtectedAdminAction('Export Security Audit CSV',async ()=>{
+    try{
+      toast('Exporting Security Audit CSV...','info');
+      await workerDownloadCsv('/api/admin/audit/export.csv','torq-desk-audit.csv');
+      toast('Audit CSV downloaded successfully.','ok');
+    }catch(err){
+      toast('Audit export failed: '+(err?.message||err),'error');
+    }
+  });
 }
 
 function saveFestivalBanner(){

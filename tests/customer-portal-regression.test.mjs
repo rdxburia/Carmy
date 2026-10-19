@@ -3466,5 +3466,241 @@ test("User Dashboard Phase 3: Vehicle addition and Document Vault enforce plan q
   assert.ok(!h.elements.get('docUploadModal'), "Document upload modal must not open when storage limit reached");
 });
 
+test("Administrative TPIN Phase 4: Account card displays status and handles 404 blocked card for /api/tpin/status", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Error state renders blocked card
+  h.eval(`
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTpinError = { message: 'Route /api/tpin/status returned 404', status: 404 };
+    adminTpinStatus = null;
+  `);
+
+  const blockedHtml = h.eval("renderTpinAccountCardInner()");
+  assert.ok(blockedHtml.includes("admin-blocked-card"), "Must render blocked card when /api/tpin/status returns 404");
+  assert.ok(blockedHtml.includes("GET"), "Blocked card must show GET method");
+  assert.ok(blockedHtml.includes("/api/tpin/status"), "Blocked card must show /api/tpin/status");
+
+  // 2. Unconfigured state
+  h.eval(`
+    adminTpinError = null;
+    adminTpinStatus = { is_set: false };
+  `);
+  const unconfiguredHtml = h.eval("renderTpinAccountCardInner()");
+  assert.ok(unconfiguredHtml.includes("Not Configured"), "Must display Not Configured status");
+  assert.ok(unconfiguredHtml.includes("Set 4-Digit TPIN"), "Must offer Set 4-Digit TPIN button");
+
+  // 3. Configured active state
+  h.eval(`
+    adminTpinStatus = { is_set: true };
+  `);
+  const configuredHtml = h.eval("renderTpinAccountCardInner()");
+  assert.ok(configuredHtml.includes("TPIN Active"), "Must display TPIN Active badge");
+  assert.ok(configuredHtml.includes("Change TPIN"), "Must display Change TPIN button");
+  assert.ok(configuredHtml.includes("Forgot / Reset TPIN"), "Must display Reset TPIN button");
+});
+
+test("Administrative TPIN Phase 4: Setup modal enforces 4 digits, disallows trivial sequences, calls POST /api/tpin/setup, and wipes memory", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openTpinSetupModal();");
+  assert.ok(h.elements.get('tpinSetupModal'), "Setup modal must be open");
+
+  // Trivial sequence fails
+  h.eval(`
+    document.getElementById('tpinSetupInput').value = '1234';
+    document.getElementById('tpinSetupConfirm').value = '1234';
+  `);
+  await h.eval("submitTpinSetup();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must reject trivial sequence '1234'");
+  assert.ok(h.elements.get('tpinSetupError')?.innerHTML.includes("Trivial or easily guessed"), "Must show trivial PIN warning");
+
+  // Mismatched confirmation fails
+  h.eval(`
+    document.getElementById('tpinSetupInput').value = '8492';
+    document.getElementById('tpinSetupConfirm').value = '8493';
+  `);
+  await h.eval("submitTpinSetup();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must reject mismatched PIN");
+
+  // Valid setup succeeds
+  h.eval(`
+    document.getElementById('tpinSetupInput').value = '8492';
+    document.getElementById('tpinSetupConfirm').value = '8492';
+  `);
+  await h.eval("submitTpinSetup();");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/setup", "Must call POST /api/tpin/setup");
+  assert.equal(postCall.body.tpin, "8492", "Must submit entered TPIN");
+
+  // Zero-storage check & modal removal
+  assert.ok(!h.elements.get('tpinSetupModal'), "Modal must be closed on success");
+  assert.equal(h.eval("adminTpinStatus?.is_set"), true, "Must update adminTpinStatus.is_set to true");
+});
+
+test("Administrative TPIN Phase 4: Change modal calls POST /api/tpin/change and displays remaining attempts on failure", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTpinStatus = { is_set: true };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      if (body.current_tpin !== '8492') {
+        const err = new Error('Invalid current TPIN.');
+        err.remaining_attempts = 2;
+        throw err;
+      }
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openTpinChangeModal();");
+  assert.ok(h.elements.get('tpinChangeModal'), "Change modal must be open");
+
+  // 1. Identical current and new TPIN rejected
+  h.eval(`
+    document.getElementById('tpinCurrentInput').value = '8492';
+    document.getElementById('tpinNewInput').value = '8492';
+    document.getElementById('tpinNewConfirm').value = '8492';
+  `);
+  await h.eval("submitTpinChange();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must reject identical current and new PIN");
+
+  // 2. Incorrect current TPIN renders remaining attempts
+  h.eval(`
+    document.getElementById('tpinCurrentInput').value = '9999';
+    document.getElementById('tpinNewInput').value = '3819';
+    document.getElementById('tpinNewConfirm').value = '3819';
+  `);
+  await h.eval("submitTpinChange();");
+  const errHtml = h.elements.get('tpinChangeError')?.innerHTML || '';
+  assert.ok(errHtml.includes("2 attempts remaining"), "Must display remaining attempts badge on failed attempt");
+
+  // 3. Valid change succeeds
+  h.eval(`
+    document.getElementById('tpinCurrentInput').value = '8492';
+    document.getElementById('tpinNewInput').value = '3819';
+    document.getElementById('tpinNewConfirm').value = '3819';
+  `);
+  await h.eval("submitTpinChange();");
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/change", "Must call POST /api/tpin/change");
+  assert.equal(postCall.body.current_tpin, "8492");
+  assert.equal(postCall.body.new_tpin, "3819");
+  assert.ok(!h.elements.get('tpinChangeModal'), "Modal must close on success");
+});
+
+test("Administrative TPIN Phase 4: Reset request calls POST /api/tpin/reset-request and displays admin email", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'security-lead@torqdesk.internal' };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openTpinResetModal();");
+  const modalHtml = h.elements.get('tpinResetModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("security-lead@torqdesk.internal"), "Must safely display administrator email");
+
+  await h.eval("submitTpinResetRequest();");
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/reset-request", "Must call POST /api/tpin/reset-request");
+  assert.ok(!h.elements.get('tpinResetModal'), "Modal must close on success");
+});
+
+test("Administrative TPIN Phase 4: Protected actions prompt TPIN verification modal before execution", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTpinStatus = { is_set: true };
+    globalThis.__actionExecuted = false;
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      if (body.tpin === '3819') {
+        return { ok: true };
+      }
+      const err = new Error('Incorrect TPIN.');
+      err.remaining_attempts = 1;
+      throw err;
+    };
+  `);
+
+  // Prompt TPIN verification
+  h.eval(`
+    promptTpinVerification('Export User Directory CSV', () => {
+      globalThis.__actionExecuted = true;
+    });
+  `);
+
+  assert.ok(h.elements.get('tpinVerifyModal'), "Verification modal must be opened");
+  const modalHtml = h.elements.get('tpinVerifyModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("Export User Directory CSV"), "Must show target action name");
+
+  // Incorrect TPIN does NOT execute action
+  h.eval("document.getElementById('tpinVerifyInput').value = '0000';");
+  await h.eval("submitTpinVerification('Export User Directory CSV');");
+  assert.equal(h.eval("globalThis.__actionExecuted"), false, "Action must NOT execute on incorrect TPIN");
+  assert.ok(h.elements.get('tpinVerifyError')?.innerHTML.includes("1 attempts remaining"), "Must show remaining attempts");
+
+  // Valid TPIN executes protected action
+  h.eval("document.getElementById('tpinVerifyInput').value = '3819';");
+  await h.eval("submitTpinVerification('Export User Directory CSV');");
+  assert.equal(h.eval("globalThis.__actionExecuted"), true, "Action must execute upon successful verification");
+  assert.ok(!h.elements.get('tpinVerifyModal'), "Modal must close on success");
+});
+
+test("Administrative TPIN Phase 4: First-login forced overlay blocks access when tpin_change_required is flagged", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-new', email: 'newadmin@carmy.internal', tpin_change_required: true };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("checkForcedTpinSetup();");
+  assert.ok(h.elements.get('forcedTpinOverlay'), "Forced TPIN overlay must be appended");
+
+  h.eval(`
+    document.getElementById('forcedTpinInput').value = '9152';
+    document.getElementById('forcedTpinConfirm').value = '9152';
+  `);
+  await h.eval("submitForcedTpinSetup();");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/setup", "Must call POST /api/tpin/setup");
+  assert.equal(postCall.body.tpin, "9152");
+  assert.ok(!h.elements.get('forcedTpinOverlay'), "Overlay must be removed after successful setup");
+  assert.equal(h.eval("user.tpin_change_required"), false, "tpin_change_required flag must be cleared");
+});
+
+
 
 
