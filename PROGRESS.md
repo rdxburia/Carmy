@@ -546,3 +546,7 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 
 ### Staging-only deployment correction — 19 Oct 2026
 - A partial Cloudflare settings PATCH briefly deployed Worker version 25 with only the `ALLOWED_ORIGIN` binding. It was immediately replaced by the previously verified isolated version 24, then by complete version 27. No request or ticket mutation was sent to version 25; that version had no D1, R2, rate-limit, or Supabase binding. Active version 27 was re-verified with the complete staging-only binding set. No production resource was deployed by this correction.
+
+
+### Final staging Pages verification — 19 Oct 2026
+- Documentation-only commits also triggered a staging Pages redeploy. Final deployment `35881032-fed7-4c31-9d68-8b2563e5547c` from branch `staging/ticket-e2e-frontend`, commit `ddc9ca4ac0b27707583e412d30c97bc7805e4085`, completed queued, initialize, clone, build, and deploy stages successfully. Stable project URL remains `https://carmy-ticket-staging.pages.dev`.
