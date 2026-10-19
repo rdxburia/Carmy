@@ -117,9 +117,10 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
     const ticket=await ownedTicket(env,ticketId,user.id);
     if(!ticket)return fail("Ticket not found.",404,origin,"NOT_FOUND");
     const events=await env.DB.prepare("SELECT id,ticket_id,actor_type,event_type,message,created_at FROM public_ticket_events WHERE ticket_id=? ORDER BY id ASC").bind(ticketId).all();
+    const publicEvents=(events.results||[]).filter((event)=>event?.visibility!=="internal"&&event?.event_type!=="internal_note").map((event)=>({id:event.id,ticket_id:event.ticket_id,actor_type:event.actor_type,event_type:event.event_type,message:event.message,created_at:event.created_at}));
     const lastId=Number(events.results?.at(-1)?.id||0);
     await env.DB.prepare("INSERT INTO ticket_reads(user_id,ticket_id,last_read_event_id,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id,ticket_id) DO UPDATE SET last_read_event_id=excluded.last_read_event_id,updated_at=excluded.updated_at").bind(user.id,ticketId,lastId,nowSec()).run();
-    return json({ok:true,data:{id:ticket.id,subject:ticket.subject,status:ticket.status,priority:ticket.priority,chat_enabled:Boolean(ticket.chat_enabled)&&Number(ticket.chat_enabled_until||0)>nowSec()&&ticket.status!=="closed",show_agent_name:Boolean(ticket.show_agent_name),events:events.results||[]}},200,origin);
+    return json({ok:true,data:{id:ticket.id,subject:ticket.subject,status:ticket.status,priority:ticket.priority,chat_enabled:Boolean(ticket.chat_enabled)&&Number(ticket.chat_enabled_until||0)>nowSec()&&ticket.status!=="closed",show_agent_name:Boolean(ticket.show_agent_name),events:publicEvents}},200,origin);
   }
   if(parts[0]==="tickets" && ticketId && parts[2]==="messages" && parts.length===3 && method==="POST") {
     const ticket=await ownedTicket(env,ticketId,user.id);
