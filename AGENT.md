@@ -203,6 +203,14 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Do not modify production resources while any production gate is unmet.
 
 
+## 2026-10-19 — Read-only staging JWT smoke test added
+- Added `tests/staging-readonly-jwt-smoke.mjs` on branch `test/staging-readonly-jwt-smoke-20261019`. It is intentionally read-only: no ticket creation, update, reply, assignment, deletion, or audit/event mutation.
+- It guards the exact staging Worker hostname and Supabase project ref, then signs in the two customer QA accounts and staging admin and checks missing/tampered-token rejection, customer denial of the admin list, and customer/admin ticket-list reads.
+- This is a smoke test, not the full ticket workflow E2E. It cannot establish per-ticket isolation or internal-note visibility without a known owner-approved fixture, and it does not validate ticket event/audit writes.
+- Cloudflare's read-only secret inventory verified the names `SUPABASE_SECRET_KEY` and `CACHE_INVALIDATION_SECRET` on `carmy-api-staging`; secret values were not accessed. The real-JWT smoke script has not been executed in this session because no secure Node.js runtime is available through the connected tools.
+- Production remains HOLD and untouched; PR #161 remains open/unmerged. Do not bypass append-only staging event/audit protections.
+
+
 ## 2026-10-19 — Autonomous Mode v5 execution status
 - W1: Staging project ref verified, but `auth.users=0`, `auth.identities=0`, and `super_admins=0`; no JWT sign-in/admin registry PASS. The full execution details and exact connector errors are in `PROGRESS.md`.
 - W2: `SUPABASE_SECRET_KEY` absent on staging Worker. Cloudflare exact error: `10056: Binding 'SUPABASE_SECRET_KEY' not found.`; Supabase tool returns only public keys; Management API URL is inaccessible through web tool. Never substitute a publishable key.

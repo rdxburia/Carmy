@@ -556,9 +556,17 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - W1 sign-in and W2 privileged secret remain blocked by missing Auth Admin/Management API capabilities in the connected tools; the next steps must continue using available independent approaches and record exact results. No production rollout is authorized unless every gate in the existing production plan is proven.
 
 
+## 2026-10-19 — Read-only staging JWT smoke test added
+- Added `tests/staging-readonly-jwt-smoke.mjs` on branch `test/staging-readonly-jwt-smoke-20261019`. It is intentionally read-only: no ticket creation, update, reply, assignment, deletion, or audit/event mutation.
+- It guards the exact staging Worker hostname and Supabase project ref, then signs in the two customer QA accounts and staging admin and checks missing/tampered-token rejection, customer denial of the admin list, and customer/admin ticket-list reads.
+- This is a smoke test, not the full ticket workflow E2E. It cannot establish per-ticket isolation or internal-note visibility without a known owner-approved fixture, and it does not validate ticket event/audit writes.
+- Cloudflare's read-only secret inventory verified the names `SUPABASE_SECRET_KEY` and `CACHE_INVALIDATION_SECRET` on `carmy-api-staging`; secret values were not accessed. The real-JWT smoke script has not been executed in this session because no secure Node.js runtime is available through the connected tools.
+- Production remains HOLD and untouched; PR #161 remains open/unmerged. Do not bypass append-only staging event/audit protections.
+
+
 ---
 
-# 2026-10-19 — AUTONOMOUS MODE v5 execution record (credential redacted)
+## 2026-10-19 — AUTONOMOUS MODE v5 execution record (credential redacted)
 
 ## Scope and security rules received
 - User authorized staging-only QA verification, staging secret provisioning, Workers Builds verification, staging frontend/E2E work, staging migration parity, and production read-only gates.
