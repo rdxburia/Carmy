@@ -218,3 +218,7 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Staging Pages redirect isolation fix
 - Root cause: staging Pages deployment commit `fdab41ce49fa2b33ec679fae89c987535cb4f5ec` uploaded `_redirects` rule `/* https://rdxburia.github.io/Carmy/ 301`. This redirected the staging hostname to the production GitHub Pages app; live smoke detected production Supabase URL in the response instead of the staging config.
 - Fixed only the `staging/ticket-e2e-frontend` branch `_redirects` file to remove the production redirect. Main branch and production GitHub Pages were not changed. New staging Pages deploy is triggered by commit `cbbcefba6f907259df7f6bd35ca6555ae9e9a0e3`; verify stable URL and config markers after deploy.
+
+
+## 2026-10-19 — Stable staging URL verified
+- GitHub Actions smoke run `39185379833` confirms `https://carmy-ticket-staging.pages.dev` now serves the staging login UI and staging `js/config.js` (`application/javascript`), with staging Supabase/Worker URLs and no production Supabase URL. Missing-token and tampered-token calls both return 401, and CORS preflight returns 204 for the staging Pages origin.
