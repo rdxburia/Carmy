@@ -260,3 +260,9 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Applied additive/idempotent CREATE TABLE/CREATE INDEX IF NOT EXISTS statements for missing cache_entries, admin_team_invites, team_members, and the two missing legacy support_tickets indexes. Then reconciled d1_migrations by recording 0001–0006 and 0008 only after confirming existing schema objects for 0002–0005 and creating missing objects for 0001/0004/0006/0008. No ticket rows were updated or deleted; no seeds added.
 - Post-write read-only verification: all expected tables and selected indexes present; d1_migrations lists 0001–0008; support_tickets count remains 4; team_members=0; admin_team_invites=0. Verification queries report changed_db=false and rows_written=0.
 - This corrects the prior log entry that said the ledger was not modified; preserve that old entry as historical state. Wrangler migration-list confirmation and authenticated staging E2E remain NOT RUN. Do not run migrations apply now; ledger is reconciled. Backend branch is not merged; production remains HOLD.
+
+
+## 2026-10-19 — PR #177 opened; CI and E2E gates
+- Opened draft PR #177: https://github.com/rdxburia/Carmy/pull/177 from feat/support-ticket-backend-v2 to main. Head commit at opening: cc61f549e81cb121bf5acd7b50dd464f9d8cb95e. It is open, draft, unmerged. No merge performed.
+- CI evidence at latest check: WS-A idle-session regression SUCCESS (run 39206288201); Policy extraction regression SUCCESS (run 39206287945); Super Admin PR checks IN PROGRESS (run 39206288099); GitHub Pages workflow IN PROGRESS (run 39206288005). These do not substitute for authenticated staging E2E.
+- Remaining blocker: connected Supabase tools do not expose Auth Admin user creation or a supported password-grant flow; staging QA users/real JWTs are still unavailable. Do not merge or deploy Worker until authenticated E2E and all required checks pass. Production remains HOLD.
