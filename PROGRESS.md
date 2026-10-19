@@ -522,3 +522,9 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - The staging isolation and production HOLD notes are now on `main`. No additional infrastructure changes in this documentation-only follow-up.
 - Active staging deployment remains version 19, deployment `2a9497bb-a110-457f-aded-5c16b77dd75a`; secret inventory empty. Staging E2E is still not run because privileged staging Supabase credentials are unavailable through the connector.
 - No production data read or mutation; no production migration or Worker deployment.
+
+
+## 2026-10-19 — Staging real-JWT E2E harness
+- Added `tests/staging-ticket-e2e.mjs` and `.github/workflows/staging-e2e-harness.yml` on branch `test/staging-ticket-e2e-v4`. The script accepts all credentials only from environment variables, never prints passwords/JWTs, exercises password-grant auth, missing/tampered JWT rejection, ticket create/detail/reply, internal visibility, customer isolation/IDOR, non-admin 403, admin assignment, and aggregate event/read/audit row checks. It retains synthetic ticket history because ticket/audit tables are append-only; it does not delete any rows.
+- Real E2E execution is not complete: staging QA users are absent. Direct auth.users SQL insertion and Auth signup through the available connector were blocked by safety checks; public Auth settings fetch returned HTTP 403 from the tool runtime. The connected Supabase tool catalog has no Management API key-reveal/create or auth-admin user-creation action. No QA passwords or keys recorded in project docs.
+- Staging frontend/API URLs are configured in Cloudflare (`ALLOWED_ORIGIN=https://carmy-ticket-staging.pages.dev`), but this runtime cannot fetch the public Pages/Workers URLs: outbound requests returned `403 Forbidden: requests to <host> are not allowed`, so public login page reachability and authenticated browser E2E are not established. Production remains HOLD.
