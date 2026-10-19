@@ -247,3 +247,12 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
 - Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
 - Production remains HOLD and untouched. PR #161 remains open/unmerged.
+
+
+## 2026-10-19 — Phase 5: Garage Side Redesign & Administration
+- Scope: Frontend-only Super Admin garage management screen, live API loader `GET /api/admin/garages` with `.admin-blocked-card` on 404, workshop status mutation, verified onboarding wizard state preservation, and garage workspace billing/staff limits.
+- Branch: `feat/frontend-roadmap`.
+- Zero backend/Worker edits, zero DB migrations/SQL changes.
+- Test suites: `npm.cmd test` passed 160/160; `node --test tests/garage-redesign.test.mjs` passed 5/5; `node --check js/app.js` passed with zero errors.
+- Cache buster updated to `?v=2026.10.19-phase5-garage`.
+

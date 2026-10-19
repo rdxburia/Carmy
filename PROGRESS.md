@@ -844,5 +844,45 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - `npm.cmd test`: 156/156 tests passing (100% green, 0 failures, 0 skips).
 
 
+## 2026-10-19 — Phase 5: Garage Side Redesign & Administration
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Super Admin garage management screen connecting to real API loader with `.admin-blocked-card` on 404, workshop status mutation, verified onboarding wizard state preservation, and garage workspace billing/staff limits.
+- **Implemented Changes:**
+  - **Super Admin Garages Screen (`renderScreenGarages`, `loadAdminGarages`):**
+    - Mounted in Super Admin shell under `garages` screen key (Operations & Platform navigation group).
+    - Authoritative directory loaded via `GET /api/admin/garages`.
+    - Handles endpoint failure/404 by rendering `.admin-blocked-card` containing HTTP method `GET` and `/api/admin/garages`.
+    - Directory table displays:
+      * Workshop Name & Location (`name`, `city`, `state`, `address` rendered via `esc()`).
+      * Contact & Owner Person (`phone`, `email`, `owner_name`).
+      * Trade License / GSTIN (`gstin` or `Unregistered (Non-GST)`).
+      * Plan Tier badge (`Lite`, `Premium`, `Ultra`).
+      * Bays & Staff Quota count (`bays` and `staff_count / max_staff`).
+      * Verification status badge (`status-active`, `status-pending`, `status-suspended`).
+      * Administrative actions (`Verify`, `Suspend`, `Reactivate`) calling `updateAdminGarageStatus()` wired to `PATCH /api/admin/garages/:id/status` behind administrative TPIN protection.
+    - Status filtering tabs: "All Garages", "Active / Verified", "Pending Verification", "Suspended".
+    - Live text search filtering across workshop name, city, owner, phone, email, and GSTIN.
+  - **Garage Onboarding Wizard (`garage-onboarding.html`, `js/garage-onboarding.js`):**
+    - Step 1-5 multi-stage form preserving draft in `localStorage` under `torq_garage_signup_draft`.
+    - Strict GSTIN format validation (15 alphanumeric characters).
+    - Server error display without fake success alerts; displays duplicate application conflict warning on 409.
+    - Safe dynamic DOM population using `textContent`.
+  - **Garage Workspace (`garage-portal.html`, `js/garage-workspace.js`):**
+    - Fallback plan limits declared across Lite, Premium, and Ultra tiers.
+    - Staff quota check calling `GET /api/garage/staff` (with fallback to plan limits) displaying `.garage-limit-banner` when quota is reached.
+    - Invoices & Billing GST toggle (B2B 18% GST vs B2C non-GST) with live client preview labeled with `.garage-preview-badge` (PREVIEW ONLY).
+    - Lite and Premium feature locks on inventory and WhatsApp automation.
+    - Expired plan read-only state disabling mutations with `.garage-expired-banner`.
+  - **CSS Styling:** Appended `.admin-badge.plan-lite`, `.admin-badge.plan-premium`, `.admin-badge.status-verified`, `.admin-badge.status-pending`, `.garage-admin-meta`, `.garage-admin-gstin` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase5-garage`.
+  - **Automated Tests:** Added 4 new regression tests in `tests/customer-portal-regression.test.mjs` verifying workshop directory table rendering, 404 blocked card handling, status update PATCH API dispatch, and status/search filtering.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 160/160 tests passing (100% green, 0 failures, 0 skips).
+  - `node --test tests/garage-redesign.test.mjs`: 5/5 tests passing (100% green).
+
+
+
 
 

@@ -4267,6 +4267,38 @@ body.td-admin-mode #admin.view.active {
   gap: 20px;
 }
 
+/* Phase 5 — Garage Administration & Badges */
+.admin-badge.plan-lite {
+  background: #f1f5f9;
+  color: #475569;
+}
+.admin-badge.plan-premium {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+.admin-badge.status-verified {
+  background: #dcfce7;
+  color: #166534;
+}
+.admin-badge.status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+.garage-admin-meta {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.garage-admin-gstin {
+  font-family: var(--font-digital);
+  font-size: 11.5px;
+  color: #0f172a;
+}
+
+
 
 
 

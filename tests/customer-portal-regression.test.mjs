@@ -3701,6 +3701,110 @@ test("Administrative TPIN Phase 4: First-login forced overlay blocks access when
   assert.equal(h.eval("user.tpin_change_required"), false, "tpin_change_required flag must be cleared");
 });
 
+test("Super Admin Garages Phase 5: renderScreenGarages displays workshop directory table with data, badges, and action buttons", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminGaragesList = [
+      { id: 'w1', name: 'Himachal Auto Care', city: 'Shimla', state: 'HP', phone: '+91 98160 11111', owner_name: 'Rajesh', gstin: '02AABCT1332L1Z5', plan: 'ultra', bays: 4, staff_count: 5, max_staff: 15, status: 'active' },
+      { id: 'w2', name: 'Speedy Motors', city: 'Solan', state: 'HP', phone: '+91 98160 22222', owner_name: 'Amit', gstin: null, plan: 'lite', bays: 2, staff_count: 2, max_staff: 3, status: 'pending' }
+    ];
+    adminGaragesLoading = false;
+    adminGaragesError = null;
+    adminGaragesFilter = 'all';
+    adminGaragesSearch = '';
+  `);
+
+  const html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("Himachal Auto Care"), "Must show workshop name");
+  assert.ok(html.includes("Shimla, HP"), "Must show city and state");
+  assert.ok(html.includes("02AABCT1332L1Z5"), "Must show GSTIN");
+  assert.ok(html.includes("plan-ultra"), "Must have plan-ultra badge");
+  assert.ok(html.includes("status-active"), "Must show active status badge");
+  assert.ok(html.includes("Suspend"), "Active workshop must have Suspend button");
+
+  assert.ok(html.includes("Speedy Motors"), "Must show pending workshop name");
+  assert.ok(html.includes("Unregistered (Non-GST)"), "Must handle unregistered workshop");
+  assert.ok(html.includes("plan-lite"), "Must have plan-lite badge");
+  assert.ok(html.includes("status-pending"), "Must show pending status badge");
+  assert.ok(html.includes("Verify"), "Pending workshop must have Verify button");
+});
+
+test("Super Admin Garages Phase 5: 404 response on GET /api/admin/garages displays .admin-blocked-card", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminGaragesList = null;
+    workerGet = async (path) => {
+      const err = new Error('Route not found');
+      err.status = 404;
+      throw err;
+    };
+  `);
+
+  await h.eval("loadAdminGarages();");
+  const html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("admin-blocked-card"), "Must render .admin-blocked-card on 404");
+  assert.ok(html.includes("/api/admin/garages"), "Blocked card must specify target route");
+  assert.ok(html.includes("GET"), "Blocked card must specify HTTP method");
+});
+
+test("Super Admin Garages Phase 5: updateAdminGarageStatus calls PATCH /api/admin/garages/:id/status", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminTpinStatus = null;
+    globalThis.__lastPatchCall = null;
+    workerPatch = async (path, body) => {
+      globalThis.__lastPatchCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  await h.eval("updateAdminGarageStatus('w2', 'active');");
+  const patchCall = h.eval("globalThis.__lastPatchCall");
+  assert.ok(patchCall, "Must execute patch call");
+  assert.equal(patchCall.path, "/api/admin/garages/w2/status", "Must call status patch route");
+  assert.equal(patchCall.body.status, "active", "Must send new status");
+});
+
+test("Super Admin Garages Phase 5: Status filter and search filter directory rows correctly", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminGaragesList = [
+      { id: 'w1', name: 'Shimla Auto Works', city: 'Shimla', status: 'active' },
+      { id: 'w2', name: 'Solan Garage Hub', city: 'Solan', status: 'pending' },
+      { id: 'w3', name: 'Dharamshala Motors', city: 'Kangra', status: 'suspended' }
+    ];
+    adminGaragesLoading = false;
+    adminGaragesError = null;
+    adminGaragesFilter = 'all';
+    adminGaragesSearch = '';
+  `);
+
+  // Filter pending
+  h.eval("adminGaragesFilter = 'pending';");
+  let html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("Solan Garage Hub"), "Pending filter must show pending garage");
+  assert.ok(!html.includes("Shimla Auto Works"), "Pending filter must hide active garage");
+  assert.ok(!html.includes("Dharamshala Motors"), "Pending filter must hide suspended garage");
+
+  // Search by keyword
+  h.eval(`
+    adminGaragesFilter = 'all';
+    adminGaragesSearch = 'Dharamshala';
+  `);
+  html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("Dharamshala Motors"), "Search must match Dharamshala Motors");
+  assert.ok(!html.includes("Shimla Auto Works"), "Search must hide unmatched garages");
+});
+
+
 
 
 

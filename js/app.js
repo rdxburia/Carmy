@@ -61,6 +61,11 @@ let adminAuditLoading=false;
 let adminAuditError=null;
 let adminAuditActorFilter='all';
 let adminAuditActionFilter='all';
+let adminGaragesList=null;
+let adminGaragesLoading=false;
+let adminGaragesError=null;
+let adminGaragesFilter='all';
+let adminGaragesSearch='';
 let adminContentTab='about';
 let userPlanStatus=null;
 let userPlanLoading=false;
@@ -129,6 +134,7 @@ function clearUserMemory(){
   adminUpgradesList=null;adminUpgradesLoading=false;adminUpgradesError=null;
   adminTeamList=null;adminTeamLoading=false;adminTeamError=null;
   adminAuditList=null;adminAuditLoading=false;adminAuditError=null;
+  adminGaragesList=null;adminGaragesLoading=false;adminGaragesError=null;adminGaragesFilter='all';adminGaragesSearch='';
   userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   userPlanStatus=null;userPlanLoading=false;userPlanError=null;isActivationRedeemOpen=false;
   adminTpinStatus=null;adminTpinLoading=false;adminTpinError=null;pendingTpinActionCallback=null;
@@ -4564,6 +4570,37 @@ async function loadAdminAudit(force=false){
   }
 }
 
+async function loadAdminGarages(force=false){
+  if(adminGaragesLoading)return;
+  if(!force&&adminGaragesList)return;
+  adminGaragesLoading=true;
+  adminGaragesError=null;
+  try{
+    const res=await workerGet('/api/admin/garages');
+    if(res&&res.ok&&Array.isArray(res.data))adminGaragesList=res.data;
+    else if(res&&Array.isArray(res.data))adminGaragesList=res.data;
+    else if(Array.isArray(res))adminGaragesList=res;
+    else throw new Error(res?.error?.message||'Failed to load garage directory.');
+  }catch(err){
+    adminGaragesError=err;
+  }finally{
+    adminGaragesLoading=false;
+    if(currentAdminScreen==='garages')renderAdminViewContent();
+  }
+}
+
+async function updateAdminGarageStatus(garageId, newStatus){
+  executeProtectedAdminAction('Update Workshop Status', async ()=>{
+    try{
+      await workerPatch('/api/admin/garages/'+encodeURIComponent(garageId)+'/status', { status: newStatus });
+      toast('Garage workshop status updated to '+newStatus+'.','ok');
+      loadAdminGarages(true);
+    }catch(err){
+      toast('Failed to update workshop status: '+(err?.message||err),'error');
+    }
+  });
+}
+
 function renderScreenHome(){
   const totalTickets=adminTickets.length;
   const openTickets=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
@@ -5046,14 +5083,99 @@ function renderScreenTickets(){
 }
 
 function renderScreenGarages(){
+  let bodyContent='';
+  if(adminGaragesLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading garage directory from <code>GET /api/admin/garages</code>...</div>';
+  }else if(adminGaragesError){
+    bodyContent=renderAdminBlockedCard('/api/admin/garages','GET',adminGaragesError?.message||'Garage network endpoint unavailable (404).');
+  }else if(adminGaragesList){
+    const q=(adminGaragesSearch||'').trim().toLowerCase();
+    const filtered=adminGaragesList.filter(g=>{
+      if(adminGaragesFilter!=='all'&&(g.status||'active').toLowerCase()!==adminGaragesFilter)return false;
+      if(q){
+        const haystack=((g.name||g.workshop_name||'')+' '+(g.city||'')+' '+(g.owner_name||'')+' '+(g.phone||'')+' '+(g.email||'')+' '+(g.gstin||'')).toLowerCase();
+        if(!haystack.includes(q))return false;
+      }
+      return true;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No workshop partners match the selected filter.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Workshop &amp; Location</th>'+
+              '<th>Contact &amp; Owner</th>'+
+              '<th>GSTIN / Trade</th>'+
+              '<th>Plan Tier</th>'+
+              '<th>Bays &amp; Staff</th>'+
+              '<th>Status</th>'+
+              '<th style="text-align:right">Actions</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(g=>{
+              const gid=g.id||g.workshop_id||'';
+              const name=g.name||g.workshop_name||'Workshop Partner';
+              const location=[g.city, g.state].filter(Boolean).join(', ') || g.address || '—';
+              const contact=g.phone || g.email || '—';
+              const owner=g.owner_name ? ' · '+g.owner_name : '';
+              const gstin=g.gstin || 'Unregistered (Non-GST)';
+              const plan=(g.plan||'lite').toLowerCase();
+              const bays=g.bays || g.service_bays || '—';
+              const staff=g.staff_count ? (g.staff_count + (g.max_staff ? '/'+g.max_staff : ' staff')) : '—';
+              const status=(g.status||'active').toLowerCase();
+              return '<tr>'+
+                '<td><div style="font-weight:700;color:#0f172a">'+esc(name)+'</div><small class="muted">'+esc(location)+'</small></td>'+
+                '<td><div style="font-size:12.5px">'+esc(contact)+'</div><small class="muted">'+esc(owner)+'</small></td>'+
+                '<td><code style="font-size:11.5px">'+esc(gstin)+'</code></td>'+
+                '<td><span class="admin-badge plan-'+esc(plan)+'">'+esc(plan.charAt(0).toUpperCase()+plan.slice(1))+'</span></td>'+
+                '<td><div style="font-size:12px">'+esc(bays)+' bays</div><small class="muted">'+esc(staff)+'</small></td>'+
+                '<td><span class="admin-badge status-'+esc(status)+'">'+esc(status.charAt(0).toUpperCase()+status.slice(1))+'</span></td>'+
+                '<td style="text-align:right">'+
+                  '<div style="display:flex;gap:6px;justify-content:flex-end">'+
+                    (status==='pending'?'<button type="button" class="primary" style="padding:4px 8px;font-size:12px" onclick="updateAdminGarageStatus(\''+esc(gid)+'\',\'active\')">Verify</button>':
+                     status==='active'?'<button type="button" class="ghost" style="padding:4px 8px;font-size:12px;color:#dc2626" onclick="updateAdminGarageStatus(\''+esc(gid)+'\',\'suspended\')">Suspend</button>':
+                     '<button type="button" class="ghost" style="padding:4px 8px;font-size:12px;color:#16a34a" onclick="updateAdminGarageStatus(\''+esc(gid)+'\',\'active\')">Reactivate</button>')+
+                  '</div>'+
+                '</td>'+
+              '</tr>';
+            }).join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Independent workshop partner directory and onboarding requests.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminGarages(true)">Fetch Garages (GET /api/admin/garages)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Garage Network &amp; Workshop Partners</h2>'+
         '<p class="muted">Review onboarding submissions, monitor garage subscriptions, and manage workshop capabilities.</p>'+
       '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminGarages(true)">↻ Refresh Garages</button>'+
+      '</div>'+
     '</div>'+
-    renderAdminPhaseCard('Phase 5 — Garage Side Redesign', '/api/admin/garages', 'GET', 'Independent workshop partner directory, trade license &amp; GSTIN verification, bay management, staff quotas, and SaaS subscription limits.')+
+    '<div class="admin-controls-bar">'+
+      '<div class="admin-filter-tabs">'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='all'?'active':'')+'" onclick="adminGaragesFilter=\'all\';renderAdminViewContent()">All Garages</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='active'?'active':'')+'" onclick="adminGaragesFilter=\'active\';renderAdminViewContent()">Active / Verified</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='pending'?'active':'')+'" onclick="adminGaragesFilter=\'pending\';renderAdminViewContent()">Pending Verification</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='suspended'?'active':'')+'" onclick="adminGaragesFilter=\'suspended\';renderAdminViewContent()">Suspended</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<input type="text" class="admin-search-input" placeholder="Search workshop name, city, GSTIN..." value="'+esc(adminGaragesSearch)+'" oninput="adminGaragesSearch=this.value;renderAdminViewContent()">'+
+      '</div>'+
+    '</div>'+
+    bodyContent+
   '</div>';
 }
 
@@ -6331,6 +6453,9 @@ function switchAdminScreen(screenId){
   if(screenId==='team'&&!adminTeamList&&!adminTeamLoading&&!adminTeamError){
     loadAdminTeam();
   }
+  if(screenId==='garages'&&!adminGaragesList&&!adminGaragesLoading&&!adminGaragesError){
+    loadAdminGarages();
+  }
   if(screenId==='audit'&&!adminAuditList&&!adminAuditLoading&&!adminAuditError){
     loadAdminAudit();
   }
@@ -7546,6 +7671,10 @@ window.updateUpgradeStatus=updateUpgradeStatus;
 window.exportUsersCsv=exportUsersCsv;
 window.exportTicketsCsv=exportTicketsCsv;
 window.exportAuditCsv=exportAuditCsv;
+window.loadAdminGarages=loadAdminGarages;
+window.renderScreenGarages=renderScreenGarages;
+window.updateAdminGarageStatus=updateAdminGarageStatus;
+window.setAdminGaragesFilter=(val)=>{adminGaragesFilter=val;renderAdminViewContent();};
 window.saveFestivalBanner=saveFestivalBanner;
 window.formatAdminDate=formatAdminDate;
 window.updateHelpUnreadBadge=updateHelpUnreadBadge;
