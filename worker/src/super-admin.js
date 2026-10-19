@@ -106,6 +106,6 @@ export async function canManageTickets(userId, env) {
     return { allowed: Boolean(row?.user_id === userId), unavailable: false };
   } catch (err) {
     console.error("Ticket team permission lookup failed", err?.message || err);
-    return { allowed: false, unavailable: !superAdminLookupAvailable };
+    return { allowed: false, unavailable: true };
   }
 }
