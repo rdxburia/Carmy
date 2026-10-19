@@ -25,31 +25,37 @@ async function ownedTicket(env,id,userId) {
 
 // Assignees must be active members of the server-managed Super Admin or support roster.
 async function isActiveTicketAssignee(env,userId) {
-  if (!userId || !env?.SUPABASE_URL || !env?.SUPABASE_SECRET_KEY || !env?.DB) {
-    return { allowed: false, unavailable: true };
-  }
-  try {
-    const endpoint = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
-    endpoint.searchParams.set("user_id", `eq.${userId}`);
-    endpoint.searchParams.set("active", "eq.true");
-    endpoint.searchParams.set("select", "user_id");
-    endpoint.searchParams.set("limit", "1");
-    const response = await fetch(endpoint.toString(), {
-      headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}` },
-    });
-    if (!response.ok) return { allowed: false, unavailable: true };
-    const rows = await response.json();
-    if (!Array.isArray(rows)) return { allowed: false, unavailable: true };
-    if (rows.some((row) => row?.user_id === userId)) return { allowed: true, unavailable: false };
-  } catch (err) {
-    console.error("Ticket assignee eligibility lookup failed", err?.message || err);
-    return { allowed: false, unavailable: true };
+  if (!userId || !env?.DB) return { allowed: false, unavailable: true };
+  let superAdminLookupUnavailable = false;
+  if (env?.SUPABASE_URL && env?.SUPABASE_SECRET_KEY) {
+    try {
+      const endpoint = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
+      endpoint.searchParams.set("user_id", `eq.${userId}`);
+      endpoint.searchParams.set("active", "eq.true");
+      endpoint.searchParams.set("select", "user_id");
+      endpoint.searchParams.set("limit", "1");
+      const response = await fetch(endpoint.toString(), {
+        headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}` },
+      });
+      if (!response.ok) superAdminLookupUnavailable = true;
+      else {
+        const rows = await response.json();
+        if (!Array.isArray(rows)) superAdminLookupUnavailable = true;
+        else if (rows.some((row) => row?.user_id === userId)) return { allowed: true, unavailable: false };
+      }
+    } catch (err) {
+      superAdminLookupUnavailable = true;
+      console.error("Ticket assignee eligibility lookup failed", err?.message || err);
+    }
+  } else {
+    superAdminLookupUnavailable = true;
   }
   try {
     const row = await env.DB.prepare(
       "SELECT user_id FROM team_members WHERE user_id = ? AND active = 1 AND role = 'support' LIMIT 1"
     ).bind(userId).first();
-    return { allowed: row?.user_id === userId, unavailable: false };
+    if (row?.user_id === userId) return { allowed: true, unavailable: false };
+    return { allowed: false, unavailable: superAdminLookupUnavailable };
   } catch (err) {
     console.error("Ticket assignee team lookup failed", err?.message || err);
     return { allowed: false, unavailable: true };
