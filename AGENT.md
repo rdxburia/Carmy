@@ -212,3 +212,17 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - W6: Duplicate-contact migrations and cache invalidation secret names verified in staging Vault/Worker; values never read.
 - W7: Production backup bookmark and export success recorded, but export size/checksum missing. Production schema/aggregate baseline and 0007 impact counts are recorded. Production Worker version 248 is active, but exact Git commit mapping is not available.
 - Production remains HOLD until all five gates pass. No production data/schema/Worker was changed. See the dated PROGRESS.md entry for detailed evidence and next actions.
+
+
+## 2026-10-19 — Staging QA retry checkpoint
+- Verified staging Auth users for both customer accounts and the admin account; all three emails are confirmed in `vejccahjrlwhaniajgez`.
+- Activated the staging-only QA admin registry entry for the admin user UUID, with `created_by=NULL` because no staging owner actor was available.
+- `SUPABASE_SECRET_KEY` is still absent from `carmy-api-staging`; do not put key material in chat, source, or logs. Continue only after the owner securely sets the key on the staging Worker.
+- Real-JWT E2E and all production rollout gates remain HOLD. Do not modify production or merge PR #161.
+
+
+## 2026-10-19 — Staging secret inventory retry
+- Cloudflare API read-only inventory for Worker `carmy-api-staging` succeeded (HTTP 200). Secret binding names returned: `CACHE_INVALIDATION_SECRET`, `SUPABASE_SECRET_KEY`. Secret values were not requested, returned, logged, or copied.
+- This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
+- Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
+- Production remains HOLD and untouched. PR #161 remains open/unmerged.
