@@ -222,3 +222,10 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 
 ## 2026-10-19 — Stable staging URL verified
 - GitHub Actions smoke run `39185379833` confirms `https://carmy-ticket-staging.pages.dev` now serves the staging login UI and staging `js/config.js` (`application/javascript`), with staging Supabase/Worker URLs and no production Supabase URL. Missing-token and tampered-token calls both return 401, and CORS preflight returns 204 for the staging Pages origin.
+
+
+## 2026-10-19 12:05 IST — Staging ticket isolation and Admin Console fix (IN PROGRESS)
+- **User prompt:** “ok kr na bhai fir fix time waste mat kr” — continue directly with the staging E2E fixes; avoid unnecessary questions or handoff.
+- **Scope:** branch `fix/staging-ticket-isolation-admin-2026-10-19` based on `staging/ticket-e2e-frontend` at `0f12831ac4815a3bae1ea3dab55d58af88e4191d`. Fix shared customer ticket cache/fallback and the hardcoded admin email gate; add regression tests. Staging/frontend code only. Do not deploy, merge, change production resources, or modify authentication infrastructure/secrets.
+- **Initial evidence:** staging D1 read-only inspection confirms Customer A and B ticket IDs have distinct user IDs and no rows were written. Frontend source shows shared `carmy_support_tickets` localStorage cache, cache fallback after API errors, and `!t.user_id` allow-through logic. `adminView()` hardcodes `rnyburia@gmail.com` and redirects other accounts.
+- **Status:** IN PROGRESS. Read `AGENT.md` and `PROGRESS.md` before editing. Next: implement fail-closed per-user cache/ownership checks and server-authorized admin gating; add tests, run available CI, update this entry with evidence and blockers. No deployment/merge without verified gates.
