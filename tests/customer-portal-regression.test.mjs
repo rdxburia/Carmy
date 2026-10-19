@@ -2665,6 +2665,7 @@ test("Support Ticket Workflow: Customer ticket list renders accessible items wit
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
     userSupportTicketsOwnerId='u1';
+    ticketsLoaded=true;
     userSupportTickets = [
       { id: 'TD-TEST-001', subject: 'Transfer assistance', status: 'working', priority: 'high', has_unread: true, created_at: '2026-10-18T10:00:00Z' },
       { id: 'TD-TEST-002', subject: 'Billing inquiry', status: 'need_info', priority: 'normal', has_unread: false, created_at: '2026-10-17T10:00:00Z' }
