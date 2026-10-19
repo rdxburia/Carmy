@@ -687,3 +687,9 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - **Post-check:** all expected tables/indexes present; ledger lists 0001–0008. support_tickets count remains 4; team_members and admin_team_invites are both 0 rows. All post-check queries were read-only (changed_db=false, rows_written=0). No ticket content changed; no seed rows were inserted.
 - **Tests / deploy:** local suite previously passed 136/136 and staging Worker dry-run passed, but this repair does not prove authenticated E2E. Wrangler migration-list confirmation and authenticated staging E2E are still NOT RUN because QA Auth users/real JWT prerequisites remain unresolved. No PR found for feat/support-ticket-backend-v2; no merge or Worker deploy performed. Production remains HOLD.
 - **Correction to prior historical note:** an earlier entry said no D1 writes occurred and the ledger was not modified; that was accurate at that earlier checkpoint, before this explicitly authorized repair. Retain the earlier entry unchanged.
+
+
+## 2026-10-19 — Draft PR opened after staging schema repair
+- Created draft PR #177: https://github.com/rdxburia/Carmy/pull/177, branch feat/support-ticket-backend-v2 -> main, head cc61f549e81cb121bf5acd7b50dd464f9d8cb95e; 27 commits, 11 files reported by GitHub. PR state open, merged=false, draft=true, mergeable=false at creation. No merge/deploy.
+- CI status checked: WS-A idle-session regression run 39206288201 SUCCESS; Policy extraction regression run 39206287945 SUCCESS; Super Admin PR checks run 39206288099 IN PROGRESS; GitHub Pages workflow run 39206288005 IN PROGRESS. CI not fully green yet.
+- Authenticated staging E2E remains NOT RUN because real staging QA Auth users/JWTs cannot be provisioned through the connected Supabase tool surface. This is a hard blocker to safely merging/deploying the Worker, not a reason to claim E2E pass. Production remains HOLD.
