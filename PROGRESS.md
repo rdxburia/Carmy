@@ -561,3 +561,8 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 ## 2026-10-19 — Staging Pages redirect correction and smoke pass
 - Correction to the earlier W4 note: stable Pages reachability and staging config are now verified from GitHub Actions run `39185379833`. The root cause was `_redirects` on `staging/ticket-e2e-frontend` sending all paths to production GitHub Pages. That rule was removed on the staging branch only, then Pages redeployed. Stable `https://carmy-ticket-staging.pages.dev/js/config.js` now returns JavaScript with staging Supabase/Worker URLs and no production Supabase URL.
 - Smoke PASS: stable Pages login UI/config, Worker root, missing token 401, tampered JWT 401, and CORS preflight. Do not use the old immutable deployment URL `https://a0b362e6.carmy-ticket-staging.pages.dev`; use the stable alias.
+
+
+## 2026-10-19 — PR #161 and staging baseline verification
+- PR #161 was re-reviewed via its current diff and metadata: `mergeable=true`, head `cf0f5aa20034dea47e45326a177ae6e5b00cc09d`. Its unique frontend changes are `css/styles.css`, `js/app.js`, and `tests/customer-portal-regression.test.mjs`; staging branch `staging/ticket-e2e-frontend` already contains the ticket workflow UI/tests. PR #161 remains unmerged because the strict production release gates are not all passed.
+- Staging D1 aggregate counts remain `support_tickets=4`, `ticket_events=2`, `ticket_reads=0`, `audit_log=0`; staging Auth count for the three requested QA emails is 0. No synthetic tickets were created. Smoke run `39185379833` passed staging login UI/config, Worker root, missing/tampered JWT rejection, and CORS.
