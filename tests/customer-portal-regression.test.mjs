@@ -1087,8 +1087,9 @@ test("Client Production: help view renders in-app tabs and supports ticket submi
   `);
   await h.eval("document.getElementById('ticketSubmitBtn').click();");
 
-  const tickets = JSON.parse(h.store.get("carmy_support_tickets") || "[]");
-  assert.equal(tickets.length, 1, "Submitted ticket must be saved to localStorage");
+  const tickets = JSON.parse(JSON.stringify(h.eval("userSupportTickets")));
+  assert.equal(tickets.length, 1, "Submitted ticket must remain in the current account memory");
+  assert.equal(h.store.has("carmy_support_tickets"), false, "Ticket data must not be persisted under a shared localStorage key");
   assert.equal(tickets[0].id, "TD-TEST9999", "Ticket ID must match server response");
   assert.equal(tickets[0].subject, "Odometer query");
   assert.equal(tickets[0].email, "driver@example.com");
@@ -2394,12 +2395,12 @@ test("Step 0 Foundation: 28. Garage workspace script syntax is valid and type de
   }, "garage-workspace.js must parse with zero syntax errors");
 });
 
-test("Super Admin Integration: designated account opens the admin console without a navigation item", async (t) => {
+test("Super Admin Integration: QA admin opens the console only when the Worker verifies its role", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'qa-admin@carmy-staging.test' };
     workerGet = async (path) => {
       if (path.startsWith('/api/admin/support-tickets')) {
         return { ok: true, data: [{ id: 'TD-TEST-1', subject: 'Test Ticket', status: 'open' }] };
@@ -2425,6 +2426,7 @@ test("Super Admin Integration: regular users cannot open the admin console", asy
     user = { id: 'regular-user', email: 'user@example.com' };
     toasts = [];
     toast = (msg, type) => { toasts.push({ msg, type }); };
+    workerGet = async () => { const err = new Error('Super Admin access required.'); err.status = 403; err.code = 'FORBIDDEN'; throw err; };
   `);
 
   await h.eval("nav('admin')");
@@ -2440,6 +2442,7 @@ test("Super Admin Integration: localStorage admin view tampering fails closed fo
     localStorage.setItem('carcare_last_view', 'admin');
     loadCars = async () => {};
     loadData = async () => {};
+    workerGet = async () => { const err = new Error('Super Admin access required.'); err.status = 403; err.code = 'FORBIDDEN'; throw err; };
   `);
 
   await h.eval("start({ id: 'attacker-uuid', email: 'attacker@example.com' }, true)");
@@ -2447,7 +2450,7 @@ test("Super Admin Integration: localStorage admin view tampering fails closed fo
   assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false);
 });
 
-test("Super Admin Integration: API authorization stays server-enforced when admin console is opened", async (t) => {
+test("Super Admin Integration: a Worker authorization denial keeps the admin console closed", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
@@ -2465,8 +2468,9 @@ test("Super Admin Integration: API authorization stays server-enforced when admi
   `);
 
   await h.eval("nav('admin')");
-  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), true);
-  assert.ok(h.elements.get("adminContent").innerHTML.includes("API rejected this account (403)"));
+  assert.equal(h.eval("document.getElementById('dashboard').classList.contains('active')"), true);
+  assert.equal(h.eval("document.getElementById('admin').classList.contains('active')"), false);
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), false);
 });
 
 test("Super Admin Workspace: Dedicated shell isolates admin from customer navigation", async (t) => {
@@ -2660,6 +2664,8 @@ test("Support Ticket Workflow: Customer ticket list renders accessible items wit
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
+    ticketsLoaded=true;
     userSupportTickets = [
       { id: 'TD-TEST-001', subject: 'Transfer assistance', status: 'working', priority: 'high', has_unread: true, created_at: '2026-10-18T10:00:00Z' },
       { id: 'TD-TEST-002', subject: 'Billing inquiry', status: 'need_info', priority: 'normal', has_unread: false, created_at: '2026-10-17T10:00:00Z' }
@@ -2700,6 +2706,7 @@ test("Support Ticket Workflow: Customer ticket stepper progression across status
   for (const s of statuses) {
     h.eval(`
       user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
       userSupportTickets = [{ id: 'TD-ST-' + '${s.st}', subject: 'Status test', status: '${s.st}', priority: 'normal', created_at: '2026-10-18T10:00:00Z' }];
       openCustomerTicketDetail('TD-ST-' + '${s.st}');
     `);
@@ -2709,6 +2716,7 @@ test("Support Ticket Workflow: Customer ticket stepper progression across status
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-NEEDINFO',
       subject: 'Missing RC page',
@@ -2737,6 +2745,7 @@ test("Support Ticket Workflow: Customer chat enabled shows reply box; disabled s
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-NO-CHAT',
       subject: 'General feedback',
@@ -2754,6 +2763,7 @@ test("Support Ticket Workflow: Customer chat enabled shows reply box; disabled s
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-CHAT-ACTIVE',
       subject: 'Live support thread',
@@ -2777,6 +2787,7 @@ test("Support Ticket Workflow: Strict XSS protection renders user and admin cont
 
   h.eval(`
     user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTicketsOwnerId='u1';
     userSupportTickets = [{
       id: 'TD-XSS-TEST',
       subject: ${JSON.stringify(xssPayload)},
@@ -2915,3 +2926,56 @@ test("Support Ticket Workflow: Admin detail modal enforces permitted transitions
   assert.equal(h.eval("adminTickets[0].status"), "pending", "Status must not be locally modified on 409 rejection");
 });
 
+
+
+test("Support tickets: old shared localStorage cache is never rendered when the API fails", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    user = { id: 'customer-b', email: 'customer-b@example.test' };
+    localStorage.setItem('carmy_support_tickets', JSON.stringify([{ id: 'TD-CUSTOMER-A', subject: 'Customer A private ticket' }]));
+    workerGet = async () => { throw new Error('staging API unavailable'); };
+  `);
+  await h.eval("loadUserSupportTickets()");
+  assert.equal(h.eval("userSupportTickets.length"), 0, "Failed API must clear ticket rows rather than fall back to shared cache");
+  assert.equal(h.eval("renderTicketPastList()"), "", "Unverified cached tickets must not render");
+});
+
+test("Support tickets: switching from Customer A to B cannot retain or accept A's tickets", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    user = { id: 'customer-a', email: 'customer-a@example.test' };
+    workerGet = async () => ({ ok: true, data: [{ id: 'TD-A', user_id: 'customer-a', subject: 'A private ticket' }] });
+  `);
+  await h.eval("loadUserSupportTickets()");
+  assert.equal(h.eval("userSupportTickets[0].id"), "TD-A");
+  h.eval(`
+    user = { id: 'customer-b', email: 'customer-b@example.test' };
+    workerGet = async () => ({ ok: true, data: [{ id: 'TD-A', user_id: 'customer-a', subject: 'A private ticket' }] });
+  `);
+  await h.eval("loadUserSupportTickets()");
+  assert.equal(h.eval("userSupportTickets.length"), 0, "Explicitly foreign ticket rows must be rejected");
+  assert.equal(h.eval("renderTicketPastList()"), "", "Customer B must not see Customer A's ticket");
+});
+
+test("Support tickets: delayed Customer A response cannot overwrite Customer B's active list", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+  h.eval(`
+    user = { id: 'customer-a', email: 'customer-a@example.test' };
+    workerGet = () => new Promise(resolve => { ticketPendingResolve = resolve; });
+    ticketPendingResolve = null;
+  `);
+  const pendingA = h.eval("loadUserSupportTickets()");
+  h.eval(`
+    user = { id: 'customer-b', email: 'customer-b@example.test' };
+    workerGet = async () => ({ ok: true, data: [{ id: 'TD-B', user_id: 'customer-b', subject: 'B private ticket' }] });
+  `);
+  await h.eval("loadUserSupportTickets()");
+  h.eval("ticketPendingResolve({ ok: true, data: [{ id: 'TD-A', user_id: 'customer-a', subject: 'A private ticket' }] })");
+  await pendingA;
+  assert.deepEqual(JSON.parse(JSON.stringify(h.eval("userSupportTickets.map(t => t.id)"))), ["TD-B"]);
+  assert.ok(h.eval("renderTicketPastList()").includes("TD-B"));
+  assert.ok(!h.eval("renderTicketPastList()").includes("TD-A"));
+});
