@@ -633,3 +633,12 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - **Production HOLD.** Gate 1 failed prerequisites (no QA Auth users, no privileged staging key, no E2E PASS); Gate 2 lacks export size/checksum; Gate 5 exact bundle/commit mapping is unverified.
 - No production migration, production Worker deployment, production Supabase mutation, or production ticket-content read occurred.
 - Next actions are to provision Auth users through supported Supabase Auth Admin, obtain a real privileged key through authenticated Supabase Management API, run staging real-JWT E2E, capture export size/checksum from a supported backup artifact route, and prove the production Worker commit mapping before considering production.
+
+
+## 2026-10-19 — Support ticket backend v2 audit checkpoint
+- User requested backend v2 work on a new branch from current `main`, no merges, no production migration, no frontend edits. Branch `feat/support-ticket-backend-v2` was created from `main` at `3710bc112401a899975c7df5475ee44d4c7937ff`.
+- Remote compare evidence: `27058bf` is not an ancestor of main (diverged; merge base `8f1f9882f27ced22cf9c3e5ed406c9f6c1b022ad`); `341ddf1` is an ancestor of main (compare merge base `341ddf1876ba686a89eb8f12424b459461e0694f`). The stale workflow backend branch was not used.
+- Inspected current main's `worker/src/index.js`, `worker/src/super-admin.js`, `worker/src/ticket-workflow.js`, `tests/ticket-workflow-route.test.mjs`, `tests/super-admin-auth.test.mjs`, and migration `worker/migrations/0007_support_ticket_workflow.sql`.
+- Audit report added at `reports/support-ticket-backend-v2-audit.md`. Current migration 0007 has seven unconditional `ALTER TABLE ... ADD COLUMN` statements, so it is not idempotent as written. The current admin guard checks only active `super_admins`, not a separate `support.manage` role. Roster and view-as-user routes were not found in inspected router.
+- No code implementation, test execution, staging SQL/migration, Worker deployment, or production action was performed. The available connected tools did not provide a repository shell/Node.js runtime or staging migration executor; tests/counts are explicitly NOT RUN, not reported as PASS.
+- No frontend changes, no merges, no production mutations. Production remains HOLD; owner approval is required before any production rollout.
