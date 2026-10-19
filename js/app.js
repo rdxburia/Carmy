@@ -21,6 +21,7 @@ function idleExpired(){return sessionGuard.isExpired()}
 function installIdleFetchGuard(){sessionGuard.installFetchGuard()}
 installIdleFetchGuard();
 let isSuperAdmin=false;
+let superAdminUserId=null;
 let adminCheckPromise=null;
 let adminTickets=[];
 let adminTicketsLoading=false;
@@ -43,11 +44,11 @@ function updateAdminNavVisibility(){
 
 async function checkSuperAdminStatus(force=false){
   if(!user){
-    isSuperAdmin=false;
+    isSuperAdmin=false;superAdminUserId=null;
     updateAdminNavVisibility();
     return false;
   }
-  if(!force&&isSuperAdmin){
+  if(!force&&isSuperAdmin&&String(superAdminUserId||'')===String(user.id)){
     updateAdminNavVisibility();
     return true;
   }
@@ -56,12 +57,12 @@ async function checkSuperAdminStatus(force=false){
     try{
       const res=await workerGet('/api/admin/support-tickets?limit=1');
       if(res&&res.ok&&Array.isArray(res.data)){
-        isSuperAdmin=true;
+        isSuperAdmin=true;superAdminUserId=String(user?.id||'')||null;
       }else{
-        isSuperAdmin=false;
+        isSuperAdmin=false;superAdminUserId=null;
       }
     }catch(err){
-      isSuperAdmin=false;
+      isSuperAdmin=false;superAdminUserId=null;
     }finally{
       updateAdminNavVisibility();
       adminCheckPromise=null;
@@ -76,7 +77,7 @@ function clearUserMemory(){
   insuranceHistory=[];pucHistory=[];renewalHistory=[];saleHistory=[];
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;garageLoadingState='idle';
-  isSuperAdmin=false;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
+  isSuperAdmin=false;superAdminUserId=null;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
   userSupportTickets=[];userSupportTicketsOwnerId=null;ticketsLoaded=false;viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
@@ -843,7 +844,7 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
- const isAdminAuthorized=v==='admin'?await checkSuperAdminStatus(true):isSuperAdmin;
+ const isAdminAuthorized=v==='admin'?await checkSuperAdminStatus(true):(isSuperAdmin&&String(superAdminUserId||'')===String(user?.id||''));
  document.body.classList.toggle('td-admin-mode',Boolean(isAdminAuthorized));
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(v==='admin'&&!isAdminAuthorized){
@@ -3110,6 +3111,7 @@ if(typeof document!=='undefined'&&document.addEventListener){
 async function loadUserSupportTickets(){
   // Never reuse a prior account's list while a request is pending or failing.
   const ownerId=String(user?.id||'');
+  try{localStorage.removeItem('carmy_support_tickets')}catch(_){}
   userSupportTickets=[];
   userSupportTicketsOwnerId=ownerId||null;
   ticketsLoaded=false;
