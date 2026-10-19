@@ -1,0 +1,26 @@
+name: Staging E2E harness validation
+
+on:
+  pull_request:
+    paths:
+      - "tests/staging-ticket-e2e.mjs"
+      - ".github/workflows/staging-e2e-harness.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/staging-ticket-e2e.mjs"
+      - ".github/workflows/staging-e2e-harness.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate staging E2E harness syntax
+        run: node --check tests/staging-ticket-e2e.mjs
