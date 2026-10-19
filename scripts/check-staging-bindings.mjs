@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 const path = "wrangler.staging.toml";
-const config = readFileSync(path, "utf8");
+const config = readFileSync(path, "utf8").split("\n").map((line) => line.replace(/#.*/, "")).join("\n");
 const forbidden = [
   ["production D1", "57c85007-1cf7-470f-bb4d-3b28cbb555b7"],
   ["production rate-limit namespace", "2601008"],
