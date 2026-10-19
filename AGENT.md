@@ -212,3 +212,12 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - W6: Duplicate-contact migrations and cache invalidation secret names verified in staging Vault/Worker; values never read.
 - W7: Production backup bookmark and export success recorded, but export size/checksum missing. Production schema/aggregate baseline and 0007 impact counts are recorded. Production Worker version 248 is active, but exact Git commit mapping is not available.
 - Production remains HOLD until all five gates pass. No production data/schema/Worker was changed. See the dated PROGRESS.md entry for detailed evidence and next actions.
+
+
+## 2026-10-19 — Support ticket backend v2 audit checkpoint
+- User requested backend v2 work on a new branch from current `main`, no merges, no production migration, no frontend edits. Branch `feat/support-ticket-backend-v2` was created from `main` at `3710bc112401a899975c7df5475ee44d4c7937ff`.
+- Remote compare evidence: `27058bf` is not an ancestor of main (diverged; merge base `8f1f9882f27ced22cf9c3e5ed406c9f6c1b022ad`); `341ddf1` is an ancestor of main (compare merge base `341ddf1876ba686a89eb8f12424b459461e0694f`). The stale workflow backend branch was not used.
+- Inspected current main's `worker/src/index.js`, `worker/src/super-admin.js`, `worker/src/ticket-workflow.js`, `tests/ticket-workflow-route.test.mjs`, `tests/super-admin-auth.test.mjs`, and migration `worker/migrations/0007_support_ticket_workflow.sql`.
+- Audit report added at `reports/support-ticket-backend-v2-audit.md`. Current migration 0007 has seven unconditional `ALTER TABLE ... ADD COLUMN` statements, so it is not idempotent as written. The current admin guard checks only active `super_admins`, not a separate `support.manage` role. Roster and view-as-user routes were not found in inspected router.
+- No code implementation, test execution, staging SQL/migration, Worker deployment, or production action was performed. The available connected tools did not provide a repository shell/Node.js runtime or staging migration executor; tests/counts are explicitly NOT RUN, not reported as PASS.
+- No frontend changes, no merges, no production mutations. Production remains HOLD; owner approval is required before any production rollout.
