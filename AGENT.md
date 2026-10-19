@@ -209,3 +209,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Staging Pages smoke failure fixed
 - GitHub Actions found that `https://carmy-ticket-staging.pages.dev/js/config.js` was being redirected to production GitHub Pages by the staging branch `_redirects` rule. Removed that rule only on `staging/ticket-e2e-frontend`; staging Pages deployment `e7d4689f-af88-4937-850a-a8fc9489304b` is now active for commit `acc363475dab2113a3f251d1407532d9000bd882`. Production GitHub Pages and main `_redirects` were untouched.
 - Re-running the staging smoke suite against the stable staging URL to verify it now serves the staging Supabase config rather than the production config. Previous Worker root, no-token 401, tampered-token 401, and CORS checks passed; the config check exposed and drove this fix.
+
+
+## 2026-10-19 — Staging URL smoke PASS
+- After removing the production redirect from the staging Pages branch, GitHub Actions run `39185379833` passed all five live smoke checks: stable Pages login UI, staging-only `js/config.js`, Worker root, missing bearer token 401, tampered JWT 401, and CORS preflight (the report has five named checks; the auth/CORS checks are individually PASS).
+- Live stable URL `https://carmy-ticket-staging.pages.dev/js/config.js` now returns `application/javascript`, contains the staging Supabase URL and staging Worker URL, and does not contain the production Supabase URL. The old immutable deployment URL `https://a0b362e6.carmy-ticket-staging.pages.dev` still serves the earlier redirected build; do not use it. Use only the stable Pages alias.
