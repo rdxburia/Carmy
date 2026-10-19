@@ -25,6 +25,7 @@ await check("staging Pages login UI and staging-only config are served", async (
       hasProductionSupabase: body.includes("https://hlrmuvzmaegnbgzvvfsn.supabase.co"),
     });
   }
+  console.log("Pages config candidate checks:", JSON.stringify(configs));
   const good = configs.find((item) => item.status === 200 && item.hasAppConfig && item.hasStagingSupabase && item.hasStagingWorker && !item.hasProductionSupabase);
   if (!good) throw new Error("no tested Pages URL serves the staging config: " + JSON.stringify(configs));
 });
