@@ -2915,3 +2915,153 @@ test("Support Ticket Workflow: Admin detail modal enforces permitted transitions
   assert.equal(h.eval("adminTickets[0].status"), "pending", "Status must not be locally modified on 409 rejection");
 });
 
+test("Support Ticket Workflow: View-as-user requires min 10 char reason, renders read-only panel with no edit controls, and uses textContent", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTickets = [{
+      id: 'TD-VAU-1',
+      email: 'customer@test.com',
+      subject: '<script>alert("xss")</script>Public Subject',
+      status: 'working',
+      priority: 'high',
+      created_at: new Date().toISOString()
+    }];
+    workerPost = async (path, body) => {
+      if (path.includes('/view-as-user')) {
+        return {
+          ok: true,
+          data: {
+            id: 'TD-VAU-1',
+            subject: '<script>alert("xss")</script>Public Subject',
+            status: 'working',
+            priority: 'high',
+            created_at: '2026-10-19T08:00:00.000Z',
+            events: [
+              { actor_type: 'user', message: '<img src=x onerror=alert(1)>User inquiry text', created_at: '2026-10-19T08:05:00.000Z' },
+              { actor_type: 'admin', message: 'Specialist response', created_at: '2026-10-19T08:10:00.000Z' }
+            ]
+          }
+        };
+      }
+      return { ok: false };
+    };
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-VAU-1');");
+
+  // 1. Minimum 10 characters validation
+  h.eval("window.prompt = () => 'short';");
+  await h.eval("openAdminTicketViewAsUser('TD-VAU-1');");
+  assert.equal(h.eval("Boolean(document.getElementById('vauSubject')?.textContent)"), false, "Modal must not open on short reason (< 10 chars)");
+
+  // 2. Successful audited view
+  h.eval("window.prompt = () => 'Security audit for user inquiry verification';");
+  await h.eval("openAdminTicketViewAsUser('TD-VAU-1');");
+
+  const vauModal = h.elements.get('adminTicketViewAsUserModal');
+  assert.ok(vauModal, "Read-only view as user modal must be rendered in DOM");
+
+  const textContent = vauModal.innerHTML;
+  assert.ok(textContent.includes("READ-ONLY AUDITED VIEW"), "Must display read-only badge");
+  assert.ok(!textContent.includes("<input"), "Must have no input elements (read-only)");
+  assert.ok(!textContent.includes("<textarea"), "Must have no textarea elements (read-only)");
+
+  // Strict textContent check (no raw HTML script tags executed)
+  assert.equal(h.eval("document.getElementById('vauSubject').textContent"), '<script>alert("xss")</script>Public Subject');
+  assert.equal(h.eval("document.getElementById('vauReason').textContent"), 'Security audit for user inquiry verification');
+
+  h.eval("closeAdminTicketViewAsUserModal();");
+  assert.equal(h.eval("document.getElementById('adminTicketViewAsUserModal')"), null, "Modal must close on close call");
+});
+
+test("Support Ticket Workflow: View-as-user marks BLOCKED and disables button when backend route returns 404", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTickets = [{
+      id: 'TD-VAU-404',
+      email: 'customer@test.com',
+      subject: 'Missing endpoint test',
+      status: 'pending',
+      priority: 'normal',
+      created_at: new Date().toISOString()
+    }];
+    workerPost = async (path, body) => {
+      const err = new Error('Route not found.');
+      err.status = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    };
+    window.prompt = () => 'Authorized audit inspection for ticket';
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-VAU-404');");
+
+  const btnDisabledBefore = h.eval("document.getElementById('btnAdminViewAsUser').disabled");
+  assert.equal(btnDisabledBefore, false, "Button must be enabled initially");
+
+  await h.eval("openAdminTicketViewAsUser('TD-VAU-404');");
+
+  assert.equal(h.eval("adminViewAsUserBlocked"), true, "adminViewAsUserBlocked flag must be true");
+  assert.equal(h.eval("document.getElementById('btnAdminViewAsUser').disabled"), true, "Button must be disabled when route is missing");
+  assert.equal(h.eval("document.getElementById('btnAdminViewAsUser').textContent"), "Not available yet", "Button text must become 'Not available yet'");
+});
+
+test("Support Ticket Workflow: Unified Enable Chat action includes optional message and 48-hour countdown", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    adminTickets = [{
+      id: 'TD-CHAT-1',
+      email: 'customer@test.com',
+      subject: 'Chat test',
+      status: 'working',
+      priority: 'normal',
+      chat_enabled: 0,
+      chat_enabled_until: null,
+      created_at: new Date().toISOString()
+    }];
+    workerGet = async (path) => {
+      return { ok: true, data: adminTickets };
+    };
+    workerPatch = async (path, body) => {
+      globalThis.__lastPatch = body;
+      adminTickets[0].chat_enabled = 1;
+      adminTickets[0].chat_enabled_until = Math.floor(Date.now() / 1000) + 48 * 3600;
+      return { ok: true, data: adminTickets[0] };
+    };
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-CHAT-1');");
+
+  const modalHtml = h.elements.get('adminTicketDetailModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("Enable Chat (48h Window)"), "Must display Enable Chat (48h Window) action");
+  assert.ok(modalHtml.includes("adminEnableChatMsg"), "Must provide optional initial message field");
+
+  h.eval(`
+    document.getElementById('adminEnableChatMsg').value = 'Please provide odometer photo.';
+  `);
+  await h.eval("handleAdminEnableChatWithMsg('TD-CHAT-1');");
+
+  const lastPatch = h.eval("globalThis.__lastPatch");
+  assert.equal(lastPatch.chat_enabled, true, "Must patch chat_enabled: true");
+  assert.equal(lastPatch.message, 'Please provide odometer photo.', "Must include optional message");
+
+  // Re-open details with active chat
+  await h.eval("openAdminTicketDetails('TD-CHAT-1');");
+  const updatedHtml = h.elements.get('adminTicketDetailModal')?.innerHTML || '';
+  assert.ok(updatedHtml.includes("Chat Active:"), "Must display active countdown");
+  assert.ok(updatedHtml.includes("Disable Chat"), "Must display Disable Chat button when active");
+});
+
+

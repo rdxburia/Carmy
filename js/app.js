@@ -4758,6 +4758,54 @@ async function openAdminTicketDetails(ticketId){
     }
   }
 
+  if(!adminRosterData&&!adminRosterBlocked&&typeof workerGet==='function'){
+    loadAdminSupportRoster().then(()=>{
+      const sel=$('adminTicketAssigneeSelect');
+      if(sel&&Array.isArray(adminRosterData)&&adminRosterData.length>0){
+        const curVal=sel.value;
+        const isMeSel=ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email;
+        let opts='<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
+          '<option value="'+esc(user?.id||'me')+'" '+(isMeSel?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>';
+        adminRosterData.forEach(m=>{
+          if(m.id===user?.id||m.email===user?.email)return;
+          const isSel=ticket.assignee_id===m.id||ticket.assignee_id===m.email;
+          const label=(m.name?esc(m.name)+' ('+esc(m.email)+')':esc(m.email))+(m.role?' ['+esc(m.role)+']':'');
+          opts+='<option value="'+esc(m.id)+'" '+(isSel?'selected':'')+'>'+label+'</option>';
+        });
+        sel.innerHTML=opts;
+        if(curVal)sel.value=curVal;
+      }
+    });
+  }
+
+  let rosterOptions='';
+  if(Array.isArray(adminRosterData)&&adminRosterData.length>0){
+    rosterOptions=adminRosterData.map(m=>{
+      if(m.id===user?.id||m.email===user?.email)return '';
+      const isSel=ticket.assignee_id===m.id||ticket.assignee_id===m.email;
+      const label=(m.name?esc(m.name)+' ('+esc(m.email)+')':esc(m.email))+(m.role?' ['+esc(m.role)+']':'');
+      return '<option value="'+esc(m.id)+'" '+(isSel?'selected':'')+'>'+label+'</option>';
+    }).join('');
+  }
+
+  let chatBoxHtml='';
+  if(chatActive){
+    chatBoxHtml='<div class="ticket-chat-toggle-box" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
+      '<div>'+
+        '<div style="font-weight:700;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:6px">● Chat Active with Customer</div>'+
+        countdownText+
+      '</div>'+
+      '<button type="button" class="ghost" style="color:#dc2626;padding:4px 10px;font-size:12px" onclick="handleAdminChatToggle(\''+tid+'\',false)">Disable Chat</button>'+
+    '</div>';
+  }else{
+    chatBoxHtml='<div class="ticket-chat-toggle-box">'+
+      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#0f172a">💬 Customer Chat Window (48h Window)</div>'+
+      '<p class="muted" style="margin:0 0 8px 0;font-size:12px">Enabling chat opens a 48-hour direct reply window in the customer\'s Help tab.</p>'+
+      '<textarea id="adminEnableChatMsg" rows="2" placeholder="Optional initial message to customer (e.g. Please reply with your odometer photo)..." style="width:100%;font-size:12.5px;border-radius:6px;border:1px solid #cbd5e1;padding:6px;box-sizing:border-box;margin-bottom:8px"></textarea>'+
+      '<button type="button" class="primary" id="btnAdminEnableChat" style="padding:6px 14px;font-size:12.5px" onclick="handleAdminEnableChatWithMsg(\''+tid+'\')">Enable Chat (48h Window)</button>'+
+    '</div>';
+  }
+
   modal.innerHTML='<div class="admin-modal-box" style="max-width:760px">'+
     '<div class="admin-modal-head">'+
       '<div>'+
@@ -4799,6 +4847,8 @@ async function openAdminTicketDetails(ticketId){
           '<select id="adminTicketAssigneeSelect" style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
             '<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
             '<option value="'+esc(user?.id||'me')+'" '+(ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>'+
+            rosterOptions+
+            (adminRosterBlocked?'<option disabled>(Team roster unavailable - BLOCKED: GET /api/admin/team missing)</option>':'')+
           '</select>'+
           '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')">Save</button>'+
         '</div>'+
@@ -4816,13 +4866,7 @@ async function openAdminTicketDetails(ticketId){
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="ticket-chat-toggle-box">'+
-      '<div style="display:flex;align-items:center;gap:8px">'+
-        '<input type="checkbox" id="adminTicketChatToggle" '+(chatActive?'checked':'')+' onchange="handleAdminChatToggle(\''+tid+'\',this.checked)">'+
-        '<label for="adminTicketChatToggle" style="font-weight:600;font-size:13px;cursor:pointer">Enable Customer Chat Window (48-hour window)</label>'+
-      '</div>'+
-      countdownText+
-    '</div>'+
+    chatBoxHtml+
     '<div style="margin:8px 0;display:flex;align-items:center;gap:8px">'+
       '<input type="checkbox" id="adminTicketShowNameToggle" '+(showNameActive?'checked':'')+' onchange="handleAdminShowNameToggle(\''+tid+'\',this.checked)">'+
       '<label for="adminTicketShowNameToggle" style="font-size:12.5px;cursor:pointer">Show my specialist name to customer</label>'+
@@ -4850,7 +4894,7 @@ async function openAdminTicketDetails(ticketId){
       '</div>'+
     '</div>'+
     '<div class="ticket-action-bar">'+
-      '<button type="button" class="ghost" style="color:#b45309" onclick="promptViewAsUser(\''+esc(ticket.user_id||'')+'\')">👁️ View As User (Audit Logged)</button>'+
+      '<button type="button" class="ghost" id="btnAdminViewAsUser" style="color:'+(adminViewAsUserBlocked?'#94a3b8':'#b45309')+'" '+(adminViewAsUserBlocked?'disabled title="Backend endpoint not available"':'')+' onclick="openAdminTicketViewAsUser(\''+tid+'\')">'+(adminViewAsUserBlocked?'Not available yet':'👁️ View As User (Audit Logged)')+'</button>'+
       '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
     '</div>'+
   '</div>';
@@ -5044,13 +5088,197 @@ async function handleAdminSendReply(ticketId){
   }
 }
 
-function promptViewAsUser(userId){
-  const reason=prompt('Enter authorized audit reason for read-only user session view:');
-  if(!reason||!reason.trim()){
-    toast('Audit reason required to view as user.','error');
+let adminRosterData=null;
+let adminRosterLoading=false;
+let adminRosterBlocked=false;
+
+async function loadAdminSupportRoster(){
+  if(adminRosterData||adminRosterLoading)return adminRosterData;
+  adminRosterLoading=true;
+  try{
+    if(typeof workerGet==='function'){
+      const res=await workerGet('/api/admin/team');
+      if(res&&res.ok&&Array.isArray(res.data)){
+        adminRosterData=res.data;
+        adminRosterBlocked=false;
+        return adminRosterData;
+      }
+    }
+    adminRosterBlocked=true;
+  }catch(err){
+    console.warn('Failed to load team roster from server (GET /api/admin/team):',err);
+    adminRosterBlocked=true;
+  }finally{
+    adminRosterLoading=false;
+  }
+  return null;
+}
+
+async function handleAdminEnableChatWithMsg(ticketId){
+  const msgInput=$('adminEnableChatMsg');
+  const btn=$('btnAdminEnableChat');
+  const optionalMsg=msgInput?.value?.trim()||'';
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Enabling Chat...';
+  }
+  try{
+    const payload={chat_enabled:true};
+    if(optionalMsg){
+      payload.message=optionalMsg;
+      payload.internal=false;
+    }
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),payload);
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to enable chat.');
+    toast('Chat enabled for customer (48h direct reply window opened).','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to enable chat:',err);
+    toast(err?.message||'Failed to enable chat.','error');
+  }finally{
+    if(btn&&document.body.contains(btn)){
+      btn.disabled=false;
+      btn.textContent='Enable Chat (48h Window)';
+    }
+  }
+}
+
+let adminViewAsUserBlocked=false;
+
+async function openAdminTicketViewAsUser(ticketId){
+  const btn=$('btnAdminViewAsUser');
+  if(adminViewAsUserBlocked){
+    if(btn){
+      btn.disabled=true;
+      btn.textContent='Not available yet';
+    }
+    toast('BLOCKED: View-as-user route (POST /api/admin/tickets/:id/view-as-user) is missing on the server.','error');
     return;
   }
-  toast('Audit record logged for user inspection: '+reason.trim(),'ok');
+  const reason=window.prompt('Enter authorized audit reason for read-only user session view (minimum 10 characters):');
+  if(reason===null)return;
+  const trimmedReason=String(reason||'').trim();
+  if(!trimmedReason||trimmedReason.length<10){
+    toast('Audit reason is required (minimum 10 characters).','error');
+    return;
+  }
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Authenticating Audit...';
+  }
+  try{
+    if(typeof workerPost!=='function'){
+      throw new Error('Worker communication gateway unavailable.');
+    }
+    const res=await workerPost('/api/admin/tickets/'+encodeURIComponent(ticketId)+'/view-as-user',{
+      reason:trimmedReason
+    });
+    if(!res?.ok||!res?.data){
+      throw new Error(res?.error?.message||'Server rejected view-as-user request.');
+    }
+    renderAdminTicketViewAsUserPanel(res.data,trimmedReason);
+  }catch(err){
+    console.warn('View-as-user failed or route missing:',err);
+    if(err?.status===404||err?.code==='NOT_FOUND'||String(err?.message||'').includes('404')||String(err?.message||'').includes('Route not found')||String(err?.message||'').includes('not found')){
+      adminViewAsUserBlocked=true;
+      if(btn){
+        btn.disabled=true;
+        btn.textContent='Not available yet';
+      }
+      toast('BLOCKED: View-as-user route (POST /api/admin/tickets/:id/view-as-user) is missing on the server. Button disabled.','error');
+    }else{
+      if(btn){
+        btn.disabled=false;
+        btn.textContent='👁️ View As User (Audit Logged)';
+      }
+      toast(err?.message||'Failed to authenticate view-as-user.','error');
+    }
+  }
+}
+
+function renderAdminTicketViewAsUserPanel(data,reason){
+  let old=$('adminTicketViewAsUserModal');
+  if(old)old.remove();
+  const modal=document.createElement('div');
+  modal.id='adminTicketViewAsUserModal';
+  modal.className='ticket-view-as-user-modal';
+  modal.innerHTML='<div class="ticket-view-as-user-box">'+
+    '<div class="ticket-view-as-user-header">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span class="ticket-readonly-badge">READ-ONLY AUDITED VIEW</span>'+
+        '<code id="vauTicketId" style="font-size:14px;font-weight:700;color:#2563eb"></code>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeAdminTicketViewAsUserModal()" style="font-size:18px;line-height:1;padding:4px 8px">✕</button>'+
+    '</div>'+
+    '<div class="ticket-view-as-user-banner">'+
+      '<small class="muted" style="display:block;font-size:11px;text-transform:uppercase">Audit Authorization Reason</small>'+
+      '<div id="vauReason" style="font-weight:600;font-size:13px;color:#0f172a"></div>'+
+    '</div>'+
+    '<div class="ticket-view-as-user-meta">'+
+      '<div><span class="muted">Subject</span><div id="vauSubject" style="font-weight:600"></div></div>'+
+      '<div><span class="muted">Status</span><div id="vauStatus" style="font-weight:600"></div></div>'+
+      '<div><span class="muted">Priority</span><div id="vauPriority" style="font-weight:600"></div></div>'+
+      '<div><span class="muted">Created</span><div id="vauCreated" style="font-weight:600"></div></div>'+
+    '</div>'+
+    '<div class="muted" style="font-size:11px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Customer Public Thread (Read-Only)</div>'+
+    '<div class="ticket-view-as-user-thread" id="vauThread"></div>'+
+    '<div style="margin-top:14px;text-align:right">'+
+      '<button type="button" class="primary" onclick="closeAdminTicketViewAsUserModal()">Done</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(modal);
+
+  $('vauTicketId').textContent=data?.id||'—';
+  $('vauReason').textContent=reason||'Audited inspection';
+  $('vauSubject').textContent=data?.subject||'—';
+  $('vauStatus').textContent=data?.status||'—';
+  $('vauPriority').textContent=data?.priority||'—';
+  $('vauCreated').textContent=data?.created_at?formatTimestamp(data.created_at):'—';
+
+  const threadEl=$('vauThread');
+  if(threadEl){
+    const events=Array.isArray(data?.events)?data.events:[];
+    if(!events.length&&data?.message){
+      events.push({actor_type:'user',message:data.message,created_at:data.created_at});
+    }
+    if(!events.length){
+      const empty=document.createElement('div');
+      empty.className='muted';
+      empty.textContent='No public messages found in this ticket.';
+      threadEl.appendChild(empty);
+    }else{
+      events.forEach(e=>{
+        const bubble=document.createElement('div');
+        bubble.className='ticket-message-bubble '+(e.actor_type==='user'?'ticket-message-user':'ticket-message-admin');
+        const hdr=document.createElement('div');
+        hdr.className='ticket-message-header';
+        const snd=document.createElement('span');
+        snd.className='ticket-message-sender';
+        snd.textContent=e.actor_type==='user'?'Customer':'Support Specialist';
+        const tm=document.createElement('span');
+        tm.className='ticket-message-time';
+        tm.textContent=formatTimestamp(e.created_at);
+        hdr.appendChild(snd);
+        hdr.appendChild(tm);
+        const txt=document.createElement('div');
+        txt.className='ticket-message-text';
+        txt.textContent=e.message||'';
+        bubble.appendChild(hdr);
+        bubble.appendChild(txt);
+        threadEl.appendChild(bubble);
+      });
+    }
+  }
+}
+
+function closeAdminTicketViewAsUserModal(){
+  const m=$('adminTicketViewAsUserModal');
+  if(m)m.remove();
+}
+
+function promptViewAsUser(ticketId){
+  return openAdminTicketViewAsUser(ticketId);
 }
 
 function openAdminUserDetails(userId){
@@ -5371,6 +5599,10 @@ window.handleAdminPriorityChange=handleAdminPriorityChange;
 window.handleAdminChatToggle=handleAdminChatToggle;
 window.handleAdminShowNameToggle=handleAdminShowNameToggle;
 window.handleAdminSendReply=handleAdminSendReply;
+window.handleAdminEnableChatWithMsg=handleAdminEnableChatWithMsg;
+window.openAdminTicketViewAsUser=openAdminTicketViewAsUser;
+window.closeAdminTicketViewAsUserModal=closeAdminTicketViewAsUserModal;
+window.loadAdminSupportRoster=loadAdminSupportRoster;
 window.isTicketSlaBreached=isTicketSlaBreached;
 window.renderSlaBadge=renderSlaBadge;
 window.normalizeTicketStatus=normalizeTicketStatus;
