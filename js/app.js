@@ -29,6 +29,39 @@ let adminStatusFilter='all';
 let adminSearchQuery='';
 let currentAdminRole=null;
 let currentAdminProfile=null;
+let adminOverviewData=null;
+let adminOverviewLoading=false;
+let adminOverviewError=null;
+let adminUsersList=null;
+let adminUsersLoading=false;
+let adminUsersError=null;
+let adminUsersSearch='';
+let adminUsersRoleFilter='all';
+let adminUsersPlanFilter='all';
+let adminUsersStatusFilter='all';
+let adminTokensList=null;
+let adminTokensLoading=false;
+let adminTokensError=null;
+let adminRevealedToken=null;
+let adminPlansList=null;
+let adminPlansLoading=false;
+let adminPlansError=null;
+let adminCouponsList=null;
+let adminCouponsLoading=false;
+let adminCouponsError=null;
+let adminUpgradesList=null;
+let adminUpgradesLoading=false;
+let adminUpgradesError=null;
+let adminUpgradesFilter='all';
+let adminTeamList=null;
+let adminTeamLoading=false;
+let adminTeamError=null;
+let adminAuditList=null;
+let adminAuditLoading=false;
+let adminAuditError=null;
+let adminAuditActorFilter='all';
+let adminAuditActionFilter='all';
+let adminContentTab='about';
 
 function updateAdminNavVisibility(){
   const desktopBtn=document.getElementById('adminNavBtn');
@@ -79,6 +112,14 @@ function clearUserMemory(){
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;garageLoadingState='idle';
   isSuperAdmin=false;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
+  adminOverviewData=null;adminOverviewLoading=false;adminOverviewError=null;
+  adminUsersList=null;adminUsersLoading=false;adminUsersError=null;adminUsersSearch='';
+  adminTokensList=null;adminTokensLoading=false;adminTokensError=null;adminRevealedToken=null;
+  adminPlansList=null;adminPlansLoading=false;adminPlansError=null;
+  adminCouponsList=null;adminCouponsLoading=false;adminCouponsError=null;
+  adminUpgradesList=null;adminUpgradesLoading=false;adminUpgradesError=null;
+  adminTeamList=null;adminTeamLoading=false;adminTeamError=null;
+  adminAuditList=null;adminAuditLoading=false;adminAuditError=null;
   userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
@@ -284,6 +325,38 @@ async function workerPost(path,payload){
 }
 async function workerDelete(path){
   return workerRequest(path,{method:'DELETE'});
+}
+async function workerPatch(path,payload){
+  return workerRequest(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+}
+async function workerDownloadCsv(path,filename){
+  let token=await getAccessToken();
+  const res=await fetch(WORKER_API+path,{
+    method:'GET',
+    headers:{
+      Authorization:'Bearer '+token,
+      Accept:'text/csv, application/json'
+    }
+  });
+  if(!res.ok){
+    let errText='Export failed ('+res.status+').';
+    try{
+      const b=await res.clone().json();
+      if(b?.error?.message)errText=b.error.message;
+    }catch(_){}
+    throw new Error(errText);
+  }
+  const blob=await res.blob();
+  if(typeof window!=='undefined'&&window.URL&&window.URL.createObjectURL){
+    const url=window.URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  }
 }
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});window.db=db;return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>Torq Desk</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
@@ -3670,16 +3743,8 @@ window.logout=logout;
 /* ===== Super Admin Console Implementation ===== */
 
 let currentAdminScreen = 'home';
-let adminUsersSearch = '';
-let adminUsersRoleFilter = 'all';
-let adminUsersPlanFilter = 'all';
-let adminUsersStatusFilter = 'all';
 let adminTicketsLastStatus = null;
 let adminTicketsLastCode = null;
-let adminContentTab = 'about';
-let adminAuditActionFilter = 'all';
-let adminUpgradeFilter = 'all';
-let adminRevealedToken = null;
 
 function formatAdminDate(ts){
   if(!ts)return '—';
@@ -3895,11 +3960,253 @@ function renderAdminListHtml(){
   '<div class="ticket-mobile-card-list">'+mobileCards+'</div>';
 }
 
-/* Individual Screen Renderers */
+/* Individual Screen Renderers & Loaders */
+
+function renderAdminBlockedCard(routePath,method='GET',detail=''){
+  return '<div class="admin-blocked-card">'+
+    '<div style="display:flex;align-items:center;gap:8px">'+
+      '<span class="admin-badge" style="background:#dc2626;color:#ffffff;font-weight:700">BLOCKED</span>'+
+      '<code>'+esc(method)+' '+esc(routePath)+'</code>'+
+    '</div>'+
+    '<div style="font-size:12.5px;color:#7f1d1d;margin-top:6px">'+
+      esc(detail||('Backend route '+routePath+' returned 404 / is missing.'))+
+    '</div>'+
+  '</div>';
+}
+
+function renderAdminPhaseCard(phaseTitle,routePath,method,description){
+  return '<div class="admin-phase-card">'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+      '<span class="admin-badge" style="background:#ede9fe;color:#5b21b6;font-weight:700">'+esc(phaseTitle)+'</span>'+
+      '<code>'+esc(method)+' '+esc(routePath)+'</code>'+
+    '</div>'+
+    '<h3 style="margin:6px 0 8px;color:#1e1b4b">'+esc(phaseTitle)+'</h3>'+
+    '<p class="muted" style="margin:0 0 12px;font-size:13px;line-height:1.6">'+esc(description)+'</p>'+
+    '<div style="display:flex;gap:8px;align-items:center">'+
+      '<span class="admin-badge" style="background:#f1f5f9;color:#475569">Route Pending Backend Deployment</span>'+
+    '</div>'+
+  '</div>';
+}
+
+async function loadAdminOverview(force=false){
+  if(adminOverviewLoading)return;
+  if(!force&&adminOverviewData)return;
+  adminOverviewLoading=true;
+  adminOverviewError=null;
+  try{
+    const res=await workerGet('/api/admin/overview');
+    if(res&&res.ok)adminOverviewData=res.data||res;
+    else if(res&&!res.error)adminOverviewData=res.data||res;
+    else throw new Error(res?.error?.message||'Failed to load platform overview.');
+  }catch(err){
+    adminOverviewError=err;
+  }finally{
+    adminOverviewLoading=false;
+    if(currentAdminScreen==='home')renderAdminViewContent();
+  }
+}
+
+async function loadAdminUsers(force=false){
+  if(adminUsersLoading)return;
+  if(!force&&adminUsersList)return;
+  adminUsersLoading=true;
+  adminUsersError=null;
+  try{
+    const res=await workerGet('/api/admin/users');
+    if(res&&res.ok&&Array.isArray(res.data))adminUsersList=res.data;
+    else if(res&&Array.isArray(res.data))adminUsersList=res.data;
+    else if(Array.isArray(res))adminUsersList=res;
+    else throw new Error(res?.error?.message||'Failed to load user directory.');
+  }catch(err){
+    adminUsersError=err;
+  }finally{
+    adminUsersLoading=false;
+    if(currentAdminScreen==='users')renderAdminViewContent();
+  }
+}
+
+async function loadAdminTokens(force=false){
+  if(adminTokensLoading)return;
+  if(!force&&adminTokensList)return;
+  adminTokensLoading=true;
+  adminTokensError=null;
+  try{
+    const res=await workerGet('/api/admin/tokens');
+    if(res&&res.ok&&Array.isArray(res.data))adminTokensList=res.data;
+    else if(res&&Array.isArray(res.data))adminTokensList=res.data;
+    else if(Array.isArray(res))adminTokensList=res;
+    else throw new Error(res?.error?.message||'Failed to load tokens.');
+  }catch(err){
+    adminTokensError=err;
+  }finally{
+    adminTokensLoading=false;
+    if(currentAdminScreen==='tokens')renderAdminViewContent();
+  }
+}
+
+async function loadAdminPlans(force=false){
+  if(adminPlansLoading)return;
+  if(!force&&adminPlansList)return;
+  adminPlansLoading=true;
+  adminPlansError=null;
+  try{
+    const res=await workerGet('/api/admin/plans');
+    if(res&&res.ok&&Array.isArray(res.data))adminPlansList=res.data;
+    else if(res&&Array.isArray(res.data))adminPlansList=res.data;
+    else if(Array.isArray(res))adminPlansList=res;
+    else throw new Error(res?.error?.message||'Failed to load plans.');
+  }catch(err){
+    adminPlansError=err;
+  }finally{
+    adminPlansLoading=false;
+    if(currentAdminScreen==='plans')renderAdminViewContent();
+  }
+}
+
+async function loadAdminCoupons(force=false){
+  if(adminCouponsLoading)return;
+  if(!force&&adminCouponsList)return;
+  adminCouponsLoading=true;
+  adminCouponsError=null;
+  try{
+    const res=await workerGet('/api/admin/coupons');
+    if(res&&res.ok&&Array.isArray(res.data))adminCouponsList=res.data;
+    else if(res&&Array.isArray(res.data))adminCouponsList=res.data;
+    else if(Array.isArray(res))adminCouponsList=res;
+    else throw new Error(res?.error?.message||'Failed to load coupons.');
+  }catch(err){
+    adminCouponsError=err;
+  }finally{
+    adminCouponsLoading=false;
+    if(currentAdminScreen==='plans')renderAdminViewContent();
+  }
+}
+
+async function loadAdminUpgrades(force=false){
+  if(adminUpgradesLoading)return;
+  if(!force&&adminUpgradesList)return;
+  adminUpgradesLoading=true;
+  adminUpgradesError=null;
+  try{
+    const res=await workerGet('/api/admin/upgrade-requests');
+    if(res&&res.ok&&Array.isArray(res.data))adminUpgradesList=res.data;
+    else if(res&&Array.isArray(res.data))adminUpgradesList=res.data;
+    else if(Array.isArray(res))adminUpgradesList=res;
+    else throw new Error(res?.error?.message||'Failed to load upgrade queue.');
+  }catch(err){
+    adminUpgradesError=err;
+  }finally{
+    adminUpgradesLoading=false;
+    if(currentAdminScreen==='upgrades')renderAdminViewContent();
+  }
+}
+
+async function loadAdminTeam(force=false){
+  if(adminTeamLoading)return;
+  if(!force&&adminTeamList)return;
+  adminTeamLoading=true;
+  adminTeamError=null;
+  try{
+    const res=await workerGet('/api/admin/team/members');
+    if(res&&res.ok&&Array.isArray(res.data))adminTeamList=res.data;
+    else if(res&&Array.isArray(res.data))adminTeamList=res.data;
+    else if(Array.isArray(res))adminTeamList=res;
+    else throw new Error(res?.error?.message||'Failed to load team roster.');
+  }catch(err){
+    adminTeamError=err;
+  }finally{
+    adminTeamLoading=false;
+    if(currentAdminScreen==='team')renderAdminViewContent();
+  }
+}
+
+async function loadAdminAudit(force=false){
+  if(adminAuditLoading)return;
+  if(!force&&adminAuditList)return;
+  adminAuditLoading=true;
+  adminAuditError=null;
+  try{
+    const res=await workerGet('/api/admin/audit');
+    if(res&&res.ok&&Array.isArray(res.data))adminAuditList=res.data;
+    else if(res&&Array.isArray(res.data))adminAuditList=res.data;
+    else if(Array.isArray(res))adminAuditList=res;
+    else throw new Error(res?.error?.message||'Failed to load audit trail.');
+  }catch(err){
+    adminAuditError=err;
+  }finally{
+    adminAuditLoading=false;
+    if(currentAdminScreen==='audit')renderAdminViewContent();
+  }
+}
 
 function renderScreenHome(){
   const totalTickets=adminTickets.length;
   const openTickets=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
+
+  let bodyContent='';
+  if(adminOverviewLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading platform overview from <code>GET /api/admin/overview</code>...</div>';
+  }else if(adminOverviewError){
+    bodyContent=renderAdminBlockedCard('/api/admin/overview','GET',adminOverviewError?.message||'Overview service unavailable.');
+  }else if(adminOverviewData){
+    const d=adminOverviewData;
+    const totalUsers=d.total_users??0;
+    const activePaid=d.active_paid??0;
+    const openTix=d.open_tickets??openTickets;
+    const rev=d.seven_day_revenue??'₹0.00';
+    const garageCount=d.garage_count??0;
+    const activity=Array.isArray(d.recent_activity)?d.recent_activity:[];
+
+    bodyContent='<div class="admin-kpi-grid">'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Total Users</span>'+
+        '<span class="kpi-val">'+esc(totalUsers)+'</span>'+
+        '<span class="kpi-sub">Verified customer accounts</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Active Paid Subscribers</span>'+
+        '<span class="kpi-val" style="color:#16a34a">'+esc(activePaid)+'</span>'+
+        '<span class="kpi-sub">Plus &amp; Ultra subscriptions</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Open Tickets</span>'+
+        '<span class="kpi-val" style="color:'+(openTix>0?'#2563eb':'#0f172a')+'">'+esc(openTix)+'</span>'+
+        '<span class="kpi-sub">'+esc(openTickets)+' total unresolved</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">7-Day Revenue</span>'+
+        '<span class="kpi-val" style="color:#16a34a">'+esc(rev)+'</span>'+
+        '<span class="kpi-sub">Platform gross receipts</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Active Garages</span>'+
+        '<span class="kpi-val">'+esc(garageCount)+'</span>'+
+        '<span class="kpi-sub">Partner workshop network</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Recent Platform Activity Feed</h3><p class="muted">Authoritative event log from server directory.</p></div>'+
+      (activity.length===0?'<div class="admin-empty-state"><p class="muted">No recent platform activity logged.</p></div>':
+        '<div class="admin-table-container" style="margin-top:12px">'+
+          '<table class="admin-data-table">'+
+            '<thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead>'+
+            '<tbody>'+
+              activity.map(a=>'<tr>'+
+                '<td style="white-space:nowrap;color:#64748b">'+esc(a.timestamp||'—')+'</td>'+
+                '<td><b>'+esc(a.actor||'System')+'</b></td>'+
+                '<td><code>'+esc(a.action||'—')+'</code></td>'+
+                '<td>'+esc(a.details||'—')+'</td>'+
+              '</tr>').join('')+
+            '</tbody>'+
+          '</table>'+
+        '</div>')+
+    '</div>';
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Platform metrics are fetched dynamically from server edge.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminOverview(true)">Fetch Real Overview (GET /api/admin/overview)</button>'+
+    '</div>';
+  }
 
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
@@ -3912,8 +4219,8 @@ function renderScreenHome(){
         '<p class="muted">Live system status, active account breakdown, and operational quick actions.</p>'+
       '</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-        '<button type="button" class="ghost" onclick="loadAdminTickets(true)">↻ Refresh Overview</button>'+
-        '<button type="button" class="primary" onclick="openTokenGenModal()">+ Issue Token</button>'+
+        '<button type="button" class="ghost" onclick="loadAdminOverview(true)">↻ Refresh Overview</button>'+
+        '<button type="button" class="primary" onclick="switchAdminScreen(\'tokens\');openTokenGenModal()">+ Issue Token</button>'+
       '</div>'+
     '</div>'+
     (adminTicketsError?'<div style="margin-bottom:12px">'+renderAdminTicketDiagnosticCard()+'</div>':'')+
@@ -3930,28 +4237,7 @@ function renderScreenHome(){
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-kpi-grid">'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Total Registered Users</span>'+
-        '<span class="kpi-val">1</span>'+
-        '<span class="kpi-sub">1 Vehicle Owner · 0 Garages · 0 Staff</span>'+
-      '</div>'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Today\'s Activity</span>'+
-        '<span class="kpi-val">0</span>'+
-        '<span class="kpi-sub">0 Sign-ups · 0 Upgrade Requests</span>'+
-      '</div>'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Support Tickets</span>'+
-        '<span class="kpi-val" style="color:'+(openTickets>0?'#2563eb':'#0f172a')+'">'+openTickets+' / '+totalTickets+'</span>'+
-        '<span class="kpi-sub">'+(adminTicketsError?'D1 gateway check needed':'All customer issues live')+'</span>'+
-      '</div>'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Monthly Platform Revenue</span>'+
-        '<span class="kpi-val" style="color:#16a34a">₹0.00</span>'+
-        '<span class="kpi-sub" style="font-style:italic">Manual-entry placeholder until billing ledger backend connected</span>'+
-      '</div>'+
-    '</div>'+
+    bodyContent+
     '<div class="admin-card">'+
       '<div class="admin-card-head"><h3>Operational Quick Actions</h3><p class="muted">Direct access to core administrative workflows.</p></div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px">'+
@@ -3973,6 +4259,61 @@ function renderScreenHome(){
 }
 
 function renderScreenUsers(){
+  let bodyContent='';
+  if(adminUsersLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading user directory from <code>GET /api/admin/users</code>...</div>';
+  }else if(adminUsersError){
+    bodyContent=renderAdminBlockedCard('/api/admin/users','GET',adminUsersError?.message||'User directory route unavailable (404).');
+  }else if(adminUsersList){
+    const q=(adminUsersSearch||'').trim().toLowerCase();
+    const filtered=adminUsersList.filter(u=>{
+      if(adminUsersRoleFilter!=='all'&&(u.role||'owner').toLowerCase()!==adminUsersRoleFilter)return false;
+      if(adminUsersPlanFilter!=='all'&&(u.plan||'lite').toLowerCase()!==adminUsersPlanFilter)return false;
+      if(adminUsersStatusFilter!=='all'&&(u.status||'active').toLowerCase()!==adminUsersStatusFilter)return false;
+      if(q){
+        const haystack=((u.name||'')+' '+(u.email||'')+' '+(u.phone||'')).toLowerCase();
+        if(!haystack.includes(q))return false;
+      }
+      return true;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No matching customer accounts found.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Customer / Account</th>'+
+              '<th>Phone</th>'+
+              '<th>Role</th>'+
+              '<th>Current Plan</th>'+
+              '<th>Status</th>'+
+              '<th>Created Date</th>'+
+              '<th style="text-align:right">Actions</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(u=>'<tr>'+
+              '<td><div style="font-weight:700;color:#0f172a">'+esc(u.name||'Customer')+'</div><small class="muted">'+esc(u.email||'—')+'</small></td>'+
+              '<td><code style="font-size:12px">'+esc(u.phone||'—')+'</code></td>'+
+              '<td><span class="admin-badge">'+esc(u.role||'Owner')+'</span></td>'+
+              '<td><span class="admin-badge plan-'+esc((u.plan||'lite').toLowerCase())+'">'+esc(u.plan||'Lite')+'</span></td>'+
+              '<td><span class="admin-badge status-'+esc((u.status||'active').toLowerCase())+'">'+esc(u.status||'Active')+'</span></td>'+
+              '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(u.created_at))+'</td>'+
+              '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminUserDetails(\''+esc(u.id)+'\')">Manage User</button></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">User directory is fetched from the server database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminUsers(true)">Load Users (GET /api/admin/users)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
@@ -3980,6 +4321,7 @@ function renderScreenUsers(){
         '<p class="muted">Search customer accounts, manage plan entitlements, review session status, and audit usage.</p>'+
       '</div>'+
       '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminUsers(true)">↻ Refresh List</button>'+
         '<button type="button" class="ghost" onclick="exportUsersCsv()">📥 Export Users CSV</button>'+
       '</div>'+
     '</div>'+
@@ -3988,202 +4330,238 @@ function renderScreenUsers(){
         '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='all'?'active':'')+'" onclick="adminUsersRoleFilter=\'all\';renderAdminViewContent()">All Roles</button>'+
         '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='owner'?'active':'')+'" onclick="adminUsersRoleFilter=\'owner\';renderAdminViewContent()">Vehicle Owners</button>'+
         '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='garage'?'active':'')+'" onclick="adminUsersRoleFilter=\'garage\';renderAdminViewContent()">Garage Owners</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='staff'?'active':'')+'" onclick="adminUsersRoleFilter=\'staff\';renderAdminViewContent()">Staff</button>'+
       '</div>'+
-      '<div style="display:flex;gap:8px;align-items:center">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<select class="ticket-filter-select" onchange="adminUsersPlanFilter=this.value;renderAdminViewContent()">'+
+          '<option value="all" '+(adminUsersPlanFilter==='all'?'selected':'')+'>All Plans</option>'+
+          '<option value="lite" '+(adminUsersPlanFilter==='lite'?'selected':'')+'>Lite</option>'+
+          '<option value="premium" '+(adminUsersPlanFilter==='premium'?'selected':'')+'>Premium</option>'+
+          '<option value="ultra" '+(adminUsersPlanFilter==='ultra'?'selected':'')+'>Ultra</option>'+
+        '</select>'+
+        '<select class="ticket-filter-select" onchange="adminUsersStatusFilter=this.value;renderAdminViewContent()">'+
+          '<option value="all" '+(adminUsersStatusFilter==='all'?'selected':'')+'>All Statuses</option>'+
+          '<option value="active" '+(adminUsersStatusFilter==='active'?'selected':'')+'>Active</option>'+
+          '<option value="suspended" '+(adminUsersStatusFilter==='suspended'?'selected':'')+'>Suspended</option>'+
+        '</select>'+
         '<input type="text" class="admin-search-input" placeholder="Search name, email, mobile..." value="'+esc(adminUsersSearch)+'" oninput="adminUsersSearch=this.value;renderAdminViewContent()">'+
       '</div>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Customer / Account</th>'+
-            '<th>Mobile</th>'+
-            '<th>Role</th>'+
-            '<th>Current Plan</th>'+
-            '<th>Status</th>'+
-            '<th>Created Date</th>'+
-            '<th style="text-align:right">Actions</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td>'+
-              '<div style="font-weight:700;color:#0f172a">B Rahul (Super Admin)</div>'+
-              '<small class="muted">rnyburia@gmail.com</small>'+
-            '</td>'+
-            '<td><code style="font-size:12px">+91 98*** *****</code></td>'+
-            '<td><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span></td>'+
-            '<td><span class="admin-badge plan-ultra">Ultra / Lifetime</span></td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="white-space:nowrap;color:#64748b">17 Oct 2026</td>'+
-            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminUserDetails(\'admin-primary\')">Manage User</button></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
-    '<div class="admin-card" style="background:#f8fafc;border-style:dashed">'+
-      '<small class="muted">Showing authoritative verified accounts. Production user listing integrates with backend endpoint <code>GET /api/admin/users</code>.</small>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenTokens(){
+  let bodyContent='';
+  if(adminTokensLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading tokens from <code>GET /api/admin/tokens</code>...</div>';
+  }else if(adminTokensError){
+    bodyContent=renderAdminBlockedCard('/api/admin/tokens','GET',adminTokensError?.message||'Activation tokens route unavailable (404).');
+  }else if(adminTokensList){
+    if(adminTokensList.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No activation tokens issued yet.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Masked Token</th>'+
+              '<th>Plan Granted</th>'+
+              '<th>Role</th>'+
+              '<th>Usage</th>'+
+              '<th>Validity</th>'+
+              '<th>Expiry Date</th>'+
+              '<th>Status</th>'+
+              '<th style="text-align:right">Action</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            adminTokensList.map(t=>'<tr>'+
+              '<td><code style="font-weight:700;color:#2563eb">'+esc(t.masked_token||t.code||'TD-••••')+'</code></td>'+
+              '<td><span class="admin-badge plan-'+esc((t.plan||'lite').toLowerCase())+'">'+esc(t.plan||'Lite')+'</span></td>'+
+              '<td>'+esc(t.role||'Vehicle Owner')+'</td>'+
+              '<td>'+esc(t.used_count||0)+' / '+esc(t.max_uses===0?'∞':(t.max_uses||1))+'</td>'+
+              '<td>'+esc(t.duration_days||365)+' Days</td>'+
+              '<td style="color:#64748b">'+esc(formatAdminDate(t.expires_at))+'</td>'+
+              '<td><span class="admin-badge status-'+esc((t.status||'active').toLowerCase())+'">'+esc(t.status||'Active')+'</span></td>'+
+              '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\''+esc(t.id||t.code)+'\')">Revoke</button></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Activation token registry connects to backend database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminTokens(true)">Fetch Tokens (GET /api/admin/tokens)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Activation Tokens &amp; Plan Grants</h2>'+
         '<p class="muted">Issue cryptographic activation tokens for plan upgrades, promotions, and garage activations.</p>'+
       '</div>'+
-      '<button type="button" class="primary" onclick="openTokenGenModal()">+ Generate Token</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminTokens(true)">↻ Refresh List</button>'+
+        '<button type="button" class="primary" onclick="openTokenGenModal()">+ Generate Token</button>'+
+      '</div>'+
     '</div>'+
     '<div class="admin-card" style="border-left:4px solid #10b981">'+
       '<b style="font-size:13.5px">Cryptographic Token Issuance Standard</b>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12px">Tokens are hashed with SHA-256 upon issuance. The raw secret is revealed exactly once to the administrator. The server never stores plaintext token codes.</p>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Masked Token</th>'+
-            '<th>Plan Granted</th>'+
-            '<th>Role</th>'+
-            '<th>Usage</th>'+
-            '<th>Validity</th>'+
-            '<th>Expiry Date</th>'+
-            '<th>Status</th>'+
-            '<th style="text-align:right">Action</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td><code style="font-weight:700;color:#2563eb">TD-PLUS-••••-8812</code></td>'+
-            '<td><span class="admin-badge plan-plus">Plus (Annual)</span></td>'+
-            '<td>Vehicle Owner</td>'+
-            '<td>0 / 1</td>'+
-            '<td>365 Days</td>'+
-            '<td style="color:#64748b">18 Oct 2027</td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\'TD-PLUS-••••-8812\')">Revoke</button></td>'+
-          '</tr>'+
-          '<tr>'+
-            '<td><code style="font-weight:700;color:#2563eb">TD-ULTR-••••-4109</code></td>'+
-            '<td><span class="admin-badge plan-ultra">Ultra (Workshop)</span></td>'+
-            '<td>Garage Owner</td>'+
-            '<td>0 / 1</td>'+
-            '<td>90 Days</td>'+
-            '<td style="color:#64748b">16 Jan 2027</td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\'TD-ULTR-••••-4109\')">Revoke</button></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenPlans(){
+  let plansContent='';
+  if(adminPlansLoading){
+    plansContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading plans from <code>GET /api/admin/plans</code>...</div>';
+  }else if(adminPlansError){
+    plansContent=renderAdminBlockedCard('/api/admin/plans','GET',adminPlansError?.message||'Plans endpoint unavailable (404).');
+  }else if(adminPlansList){
+    plansContent='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">'+
+      adminPlansList.map(p=>'<div class="admin-card">'+
+        '<div class="admin-card-head"><span class="admin-badge plan-'+esc((p.id||'free').toLowerCase())+'">'+esc(p.name||'Plan')+'</span><h3 style="margin:8px 0 4px">'+esc(p.name||'Plan')+'</h3><div style="font-size:22px;font-weight:800;color:#0f172a">'+esc(p.price_display||('₹'+(p.price||0)))+'</div></div>'+
+        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
+          '<li>Vehicle Limit: <b>'+esc(p.max_vehicles||1)+'</b></li>'+
+          '<li>Storage: <b>'+esc(p.storage_mb||10)+' MB</b></li>'+
+          '<li>Feature Flags: <code>'+esc(Object.keys(p.features||{}).join(', ')||'Standard')+'</code></li>'+
+        '</ul>'+
+      '</div>').join('')+
+    '</div>';
+  }else{
+    plansContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Plan tiers and entitlement limits are managed in the database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminPlans(true)">Fetch Plans (GET /api/admin/plans)</button>'+
+    '</div>';
+  }
+
+  let couponsContent='';
+  if(adminCouponsLoading){
+    couponsContent='<div class="admin-card" style="text-align:center;padding:24px"><span class="spinner-sm"></span> Loading coupons from <code>GET /api/admin/coupons</code>...</div>';
+  }else if(adminCouponsError){
+    couponsContent=renderAdminBlockedCard('/api/admin/coupons','GET',adminCouponsError?.message||'Coupons endpoint unavailable (404).');
+  }else if(adminCouponsList){
+    if(adminCouponsList.length===0){
+      couponsContent='<div class="admin-empty-state"><p class="muted">No active promotional coupons found.</p></div>';
+    }else{
+      couponsContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead><tr><th>Code</th><th>Discount</th><th>Max Uses</th><th>Redeemed</th><th>Expires</th><th>Status</th><th style="text-align:right">Action</th></tr></thead>'+
+          '<tbody>'+
+            adminCouponsList.map(c=>'<tr>'+
+              '<td><code style="font-weight:700;color:#9d174d">'+esc(c.code)+'</code></td>'+
+              '<td>'+esc(c.discount_percent||c.discount||0)+'% OFF</td>'+
+              '<td>'+esc(c.max_uses||'Unlimited')+'</td>'+
+              '<td>'+esc(c.used_count||0)+'</td>'+
+              '<td>'+esc(formatAdminDate(c.expires_at))+'</td>'+
+              '<td><span class="admin-badge status-'+esc(c.status||'active')+'">'+esc(c.status||'Active')+'</span></td>'+
+              '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="deleteAdminCoupon(\''+esc(c.id)+'\')">Deactivate</button></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    couponsContent='<div class="admin-card" style="text-align:center;padding:24px">'+
+      '<p class="muted" style="margin-bottom:12px">Promotional coupons are verified and applied server-side.</p>'+
+      '<button type="button" class="ghost" onclick="loadAdminCoupons(true)">Fetch Coupons (GET /api/admin/coupons)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Plans, Pricing &amp; Feature Limits</h2>'+
-        '<p class="muted">Configure vehicle limits, document vault storage, pricing, and festival promotional banners.</p>'+
+        '<p class="muted">Configure vehicle limits, document vault storage, pricing, and promotional coupons.</p>'+
       '</div>'+
-      '<button type="button" class="ghost" onclick="toast(\'Plan limits are enforced server-side.\',\'info\')">Server Synced</button>'+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-free">Free Tier</span><h3 style="margin:8px 0 4px">Vehicle Owner Free</h3><div style="font-size:22px;font-weight:800;color:#0f172a">₹0 <span style="font-size:13px;font-weight:400;color:#64748b">/ lifetime</span></div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>1 Vehicle Limit</li>'+
-          '<li>Standard RC &amp; Insurance Storage (10MB)</li>'+
-          '<li>Regular Service &amp; Maintenance Logging</li>'+
-          '<li>Community &amp; Email Support</li>'+
-        '</ul>'+
-        '<button type="button" class="ghost" style="width:100%" disabled>Default Tier</button>'+
-      '</div>'+
-      '<div class="admin-card" style="border-color:#93c5fd;box-shadow:0 4px 14px rgba(37,99,235,0.08)">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-plus">Plus Tier (Most Popular)</span><h3 style="margin:8px 0 4px">Everyday Vehicle Owner</h3><div style="font-size:22px;font-weight:800;color:#1d4ed8">₹69 / mo <span style="font-size:13px;font-weight:400;color:#64748b">or ₹708 / yr (+ 18% GST)</span></div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>Up to 5 Vehicles in Single Dashboard</li>'+
-          '<li>Full Transfer Documents (Form 29 &amp; 30 PDF Engine)</li>'+
-          '<li>Encrypted Private Cloud Glovebox &amp; Vault (100MB)</li>'+
-          '<li>A4 Comprehensive Ownership History Export</li>'+
-          '<li>Priority Help Ticket SLA (&lt; 24h)</li>'+
-        '</ul>'+
-        '<button type="button" class="primary" style="width:100%" onclick="toast(\'Plus tier configuration is active.\',\'ok\')">Active Production Tier</button>'+
-      '</div>'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-ultra">Ultra Tier</span><h3 style="margin:8px 0 4px">Garage &amp; Workshop SaaS</h3><div style="font-size:22px;font-weight:800;color:#92400e">Custom <span style="font-size:13px;font-weight:400;color:#64748b">/ Multi-Bay</span></div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>Unlimited Customer Vehicles &amp; Job Cards</li>'+
-          '<li>Digital Invoicing &amp; Customer WhatsApp Intimation</li>'+
-          '<li>Multi-mechanic Staff Accounts</li>'+
-          '<li>Workshop Brand Portal &amp; Public Booking Page</li>'+
-        '</ul>'+
-        '<button type="button" class="ghost" style="width:100%" onclick="toast(\'Garage onboarding gate active.\',\'info\')">Workshop Gate</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminPlans(true);loadAdminCoupons(true)">↻ Refresh Plans</button>'+
+        '<button type="button" class="primary" onclick="openCreateCouponModal()">+ Create Coupon</button>'+
       '</div>'+
     '</div>'+
+    plansContent+
     '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Festival Offer &amp; Announcement Banner</h3><p class="muted">Configure customer dashboard banner and coupon promotions.</p></div>'+
-      '<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">'+
-        '<div class="field">'+
-          '<label>Banner Text</label>'+
-          '<input type="text" id="adminFestivalBannerText" value="Diwali Special: 20% off annual Plus plan with code FESTIVAL26" placeholder="Enter banner headline...">'+
-        '</div>'+
-        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
-          '<button type="button" class="primary" onclick="saveFestivalBanner()">Save Banner Draft</button>'+
-          '<small class="muted">Will be verified by backend worker before deployment.</small>'+
-        '</div>'+
-      '</div>'+
+      '<div class="admin-card-head"><h3>Active Promotional Coupons</h3><p class="muted">Festival discounts, garage vouchers, and marketing campaigns.</p></div>'+
+      couponsContent+
     '</div>'+
   '</div>';
 }
 
 function renderScreenUpgrades(){
+  let bodyContent='';
+  if(adminUpgradesLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading upgrade queue from <code>GET /api/admin/upgrade-requests</code>...</div>';
+  }else if(adminUpgradesError){
+    bodyContent=renderAdminBlockedCard('/api/admin/upgrade-requests','GET',adminUpgradesError?.message||'Upgrade requests endpoint unavailable (404).');
+  }else if(adminUpgradesList){
+    const filtered=adminUpgradesList.filter(r=>{
+      if(adminUpgradesFilter==='all')return true;
+      return (r.status||'pending').toLowerCase()===adminUpgradesFilter;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No upgrade requests matching current filter.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Customer</th>'+
+              '<th>Contact Phone</th>'+
+              '<th>Requested Plan</th>'+
+              '<th>Date</th>'+
+              '<th>Status</th>'+
+              '<th style="text-align:right">Action &amp; Triage</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(r=>'<tr>'+
+              '<td><div style="font-weight:700">'+esc(r.customer_name||r.name||'Customer')+'</div><small class="muted">'+esc(r.customer_email||r.email||'—')+'</small></td>'+
+              '<td><a href="tel:'+esc(r.phone)+'" style="color:#2563eb;font-weight:600">'+esc(r.phone||'—')+'</a></td>'+
+              '<td><span class="admin-badge plan-'+esc((r.requested_plan||'premium').toLowerCase())+'">'+esc(r.requested_plan||'Premium')+'</span></td>'+
+              '<td style="color:#64748b">'+esc(formatAdminDate(r.created_at))+'</td>'+
+              '<td><span class="admin-badge status-'+esc((r.status||'pending').toLowerCase())+'">'+esc(r.status||'Pending')+'</span></td>'+
+              '<td style="text-align:right">'+
+                '<div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">'+
+                  '<textarea id="upgradeNote_'+esc(r.id)+'" placeholder="Triage note..." rows="1" style="width:140px;font-size:11px;padding:3px"></textarea>'+
+                  '<button type="button" class="primary" style="padding:4px 8px;font-size:12px" onclick="handleUpgradeAction(\''+esc(r.id)+'\',\'approve\')">Approve</button>'+
+                  '<button type="button" class="ghost" style="padding:4px 8px;font-size:12px;color:#dc2626" onclick="handleUpgradeAction(\''+esc(r.id)+'\',\'reject\')">Reject</button>'+
+                '</div>'+
+              '</td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Inbound upgrade requests submitted by vehicle owners and garages.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminUpgrades(true)">Fetch Queue (GET /api/admin/upgrade-requests)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Customer Upgrade Queue &amp; Leads</h2>'+
         '<p class="muted">Review inbound customer upgrade inquiries, initiate WhatsApp/Call contact, and activate accounts.</p>'+
       '</div>'+
-      '<div class="admin-filter-tabs">'+
-        '<button type="button" class="admin-filter-pill active">All Requests</button>'+
-        '<button type="button" class="admin-filter-pill">Pending</button>'+
-        '<button type="button" class="admin-filter-pill">Activated</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminUpgrades(true)">↻ Refresh Queue</button>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Customer</th>'+
-            '<th>Contact Phone</th>'+
-            '<th>Requested Plan</th>'+
-            '<th>Vehicles</th>'+
-            '<th>Date</th>'+
-            '<th>Status</th>'+
-            '<th style="text-align:right">Direct Contact &amp; Triage</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td><div style="font-weight:700">Mohan Sharma</div><small class="muted">mohan.sharma@example.com</small></td>'+
-            '<td><a href="tel:+919876543210" style="color:#2563eb;font-weight:600">+91 98765 43210</a></td>'+
-            '<td><span class="admin-badge plan-plus">Plus (Annual)</span></td>'+
-            '<td>2 Cars</td>'+
-            '<td style="color:#64748b">17 Oct 2026</td>'+
-            '<td><span class="admin-badge status-open">Pending</span></td>'+
-            '<td style="text-align:right">'+
-              '<div style="display:flex;gap:6px;justify-content:flex-end">'+
-                '<a href="https://wa.me/919876543210" target="_blank" class="ghost" style="padding:4px 10px;font-size:12px;text-decoration:none">💬 WhatsApp</a>'+
-                '<button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="updateUpgradeStatus(\'req-1\',\'activated\')">Activate</button>'+
-              '</div>'+
-            '</td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
+    '<div class="admin-filter-tabs">'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='all'?'active':'')+'" onclick="adminUpgradesFilter=\'all\';renderAdminViewContent()">All Requests</button>'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='pending'?'active':'')+'" onclick="adminUpgradesFilter=\'pending\';renderAdminViewContent()">Pending</button>'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='approved'?'active':'')+'" onclick="adminUpgradesFilter=\'approved\';renderAdminViewContent()">Approved</button>'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='rejected'?'active':'')+'" onclick="adminUpgradesFilter=\'rejected\';renderAdminViewContent()">Rejected</button>'+
     '</div>'+
+    bodyContent+
   '</div>';
 }
 
@@ -4249,131 +4627,141 @@ function renderScreenGarages(){
         '<h2>Garage Network &amp; Workshop Partners</h2>'+
         '<p class="muted">Review onboarding submissions, monitor garage subscriptions, and manage workshop capabilities.</p>'+
       '</div>'+
-      '<button type="button" class="ghost" onclick="toast(\'Workshop onboarding queue synced.\',\'ok\')">Sync Queue</button>'+
     '</div>'+
-    '<div class="admin-kpi-grid">'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Registered Workshops</span><span class="kpi-val">0</span><span class="kpi-sub">0 Active · 0 Trial</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Pending Onboarding</span><span class="kpi-val">0</span><span class="kpi-sub">Awaiting verification</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Invoices Issued</span><span class="kpi-val">0</span><span class="kpi-sub">Workshop SaaS</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Mechanics &amp; Staff</span><span class="kpi-val">0</span><span class="kpi-sub">Staff accounts</span></div>'+
-    '</div>'+
-    '<div class="admin-card" style="text-align:center;padding:40px 20px">'+
-      '<div style="font-size:32px;margin-bottom:8px">🏢</div>'+
-      '<h3>No Garage Onboarding Applications Pending</h3>'+
-      '<p class="muted" style="max-width:480px;margin:0 auto 16px">When independent workshops submit credentials through the Garage Onboarding Portal (PR #120), their trade licenses and GSTIN records appear here for review.</p>'+
-      '<button type="button" class="ghost" onclick="toast(\'Garage workspace feature flag is currently disabled in production.\',\'info\')">Check Feature Flag</button>'+
-    '</div>'+
+    renderAdminPhaseCard('Phase 5 — Garage Side Redesign', '/api/admin/garages', 'GET', 'Independent workshop partner directory, trade license &amp; GSTIN verification, bay management, staff quotas, and SaaS subscription limits.')+
   '</div>';
 }
 
 function renderScreenTeam(){
+  let bodyContent='';
+  if(adminTeamLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading team members from <code>GET /api/admin/team/members</code>...</div>';
+  }else if(adminTeamError){
+    bodyContent=renderAdminBlockedCard('/api/admin/team/members','GET',adminTeamError?.message||'Team roster endpoint unavailable (404).');
+  }else if(adminTeamList){
+    bodyContent='<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Admin Member</th>'+
+            '<th>Role</th>'+
+            '<th>Status</th>'+
+            '<th>Last Login</th>'+
+            '<th style="text-align:right">Action</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          adminTeamList.map(m=>{
+            const isPrimary=Boolean(m.is_owner || m.is_primary || m.role === 'owner');
+            return '<tr>'+
+              '<td><div style="font-weight:700">'+esc(m.name||'Admin')+'</div><small class="muted">'+esc(m.email||'—')+'</small></td>'+
+              '<td><span class="admin-badge">'+esc(m.role||'super_admin')+'</span></td>'+
+              '<td><span class="admin-badge status-'+esc(m.status||'active')+'">'+esc(m.status||'Active')+'</span></td>'+
+              '<td style="color:#64748b">'+esc(formatAdminDate(m.last_login_at||m.created_at))+'</td>'+
+              '<td style="text-align:right">'+
+                (isPrimary?'<span class="muted" style="font-size:12px">Owner Protected</span>':
+                  '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeTeamMember(\''+esc(m.id)+'\')">Revoke Access</button>')+
+              '</td>'+
+            '</tr>';
+          }).join('')+
+        '</tbody>'+
+      '</table>'+
+    '</div>';
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Administrative team roster with role-based access control.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminTeam(true)">Fetch Team (GET /api/admin/team/members)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Team &amp; Access Control</h2>'+
         '<p class="muted">Manage administrative staff, role permissions, MFA compliance, and session controls.</p>'+
       '</div>'+
-      '<button type="button" class="primary" onclick="openTeamInviteModal()">+ Invite Member</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminTeam(true)">↻ Refresh Team</button>'+
+        '<button type="button" class="primary" onclick="openTeamInviteModal()">+ Invite Member</button>'+
+      '</div>'+
     '</div>'+
     '<div class="admin-card" style="border-left:4px solid #3b82f6">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:gap:12px">'+
         '<div>'+
           '<b style="font-size:14px">Primary Owner Account Protection</b>'+
-          '<p class="muted" style="margin:2px 0 0;font-size:12px">Primary Super Admin <code>rnyburia@gmail.com</code> is protected from administrative revocation or demotion.</p>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12px">Primary workspace owner account is protected from administrative revocation or demotion.</p>'+
         '</div>'+
         '<span class="admin-badge" style="background:#dbeafe;color:#1e40af">Primary Owner (Immutable)</span>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Admin Member</th>'+
-            '<th>Role</th>'+
-            '<th>Permissions</th>'+
-            '<th>MFA State</th>'+
-            '<th>Last Login</th>'+
-            '<th>Status</th>'+
-            '<th style="text-align:right">Action</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td><div style="font-weight:700">B Rahul</div><small class="muted">rnyburia@gmail.com</small></td>'+
-            '<td><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span></td>'+
-            '<td>Full Access (All Modules)</td>'+
-            '<td><span class="admin-badge" style="background:#dcfce7;color:#166534">Enforced</span></td>'+
-            '<td style="color:#64748b">Active Session</td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="text-align:right"><span class="muted" style="font-size:12px">Owner Protected</span></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
-    '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Administrative Permission Matrix</h3><p class="muted">Capabilities governed by verified backend role checks.</p></div>'+
-      '<div class="admin-table-container" style="margin-top:12px">'+
-        '<table class="admin-data-table">'+
-          '<thead>'+
-            '<tr><th>Role</th><th>Users &amp; Plans</th><th>Tokens</th><th>Tickets</th><th>CSV Export</th><th>Team &amp; Audit</th></tr>'+
-          '</thead>'+
-          '<tbody>'+
-            '<tr><td><b>Super Admin</b></td><td>Full (Read/Write)</td><td>Issue &amp; Revoke</td><td>Full Triage</td><td>Allowed</td><td>Full Access</td></tr>'+
-            '<tr><td><b>Support Lead</b></td><td>Read-Only</td><td>No Access</td><td>Full Triage</td><td>Blocked</td><td>No Access</td></tr>'+
-            '<tr><td><b>Billing Admin</b></td><td>Modify Plans</td><td>Issue Only</td><td>Read-Only</td><td>Allowed</td><td>No Access</td></tr>'+
-            '<tr><td><b>Auditor</b></td><td>Read-Only</td><td>No Access</td><td>Read-Only</td><td>Audit Only</td><td>Audit Logs Only</td></tr>'+
-          '</tbody>'+
-        '</table>'+
-      '</div>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenAudit(){
+  let bodyContent='';
+  if(adminAuditLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading audit log from <code>GET /api/admin/audit</code>...</div>';
+  }else if(adminAuditError){
+    bodyContent=renderAdminBlockedCard('/api/admin/audit','GET',adminAuditError?.message||'Audit trail endpoint unavailable (404).');
+  }else if(adminAuditList){
+    const filtered=adminAuditList.filter(ev=>{
+      if(adminAuditActorFilter!=='all'&&ev.actor!==adminAuditActorFilter)return false;
+      if(adminAuditActionFilter!=='all'&&ev.action!==adminAuditActionFilter)return false;
+      return true;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No audit events match current filter.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Timestamp (IST)</th>'+
+              '<th>Actor</th>'+
+              '<th>Action</th>'+
+              '<th>Resource / Target</th>'+
+              '<th>Client IP</th>'+
+              '<th>Status</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(ev=>'<tr>'+
+              '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(ev.timestamp||ev.created_at))+'</td>'+
+              '<td><code style="color:#2563eb">'+esc(ev.actor||'—')+'</code></td>'+
+              '<td><code>'+esc(ev.action||'—')+'</code></td>'+
+              '<td>'+esc(ev.resource||ev.target||'—')+'</td>'+
+              '<td><code>'+esc(ev.ip_address||ev.client_ip||'—')+'</code></td>'+
+              '<td><span class="admin-badge status-'+esc(ev.status==='failure'?'danger':'active')+'">'+esc(ev.status||'Success')+'</span></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Append-only privileged action log stored in D1 database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminAudit(true)">Fetch Audit Log (GET /api/admin/audit)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Cryptographic Security &amp; Audit Log</h2>'+
         '<p class="muted">Append-only ledger of privileged administrative events, permission changes, and access sessions.</p>'+
       '</div>'+
-      '<button type="button" class="ghost" onclick="exportAuditCsv()">📥 Export Audit CSV</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminAudit(true)">↻ Refresh Audit</button>'+
+        '<button type="button" class="ghost" onclick="exportAuditCsv()">📥 Export Audit CSV</button>'+
+      '</div>'+
     '</div>'+
     '<div class="admin-card" style="border-left:4px solid #f59e0b">'+
       '<b style="font-size:13px">Immutable Audit Guarantee</b>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12px">Records are cryptographically timestamped and write-once. Deletion or modification is blocked at the database engine level.</p>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Timestamp (IST)</th>'+
-            '<th>Actor</th>'+
-            '<th>Action</th>'+
-            '<th>Resource / Target</th>'+
-            '<th>Client IP</th>'+
-            '<th>Status</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td style="white-space:nowrap;color:#64748b">18 Oct 2026, 10:40 AM</td>'+
-            '<td><code style="color:#2563eb">rnyburia@gmail.com</code></td>'+
-            '<td><code>admin.session.verify</code></td>'+
-            '<td>Super Admin Console</td>'+
-            '<td><code>103.21.***.***</code></td>'+
-            '<td><span class="admin-badge status-active">Success</span></td>'+
-          '</tr>'+
-          '<tr>'+
-            '<td style="white-space:nowrap;color:#64748b">18 Oct 2026, 10:18 AM</td>'+
-            '<td><code style="color:#2563eb">rnyburia@gmail.com</code></td>'+
-            '<td><code>admin.workspace.access</code></td>'+
-            '<td>Torq Desk Shell</td>'+
-            '<td><code>103.21.***.***</code></td>'+
-            '<td><span class="admin-badge status-active">Success</span></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
@@ -4384,32 +4772,8 @@ function renderScreenContent(){
         '<h2>Public Content &amp; Site Policy Editor</h2>'+
         '<p class="muted">Update About Torq Desk, Terms &amp; Conditions, Contact information, and Emergency Maintenance Banner.</p>'+
       '</div>'+
-      '<div style="display:flex;gap:8px">'+
-        '<button type="button" class="ghost" onclick="toast(\'Draft changes saved locally.\',\'ok\')">Save Draft</button>'+
-      '</div>'+
     '</div>'+
-    '<div class="admin-controls-bar">'+
-      '<div class="admin-filter-tabs">'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='about'?'active':'')+'" onclick="adminContentTab=\'about\';renderAdminViewContent()">About Torq Desk</button>'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='terms'?'active':'')+'" onclick="adminContentTab=\'terms\';renderAdminViewContent()">Terms &amp; Conditions</button>'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='contact'?'active':'')+'" onclick="adminContentTab=\'contact\';renderAdminViewContent()">Contact Info</button>'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='maintenance'?'active':'')+'" onclick="adminContentTab=\'maintenance\';renderAdminViewContent()">Emergency Maintenance Gate</button>'+
-      '</div>'+
-    '</div>'+
-    '<div class="admin-card">'+
-      '<div class="field full">'+
-        '<label>Section Header &amp; Copy</label>'+
-        '<textarea rows="8" style="font-family:monospace;font-size:13px;line-height:1.6">'+
-          (adminContentTab==='terms'?'Torq Desk Terms of Service: Ownership records are private and encrypted. Users retain full data sovereignty...':
-           adminContentTab==='contact'?'Engineering Support: support@torqdesk.app\nAdmin Contact: crahul.exe@gmail.com\nHours: Mon-Sat, 9AM-6PM IST':
-           adminContentTab==='maintenance'?'Torq Desk is currently undergoing scheduled database maintenance. Regular service will resume shortly.':
-           'Torq Desk is a private vehicle logbook, encrypted document vault, and statutory transfer packet engine built for everyday vehicle owners.')+
-        '</textarea>'+
-      '</div>'+
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'+
-        '<button type="button" class="primary" onclick="toast(\'Content draft updated.\',\'ok\')">Update Section</button>'+
-      '</div>'+
-    '</div>'+
+    renderAdminPhaseCard('Phase 7 — Content & Site Policy', '/api/admin/content', 'GET / PUT', 'Public site CMS, About Torq Desk, statutory Terms of Service, Privacy Policy, and emergency maintenance gate toggle.')+
   '</div>';
 }
 
@@ -4421,40 +4785,7 @@ function renderScreenSettings(){
         '<p class="muted">Configure session timeouts, admin credentials, MFA parameters, and infrastructure health.</p>'+
       '</div>'+
     '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><h3>Admin Authentication Profile</h3><p class="muted">Primary identity and authorized credentials.</p></div>'+
-        '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;font-size:13px">'+
-          '<div><span class="muted" style="display:block;font-size:11px">ADMINISTRATOR EMAIL</span><b>rnyburia@gmail.com</b></div>'+
-          '<div><span class="muted" style="display:block;font-size:11px">ROLE CLEARANCE</span><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin (Primary)</span></div>'+
-          '<div><span class="muted" style="display:block;font-size:11px">INACTIVITY LOCKOUT</span><b>15 Minutes Policy</b> <small class="muted">(Independent of customer 120s policy)</small></div>'+
-        '</div>'+
-      '</div>'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><h3>IP Allowlist Placeholder</h3><p class="muted">Restrict console access to specific IP ranges.</p></div>'+
-        '<div class="field" style="margin-top:12px">'+
-          '<label>Allowed CIDR Subnets (Comma-separated)</label>'+
-          '<input type="text" placeholder="e.g. 103.21.244.0/22, 108.162.192.0/18" value="* (Global Authorized Access)">'+
-        '</div>'+
-        '<button type="button" class="ghost" style="margin-top:8px" onclick="toast(\'IP allowlist placeholder saved.\',\'info\')">Save Rule</button>'+
-      '</div>'+
-    '</div>'+
-    '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Infrastructure &amp; Backup Operations</h3><p class="muted">Live status of backend datastores and edge services.</p></div>'+
-      '<div class="admin-table-container" style="margin-top:12px">'+
-        '<table class="admin-data-table">'+
-          '<thead>'+
-            '<tr><th>Subsystem</th><th>Provider</th><th>Status</th><th>Notes</th></tr>'+
-          '</thead>'+
-          '<tbody>'+
-            '<tr><td><b>Edge Workers</b></td><td>Cloudflare Workers</td><td><span class="admin-badge status-active">Operational</span></td><td>Global multi-region dispatch</td></tr>'+
-            '<tr><td><b>SQL Database</b></td><td>Cloudflare D1 (torqdesk-db)</td><td><span class="admin-badge status-trial">Action Needed</span></td><td>Check <code>support_tickets</code> table migration</td></tr>'+
-            '<tr><td><b>Document Vault</b></td><td>Cloudflare R2 Bucket</td><td><span class="admin-badge status-active">Operational</span></td><td>Private encrypted glovebox storage</td></tr>'+
-            '<tr><td><b>Auth &amp; Database</b></td><td>Supabase PostgreSQL</td><td><span class="admin-badge status-active">Operational</span></td><td>RLS &amp; Session Guard enforced</td></tr>'+
-          '</tbody>'+
-        '</table>'+
-      '</div>'+
-    '</div>'+
+    renderAdminPhaseCard('Phase 7 — Platform Settings', '/api/admin/settings', 'GET / PATCH', 'CIDR IP allowlisting, global maintenance flag, notification webhooks, and 15-minute session guard configuration.')+
   '</div>';
 }
 
@@ -4466,26 +4797,21 @@ function renderScreenReports(){
         '<p class="muted">Monitor registration growth, vehicle addition trends, support SLAs, and generate compliance exports.</p>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-kpi-grid">'+
-      '<div class="admin-kpi-card"><span class="kpi-label">30-Day New Users</span><span class="kpi-val">1</span><span class="kpi-sub">Organic registrations</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Total Vehicles Managed</span><span class="kpi-val">1</span><span class="kpi-sub">Cloud garage records</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Plus Conversion Rate</span><span class="kpi-val">0%</span><span class="kpi-sub">0 Paid / 1 Free</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Average Ticket SLA</span><span class="kpi-val">&lt; 24h</span><span class="kpi-sub">Customer support velocity</span></div>'+
-    '</div>'+
     '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Compliance &amp; Data Export Center</h3><p class="muted">Download structured CSV files for auditing, accounting, and compliance.</p></div>'+
+      '<div class="admin-card-head"><h3>Compliance &amp; Data Export Center</h3><p class="muted">Download authoritative CSV files for auditing, accounting, and compliance.</p></div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px">'+
         '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportUsersCsv()">'+
-          '<b>📥 Export Users Directory</b><span class="muted" style="font-size:12px">CSV format with account creation dates &amp; tiers</span>'+
+          '<b>📥 Export Users Directory</b><span class="muted" style="font-size:12px">Calls GET /api/admin/users/export.csv</span>'+
         '</button>'+
         '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportTicketsCsv()">'+
-          '<b>📥 Export Support Tickets</b><span class="muted" style="font-size:12px">Full resolution history, priority, and timestamps</span>'+
+          '<b>📥 Export Support Tickets</b><span class="muted" style="font-size:12px">Calls GET /api/admin/tickets/export.csv</span>'+
         '</button>'+
         '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportAuditCsv()">'+
-          '<b>📥 Export Security Audit Log</b><span class="muted" style="font-size:12px">Append-only privileged action log</span>'+
+          '<b>📥 Export Security Audit Log</b><span class="muted" style="font-size:12px">Calls GET /api/admin/audit/export.csv</span>'+
         '</button>'+
       '</div>'+
     '</div>'+
+    renderAdminPhaseCard('Phase 7 — Platform Analytics & Reports', '/api/admin/reports/analytics', 'GET', 'Registration cohort analytics, vehicle growth trends, ticket SLA resolution times, and compliance ledger archives.')+
   '</div>';
 }
 
@@ -4941,6 +5267,28 @@ function switchAdminScreen(screenId){
   }
   if(screenId==='tickets'&&!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
     loadAdminTickets();
+  }
+  if(screenId==='home'&&!adminOverviewData&&!adminOverviewLoading&&!adminOverviewError){
+    loadAdminOverview();
+  }
+  if(screenId==='users'&&!adminUsersList&&!adminUsersLoading&&!adminUsersError){
+    loadAdminUsers();
+  }
+  if(screenId==='tokens'&&!adminTokensList&&!adminTokensLoading&&!adminTokensError){
+    loadAdminTokens();
+  }
+  if(screenId==='plans'&&!adminPlansList&&!adminPlansLoading&&!adminPlansError){
+    loadAdminPlans();
+    loadAdminCoupons();
+  }
+  if(screenId==='upgrades'&&!adminUpgradesList&&!adminUpgradesLoading&&!adminUpgradesError){
+    loadAdminUpgrades();
+  }
+  if(screenId==='team'&&!adminTeamList&&!adminTeamLoading&&!adminTeamError){
+    loadAdminTeam();
+  }
+  if(screenId==='audit'&&!adminAuditList&&!adminAuditLoading&&!adminAuditError){
+    loadAdminAudit();
   }
 }
 
@@ -5577,9 +5925,22 @@ function promptViewAsUser(ticketId){
   return openAdminTicketViewAsUser(ticketId);
 }
 
+let activeAdminSelectedUserId=null;
+
 function openAdminUserDetails(userId){
+  activeAdminSelectedUserId=userId;
   let old=document.getElementById('adminUserModal');
   if(old)old.remove();
+
+  const targetUser=(adminUsersList&&adminUsersList.find(u=>String(u.id)===String(userId)))||{
+    id:userId||'unknown',
+    name:'Customer',
+    email:userId||'unknown@example.com',
+    role:'owner',
+    plan:'lite',
+    status:'active',
+    created_at:null
+  };
 
   const modal=document.createElement('div');
   modal.id='adminUserModal';
@@ -5587,61 +5948,134 @@ function openAdminUserDetails(userId){
   modal.setAttribute('role','dialog');
   modal.setAttribute('aria-modal','true');
 
-  modal.innerHTML='<div class="admin-modal-box">'+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:560px">'+
     '<div class="admin-modal-head">'+
       '<div>'+
         '<h3 style="margin:0;font-size:17px">Manage User Entitlements</h3>'+
-        '<span class="muted" style="font-size:12px">User: rnyburia@gmail.com</span>'+
+        '<span class="muted" style="font-size:12px" id="adminUserModalSubtitle"></span>'+
       '</div>'+
       '<button type="button" class="ghost" onclick="closeAdminUserDetails()">✕</button>'+
     '</div>'+
-    '<div style="display:flex;flex-direction:column;gap:12px">'+
+    '<div style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="admin-card" style="padding:12px;background:#f8fafc">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px">'+
+          '<div><span class="muted">Role:</span> <b id="adminUserModalRole"></b></div>'+
+          '<div><span class="muted">Status:</span> <b id="adminUserModalStatus"></b></div>'+
+          '<div><span class="muted">Plan:</span> <b id="adminUserModalPlan"></b></div>'+
+          '<div><span class="muted">Joined:</span> <span id="adminUserModalJoined"></span></div>'+
+        '</div>'+
+      '</div>'+
       '<div class="field">'+
-        '<label>Subscription Plan</label>'+
-        '<select id="adminUserPlanSelect"><option value="plus">Vehicle Owner Plus (₹69/mo or ₹708/yr)</option><option value="ultra" selected>Ultra / Workshop (Lifetime)</option><option value="free">Vehicle Owner Free</option></select>'+
+        '<label>Subscription Plan Tier</label>'+
+        '<select id="adminUserPlanSelect">'+
+          '<option value="lite"'+((targetUser.plan||'').toLowerCase()==='lite'?' selected':'')+'>Lite / Free Tier (1 Vehicle, 10MB)</option>'+
+          '<option value="premium"'+((targetUser.plan||'').toLowerCase()==='premium'?' selected':'')+'>Vehicle Owner Premium (₹69/mo or ₹708/yr)</option>'+
+          '<option value="ultra"'+((targetUser.plan||'').toLowerCase()==='ultra'?' selected':'')+'>Ultra / Workshop SaaS (Unlimited)</option>'+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
         '<label>Entitlement Validity Duration</label>'+
-        '<select><option>365 Days (1 Year)</option><option selected>Indefinite / Lifetime</option><option>30 Days</option><option>90 Days</option></select>'+
+        '<select id="adminUserDurationSelect">'+
+          '<option value="30">30 Days</option>'+
+          '<option value="90">90 Days</option>'+
+          '<option value="365" selected>365 Days (1 Year)</option>'+
+          '<option value="lifetime">Indefinite / Lifetime</option>'+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
         '<label>Internal Staff Notes</label>'+
-        '<textarea rows="2" placeholder="Record reason for manual entitlement change..."></textarea>'+
+        '<textarea id="adminUserPlanNotes" rows="2" placeholder="Record reason for manual entitlement change..."></textarea>'+
       '</div>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'+
-        '<button type="button" class="primary" onclick="saveUserPlanDraft()">Save Plan Changes</button>'+
-        '<button type="button" class="ghost" onclick="extendUserGrace()">+7 Days Grace</button>'+
-        '<button type="button" class="ghost" style="color:#dc2626" onclick="suspendUserAccount()">Suspend Account</button>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'+
+        '<button type="button" class="primary" id="btnSaveUserPlan" onclick="saveUserPlanDraft(\''+esc(targetUser.id)+'\')">Save Plan Changes</button>'+
+        '<button type="button" class="ghost" id="btnExtendUserGrace" onclick="extendUserGrace(\''+esc(targetUser.id)+'\')">+7 Days Grace</button>'+
+        '<button type="button" class="ghost" id="btnSuspendUser" style="color:'+(targetUser.status==='suspended'?'#16a34a':'#dc2626')+'" onclick="suspendUserAccount(\''+esc(targetUser.id)+'\',\''+esc(targetUser.status||'active')+'\')">'+(targetUser.status==='suspended'?'Reactivate Account':'Suspend Account')+'</button>'+
+      '</div>'+
+      '<div class="admin-detail-section" style="margin-top:6px">'+
+        '<h4 style="margin:0 0 4px;font-size:13px">Registered Vehicles</h4>'+
+        '<div id="adminUserVehiclesList"><small class="muted">Live vehicle records query: <code>GET /api/admin/users/'+esc(targetUser.id)+'/vehicles</code></small></div>'+
+      '</div>'+
+      '<div class="admin-detail-section">'+
+        '<h4 style="margin:0 0 4px;font-size:13px">Recent Support Inquiries</h4>'+
+        '<div id="adminUserTicketsList"><small class="muted">Live ticket history query: <code>GET /api/admin/users/'+esc(targetUser.id)+'/tickets</code></small></div>'+
       '</div>'+
     '</div>'+
   '</div>';
 
   modal.onclick=e=>{if(e.target===modal)closeAdminUserDetails();};
   document.body.appendChild(modal);
+
+  const sub=document.getElementById('adminUserModalSubtitle');
+  if(sub)sub.textContent='User: '+(targetUser.email||targetUser.name||targetUser.id);
+  const rEl=document.getElementById('adminUserModalRole');
+  if(rEl)rEl.textContent=targetUser.role||'owner';
+  const sEl=document.getElementById('adminUserModalStatus');
+  if(sEl)sEl.textContent=targetUser.status||'active';
+  const pEl=document.getElementById('adminUserModalPlan');
+  if(pEl)pEl.textContent=targetUser.plan||'lite';
+  const jEl=document.getElementById('adminUserModalJoined');
+  if(jEl)jEl.textContent=formatAdminDate(targetUser.created_at);
 }
 
 function closeAdminUserDetails(){
   const m=document.getElementById('adminUserModal');
   if(m)m.remove();
+  activeAdminSelectedUserId=null;
 }
 
-function saveUserPlanDraft(){
-  toast('Plan draft saved. Backend endpoint /api/admin/users/:id pending integration.','ok');
-  closeAdminUserDetails();
-}
-
-function extendUserGrace(){
-  toast('Grace period extended by 7 days.','ok');
-  closeAdminUserDetails();
-}
-
-function suspendUserAccount(){
-  const confirmStr=prompt('Type SUSPEND to confirm locking this user account:');
-  if(confirmStr==='SUSPEND'){
-    toast('Account suspended.','ok');
+async function saveUserPlanDraft(userId){
+  const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
+  const plan=document.getElementById('adminUserPlanSelect')?.value||'lite';
+  const duration=document.getElementById('adminUserDurationSelect')?.value||'365';
+  const notes=document.getElementById('adminUserPlanNotes')?.value?.trim()||'';
+  const btn=document.getElementById('btnSaveUserPlan');
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
+  try{
+    await workerPatch('/api/admin/users/'+encodeURIComponent(uid)+'/plan',{plan,duration,notes});
+    toast('User plan updated successfully.','ok');
     closeAdminUserDetails();
-  }else{
-    toast('Suspension cancelled.','info');
+    loadAdminUsers(true);
+  }catch(err){
+    toast('Failed to update user plan: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent='Save Plan Changes';}
+  }
+}
+
+async function extendUserGrace(userId){
+  const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
+  const btn=document.getElementById('btnExtendUserGrace');
+  if(btn){btn.disabled=true;btn.textContent='Extending...';}
+  try{
+    await workerPost('/api/admin/users/'+encodeURIComponent(uid)+'/extend-grace',{days:7});
+    toast('Grace period extended by 7 days.','ok');
+    loadAdminUsers(true);
+  }catch(err){
+    toast('Failed to extend grace: '+(err?.message||err),'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='+7 Days Grace';}
+  }
+}
+
+async function suspendUserAccount(userId,currentStatus){
+  const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
+  const isSuspended=(currentStatus==='suspended');
+  const newStatus=isSuspended?'active':'suspended';
+  const promptWord=isSuspended?'UNSUSPEND':'SUSPEND';
+  const confirmStr=prompt('Type '+promptWord+' to confirm changing user account status:');
+  if(confirmStr!==promptWord){
+    toast('Status change cancelled.','info');
+    return;
+  }
+  const btn=document.getElementById('btnSuspendUser');
+  if(btn){btn.disabled=true;btn.textContent='Updating...';}
+  try{
+    await workerPost('/api/admin/users/'+encodeURIComponent(uid)+'/status',{status:newStatus});
+    toast('User status updated to '+newStatus+'.','ok');
+    closeAdminUserDetails();
+    loadAdminUsers(true);
+  }catch(err){
+    toast('Failed to update status: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent=isSuspended?'Reactivate Account':'Suspend Account';}
   }
 }
 
@@ -5678,7 +6112,7 @@ function openTokenGenModal(){
       '</div>'+
       '<div class="field">'+
         '<label>Optional Mobile Number Binding (+91)</label>'+
-        '<input type="text" placeholder="e.g. 9876543210 (Leave blank for open redemption)">'+
+        '<input type="text" id="tokenGenMobile" placeholder="e.g. 9876543210 (Leave blank for open redemption)">'+
       '</div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeTokenGenModal()">Cancel</button>'+
@@ -5697,11 +6131,32 @@ function closeTokenGenModal(){
 }
 
 function generateAdminToken(){
+  const planEl=document.getElementById('tokenGenPlan');
+  const durationEl=document.getElementById('tokenGenDuration');
+  const usageEl=document.getElementById('tokenGenUsage');
+  const mobileEl=document.getElementById('tokenGenMobile');
+  const plan=planEl?.value||'plus';
+  const duration=Number(durationEl?.value)||365;
+  const usage=usageEl?.value||'single';
+  const mobile=mobileEl?.value?.trim()||null;
+
   closeTokenGenModal();
   const randHex=Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();
   const tokenCode='TD-PLUS-'+randHex;
   adminRevealedToken=tokenCode;
   openTokenRevealModal(tokenCode);
+
+  workerPost('/api/admin/tokens',{
+    token:tokenCode,
+    plan:plan,
+    duration_days:duration,
+    max_uses:usage==='multi'?50:1,
+    bound_mobile:mobile
+  }).then(()=>{
+    loadAdminTokens(true);
+  }).catch(err=>{
+    console.error('Failed to register token with backend:',err?.message||err);
+  });
 }
 
 function openTokenRevealModal(code){
@@ -5719,7 +6174,7 @@ function openTokenRevealModal(code){
     '<h3 style="margin:0 0 6px">One-Time Token Secret Revealed</h3>'+
     '<p class="muted" style="margin:0 0 16px;font-size:13px">Copy this activation token immediately. For security, raw token secret cannot be shown again.</p>'+
     '<div style="background:#f1f5f9;border:2px dashed #94a3b8;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">'+
-      '<code id="revealedTokenCode" style="font-size:18px;font-weight:800;color:#2563eb;letter-spacing:0.05em">'+esc(code)+'</code>'+
+      '<code id="revealedTokenCode" style="font-size:18px;font-weight:800;color:#2563eb;letter-spacing:0.05em"></code>'+
       '<button type="button" class="primary" onclick="copyRevealedToken()">📋 Copy</button>'+
     '</div>'+
     '<div style="margin-top:20px">'+
@@ -5728,10 +6183,12 @@ function openTokenRevealModal(code){
   '</div>';
 
   document.body.appendChild(modal);
+  const codeEl=document.getElementById('revealedTokenCode');
+  if(codeEl)codeEl.textContent=code;
 }
 
 function copyRevealedToken(){
-  if(adminRevealedToken&&navigator.clipboard){
+  if(adminRevealedToken&&typeof navigator!=='undefined'&&navigator.clipboard){
     navigator.clipboard.writeText(adminRevealedToken);
     toast('Token copied to clipboard!','ok');
   }else{
@@ -5745,9 +6202,103 @@ function closeTokenRevealModal(){
   adminRevealedToken=null;
 }
 
-function revokeAdminToken(tokenStr){
-  if(confirm('Revoke activation token '+tokenStr+'?')){
+async function revokeAdminToken(tokenStr){
+  if(!tokenStr)return;
+  if(!confirm('Revoke activation token '+tokenStr+'?'))return;
+  try{
+    await workerPost('/api/admin/tokens/'+encodeURIComponent(tokenStr)+'/revoke');
     toast('Token '+tokenStr+' revoked.','ok');
+    loadAdminTokens(true);
+  }catch(err){
+    toast('Failed to revoke token: '+(err?.message||err),'error');
+  }
+}
+
+function openCreateCouponModal(){
+  let old=document.getElementById('adminCouponModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='adminCouponModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Create Promotional Coupon</h3>'+
+        '<span class="muted" style="font-size:12px">Server-verified discount codes for seasonal campaigns or garages.</span>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeCreateCouponModal()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label>Coupon Code</label>'+
+        '<input type="text" id="couponCodeInput" placeholder="e.g. DIWALI50, GARAGE20" style="text-transform:uppercase">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Discount Percentage (%)</label>'+
+        '<input type="number" id="couponDiscountInput" min="1" max="100" placeholder="e.g. 20" value="20">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Maximum Redemptions (Optional)</label>'+
+        '<input type="number" id="couponMaxUsesInput" min="1" placeholder="Leave empty for unlimited">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Expiry Date (Optional)</label>'+
+        '<input type="date" id="couponValidUntilInput">'+
+      '</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+        '<button type="button" class="ghost" onclick="closeCreateCouponModal()">Cancel</button>'+
+        '<button type="button" class="primary" id="btnSubmitCoupon" onclick="submitCreateCoupon()">Create Coupon</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeCreateCouponModal();};
+  document.body.appendChild(modal);
+}
+
+function closeCreateCouponModal(){
+  const m=document.getElementById('adminCouponModal');
+  if(m)m.remove();
+}
+
+async function submitCreateCoupon(){
+  const code=document.getElementById('couponCodeInput')?.value?.trim()?.toUpperCase()||'';
+  const discount=Number(document.getElementById('couponDiscountInput')?.value||0);
+  const maxUses=Number(document.getElementById('couponMaxUsesInput')?.value)||null;
+  const validUntil=document.getElementById('couponValidUntilInput')?.value||null;
+  if(!code){
+    toast('Coupon code is required.','error');
+    return;
+  }
+  if(isNaN(discount)||discount<1||discount>100){
+    toast('Discount must be between 1% and 100%.','error');
+    return;
+  }
+  const btn=document.getElementById('btnSubmitCoupon');
+  if(btn){btn.disabled=true;btn.textContent='Creating...';}
+  try{
+    await workerPost('/api/admin/coupons',{code,discount_percent:discount,max_uses:maxUses,expires_at:validUntil});
+    toast('Coupon '+code+' created successfully.','ok');
+    closeCreateCouponModal();
+    loadAdminCoupons(true);
+  }catch(err){
+    toast('Failed to create coupon: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent='Create Coupon';}
+  }
+}
+
+async function deleteAdminCoupon(couponId){
+  if(!confirm('Deactivate and delete this promotional coupon?'))return;
+  try{
+    await workerDelete('/api/admin/coupons/'+encodeURIComponent(couponId));
+    toast('Coupon deactivated.','ok');
+    loadAdminCoupons(true);
+  }catch(err){
+    toast('Failed to deactivate coupon: '+(err?.message||err),'error');
   }
 }
 
@@ -5758,6 +6309,8 @@ function openTeamInviteModal(){
   const modal=document.createElement('div');
   modal.id='adminTeamInviteModal';
   modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
 
   modal.innerHTML='<div class="admin-modal-box">'+
     '<div class="admin-modal-head">'+
@@ -5768,9 +6321,14 @@ function openTeamInviteModal(){
       '<div class="field"><label>Member Email</label><input type="email" id="teamInviteEmail" placeholder="admin@example.com"></div>'+
       '<div class="field">'+
         '<label>Role Clearance</label>'+
-        '<select id="teamInviteRole"><option value="support">Support Lead (Ticket Triage)</option><option value="billing">Billing Manager (Plans &amp; Tokens)</option><option value="auditor">Compliance Auditor (Read-Only)</option></select>'+
+        '<select id="teamInviteRole">'+
+          '<option value="support_lead">Support Lead (Ticket Triage)</option>'+
+          '<option value="billing_admin">Billing Admin (Plans &amp; Tokens)</option>'+
+          '<option value="auditor">Compliance Auditor (Read-Only Audit Log)</option>'+
+          '<option value="super_admin">Super Admin (Full Administrative Access)</option>'+
+        '</select>'+
       '</div>'+
-      '<small class="muted">Invite links are single-use. Expiration follows the configured Supabase Auth email-link lifetime.</small>'+
+      '<small class="muted">Invite creates an administrative profile and issues server credentials.</small>'+
       '<div id="teamInviteStatus" class="muted" role="status" aria-live="polite" style="display:none;padding:9px 11px;border-radius:8px;white-space:normal"></div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeTeamInviteModal()">Cancel</button>'+
@@ -5790,44 +6348,91 @@ function closeTeamInviteModal(){
 
 async function sendTeamInvite(){
   const email=document.getElementById('teamInviteEmail')?.value.trim().toLowerCase()||'';
-  const role=document.getElementById('teamInviteRole')?.value||'';
+  const role=document.getElementById('teamInviteRole')?.value||'support_lead';
   const status=document.getElementById('teamInviteStatus');
   const button=document.getElementById('teamInviteSubmitBtn');
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
     toast('Valid member email required.','error');
     return;
   }
-  if(status){status.style.display='block';status.style.background='rgba(37,99,235,.08)';status.style.color='#1d4ed8';status.textContent='Submitting invitation to Supabase Auth…';}
+  if(status){status.style.display='block';status.style.background='rgba(37,99,235,.08)';status.style.color='#1d4ed8';status.textContent='Submitting invitation to server…';}
   if(button){button.disabled=true;button.textContent='Sending…';}
   try{
-    const result=await workerPost('/api/admin/team-invites',{email,role});
-    if(status){status.style.background='rgba(22,163,74,.08)';status.style.color='#166534';status.textContent='Supabase accepted the invitation request. Actual email delivery depends on the configured mail provider. Invite can be resent if the recipient does not receive it.';}
-    toast('Supabase accepted the invitation request for '+email+'.','ok');
-    if(button){button.textContent='Resend Invitation';button.disabled=false;}
-    // Keep the modal open so the admin can deliberately resend after checking delivery.
+    const result=await workerPost('/api/admin/team/members',{email,role});
+    if(status){
+      status.style.background='rgba(22,163,74,.08)';status.style.color='#166534';
+      if(result?.temp_password){
+        status.innerHTML='Invitation sent. One-time temporary password: <code style="font-weight:700">'+esc(result.temp_password)+'</code> (Copy now; never stored).';
+      }else{
+        status.textContent='Invitation sent successfully to '+email+'.';
+      }
+    }
+    toast('Team invitation sent for '+email+'.','ok');
+    if(button){button.textContent='Done';button.disabled=false;button.onclick=closeTeamInviteModal;}
+    loadAdminTeam(true);
   }catch(err){
     const detail=String(err?.message||'Unknown invitation error');
-    if(status){status.style.background='rgba(220,38,38,.08)';status.style.color='#b91c1c';status.textContent='Invitation failed: '+detail+' Check the email and provider configuration, then select Retry / Resend.';}
-    if(button){button.textContent='Retry / Resend Invitation';button.disabled=false;}
-    toast('Invitation was not confirmed by Supabase. '+detail,'error');
-    console.error('Team invitation request failed', {status:err?.status||null,code:err?.code||null,message:detail});
+    if(status){status.style.background='rgba(220,38,38,.08)';status.style.color='#b91c1c';status.textContent='Invitation failed: '+detail;}
+    if(button){button.textContent='Retry Invitation';button.disabled=false;}
+    toast('Invitation failed: '+detail,'error');
+  }
+}
+
+async function revokeTeamMember(memberId){
+  if(!confirm('Revoke access for this administrative team member?'))return;
+  try{
+    await workerDelete('/api/admin/team/members/'+encodeURIComponent(memberId));
+    toast('Team member access revoked.','ok');
+    loadAdminTeam(true);
+  }catch(err){
+    toast('Failed to revoke team member: '+(err?.message||err),'error');
+  }
+}
+
+async function handleUpgradeAction(id,action){
+  const noteEl=document.getElementById('upgradeNote_'+id);
+  const note=noteEl?.value?.trim()||'';
+  try{
+    await workerPost('/api/admin/upgrade-requests/'+encodeURIComponent(id)+'/'+encodeURIComponent(action),{note});
+    toast('Upgrade request marked '+action+'.','ok');
+    loadAdminUpgrades(true);
+  }catch(err){
+    toast('Failed to '+action+' upgrade request: '+(err?.message||err),'error');
   }
 }
 
 function updateUpgradeStatus(reqId,status){
-  toast('Upgrade request marked '+status+'.','ok');
+  handleUpgradeAction(reqId,status);
 }
 
-function exportUsersCsv(){
-  toast('Exporting Users CSV (Permission: super_admin:export)...','ok');
+async function exportUsersCsv(){
+  try{
+    toast('Exporting Users CSV...','info');
+    await workerDownloadCsv('/api/admin/users/export.csv','torq-desk-users.csv');
+    toast('Users CSV downloaded successfully.','ok');
+  }catch(err){
+    toast('Users export failed: '+(err?.message||err),'error');
+  }
 }
 
-function exportTicketsCsv(){
-  toast('Exporting Tickets CSV...','ok');
+async function exportTicketsCsv(){
+  try{
+    toast('Exporting Tickets CSV...','info');
+    await workerDownloadCsv('/api/admin/tickets/export.csv','torq-desk-tickets.csv');
+    toast('Tickets CSV downloaded successfully.','ok');
+  }catch(err){
+    toast('Tickets export failed: '+(err?.message||err),'error');
+  }
 }
 
-function exportAuditCsv(){
-  toast('Exporting Security Audit CSV...','ok');
+async function exportAuditCsv(){
+  try{
+    toast('Exporting Security Audit CSV...','info');
+    await workerDownloadCsv('/api/admin/audit/export.csv','torq-desk-audit.csv');
+    toast('Audit CSV downloaded successfully.','ok');
+  }catch(err){
+    toast('Audit export failed: '+(err?.message||err),'error');
+  }
 }
 
 function saveFestivalBanner(){
@@ -5836,7 +6441,8 @@ function saveFestivalBanner(){
 
 async function adminView(){
   const primaryAdminEmail='rnyburia@gmail.com';
-  if(String(user?.email||'').trim().toLowerCase()!==primaryAdminEmail){
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (user && (user.role==='admin'||user.role==='super_admin'||String(user.email||'').trim().toLowerCase()===primaryAdminEmail));
+  if(!isCandidateAdmin){
     nav('dashboard');
     return;
   }
@@ -5873,6 +6479,12 @@ window.revokeAdminToken=revokeAdminToken;
 window.openTeamInviteModal=openTeamInviteModal;
 window.closeTeamInviteModal=closeTeamInviteModal;
 window.sendTeamInvite=sendTeamInvite;
+window.openCreateCouponModal=openCreateCouponModal;
+window.closeCreateCouponModal=closeCreateCouponModal;
+window.submitCreateCoupon=submitCreateCoupon;
+window.deleteAdminCoupon=deleteAdminCoupon;
+window.handleUpgradeAction=handleUpgradeAction;
+window.revokeTeamMember=revokeTeamMember;
 window.updateUpgradeStatus=updateUpgradeStatus;
 window.exportUsersCsv=exportUsersCsv;
 window.exportTicketsCsv=exportTicketsCsv;

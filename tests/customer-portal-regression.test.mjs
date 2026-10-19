@@ -3161,4 +3161,161 @@ test("Support Ticket Workflow: Unified Enable Chat action includes optional mess
   assert.ok(updatedHtml.includes("Disable Chat"), "Must display Disable Chat button when active");
 });
 
+test("Super Admin Phase 2: User management drawer displays user data with textContent and plan update calls PATCH /api/admin/users/:id/plan", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    currentAdminRole = 'super_admin';
+    adminUsersList = [{
+      id: 'usr-456',
+      name: 'Priya Sharma',
+      email: 'priya@example.com',
+      phone: '9876543210',
+      role: 'owner',
+      plan: 'lite',
+      status: 'active',
+      created_at: 1700000000
+    }];
+    globalThis.__lastPatchCall = null;
+    workerPatch = async (path, body) => {
+      globalThis.__lastPatchCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openAdminUserDetails('usr-456');");
+  const modal = h.elements.get('adminUserModal');
+  assert.ok(modal, "User management modal must be open");
+
+  // Verify textContent elements
+  assert.equal(h.eval("document.getElementById('adminUserModalSubtitle').textContent"), "User: priya@example.com");
+  assert.equal(h.eval("document.getElementById('adminUserModalRole').textContent"), "owner");
+  assert.equal(h.eval("document.getElementById('adminUserModalPlan').textContent"), "lite");
+  assert.equal(h.eval("document.getElementById('adminUserModalStatus').textContent"), "active");
+
+  // Change plan
+  h.eval(`
+    document.getElementById('adminUserPlanSelect').value = 'premium';
+    document.getElementById('adminUserDurationSelect').value = '365';
+    document.getElementById('adminUserPlanNotes').value = 'Approved offline payment';
+  `);
+  await h.eval("saveUserPlanDraft('usr-456')");
+
+  const patchCall = h.eval("globalThis.__lastPatchCall");
+  assert.equal(patchCall.path, "/api/admin/users/usr-456/plan", "Must call PATCH /api/admin/users/:id/plan");
+  assert.equal(patchCall.body.plan, "premium");
+  assert.equal(patchCall.body.notes, "Approved offline payment");
+
+  // Modal must close
+  assert.ok(!h.elements.get('adminUserModal'), "Modal must close on success");
+});
+
+test("Super Admin Phase 2: Promotional coupons can be created via POST /api/admin/coupons and deactivated via DELETE /api/admin/coupons/:id", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    currentAdminRole = 'super_admin';
+    globalThis.__lastPostCall = null;
+    globalThis.__lastDeleteCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true, data: { id: 'cpn-1' } };
+    };
+    workerDelete = async (path) => {
+      globalThis.__lastDeleteCall = { path };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openCreateCouponModal();");
+  assert.ok(h.elements.get('adminCouponModal'), "Coupon modal must be created");
+
+  h.eval(`
+    document.getElementById('couponCodeInput').value = 'DIWALI50';
+    document.getElementById('couponDiscountInput').value = '50';
+    document.getElementById('couponMaxUsesInput').value = '100';
+  `);
+  await h.eval("submitCreateCoupon()");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/admin/coupons", "Must call POST /api/admin/coupons");
+  assert.equal(postCall.body.code, "DIWALI50");
+  assert.equal(postCall.body.discount_percent, 50);
+  assert.equal(postCall.body.max_uses, 100);
+
+  // Deactivate coupon
+  await h.eval("deleteAdminCoupon('cpn-1')");
+  const deleteCall = h.eval("globalThis.__lastDeleteCall");
+  assert.equal(deleteCall.path, "/api/admin/coupons/cpn-1", "Must call DELETE /api/admin/coupons/:id");
+});
+
+test("Super Admin Phase 2: CSV exports call workerDownloadCsv on real endpoints", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    currentAdminRole = 'super_admin';
+    globalThis.__downloadCalls = [];
+    workerDownloadCsv = async (path, filename) => {
+      globalThis.__downloadCalls.push({ path, filename });
+    };
+  `);
+
+  await h.eval("exportUsersCsv()");
+  await h.eval("exportTicketsCsv()");
+  await h.eval("exportAuditCsv()");
+
+  const calls = h.eval("globalThis.__downloadCalls");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].path, "/api/admin/users/export.csv");
+  assert.equal(calls[1].path, "/api/admin/tickets/export.csv");
+  assert.equal(calls[2].path, "/api/admin/audit/export.csv");
+});
+
+test("Super Admin Phase 2: Missing or 404 admin endpoints render .admin-blocked-card containing HTTP method and route name", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    currentAdminRole = 'super_admin';
+    adminOverviewError = { message: 'Route /api/admin/overview returned 404' };
+    adminUsersError = { message: 'Route /api/admin/users returned 404' };
+    adminTokensError = { message: 'Route /api/admin/tokens returned 404' };
+    adminPlansError = { message: 'Route /api/admin/plans returned 404' };
+    adminTeamError = { message: 'Route /api/admin/team/members returned 404' };
+    adminAuditError = { message: 'Route /api/admin/audit returned 404' };
+  `);
+
+  const homeHtml = h.eval("renderScreenHome()");
+  assert.ok(homeHtml.includes("admin-blocked-card"), "Home must render blocked card when overview fails");
+  assert.ok(homeHtml.includes("GET"), "Blocked card must show GET method");
+  assert.ok(homeHtml.includes("/api/admin/overview"), "Blocked card must show /api/admin/overview");
+
+  const usersHtml = h.eval("renderScreenUsers()");
+  assert.ok(usersHtml.includes("admin-blocked-card"));
+  assert.ok(usersHtml.includes("/api/admin/users"));
+
+  const tokensHtml = h.eval("renderScreenTokens()");
+  assert.ok(tokensHtml.includes("admin-blocked-card"));
+  assert.ok(tokensHtml.includes("/api/admin/tokens"));
+
+  const plansHtml = h.eval("renderScreenPlans()");
+  assert.ok(plansHtml.includes("admin-blocked-card"));
+  assert.ok(plansHtml.includes("/api/admin/plans"));
+
+  const teamHtml = h.eval("renderScreenTeam()");
+  assert.ok(teamHtml.includes("admin-blocked-card"));
+  assert.ok(teamHtml.includes("/api/admin/team/members"));
+
+  const auditHtml = h.eval("renderScreenAudit()");
+  assert.ok(auditHtml.includes("admin-blocked-card"));
+  assert.ok(auditHtml.includes("/api/admin/audit"));
+});
+
 

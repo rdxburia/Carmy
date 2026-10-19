@@ -731,8 +731,35 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - Added CSS classes prefixed with `admin-` in `css/styles.css`: `.admin-account-shell`, `.admin-account-grid`, `.admin-account-card`, `.admin-profile-meta`, `.admin-password-meter`, `.admin-password-meter-fill`, `.admin-password-feedback`, `.admin-timeout-badge`, `.admin-blocked-card`.
   - Bumped asset cache busters to `?v=2026.10.19-phase1-admin` in `index.html`.
   - Added 3 new automated test cases to `tests/customer-portal-regression.test.mjs` (Account & Security read-only profile rendering, password change validation & server errors, and `adminSignOut()` storage & class cleanup).
+  - `npm.cmd test`: 142/142 tests passing (100% green, 0 failures, 0 skips).
+
+## 2026-10-19 — Phase 2: Super Admin Screens & Real Endpoints
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Super Admin console overhaul connecting all screens to real API endpoints, implementing strict blocked card rendering on missing/404 routes, eliminating fake toasts, removing hardcoded emails, and adding CSV compliance exports.
+- **Implemented Changes:**
+  - **Overview (`home`):** Connected to `GET /api/admin/overview` with KPI cards (Users, Active, Tickets, Revenue, Upgrades), system health indicator, operational quick actions, activity feed, and `.admin-blocked-card` on 404.
+  - **User Directory & Entitlements (`users`):** Connected to `GET /api/admin/users` with client-side role/plan/status filtering and search. User Drawer (`openAdminUserDetails`):
+    - Profile metadata rendered strictly with `textContent`.
+    - Plan tier changes wired to `PATCH /api/admin/users/:id/plan` (`saveUserPlanDraft`).
+    - Grace period extensions wired to `POST /api/admin/users/:id/extend-grace` (`extendUserGrace`).
+    - Suspend/unsuspend toggle wired to `POST /api/admin/users/:id/status` (`suspendUserAccount`).
+    - Registered vehicles query linked to `GET /api/admin/users/:id/vehicles`.
+    - Support inquiries linked to `GET /api/admin/users/:id/tickets`.
+  - **Activation Tokens (`tokens`):** Connected to `GET /api/admin/tokens`. Modal to generate tokens (`openTokenGenModal`, `generateAdminToken`) registers tokens via `POST /api/admin/tokens` and displays one-time reveal modal (`openTokenRevealModal`) wiped from memory on modal close. Revocation wired to `POST /api/admin/tokens/:id/revoke` (`revokeAdminToken`).
+  - **Plans, Pricing & Coupons (`plans`):** Connected to `GET /api/admin/plans` and `GET /api/admin/coupons`. Added promotional coupon creation modal (`openCreateCouponModal`, `submitCreateCoupon`) wired to `POST /api/admin/coupons` and deactivation wired to `DELETE /api/admin/coupons/:id` (`deleteAdminCoupon`).
+  - **Customer Upgrade Queue (`upgrades`):** Connected to `GET /api/admin/upgrade-requests` with triage note input and Approve/Reject buttons wired to `POST /api/admin/upgrade-requests/:id/approve` and `reject` (`handleUpgradeAction`).
+  - **Garage Network (`garages`):** Rendered Phase 5 placeholder card citing target endpoint `GET /api/admin/garages`.
+  - **Team & Access Control (`team`):** Connected to `GET /api/admin/team/members`. Invitation modal (`openTeamInviteModal`, `sendTeamInvite`) wired to `POST /api/admin/team/members` displaying one-time temporary passwords without storage. Revocation wired to `DELETE /api/admin/team/members/:id` (`revokeTeamMember`). Protected primary owner identified via server attributes (`is_owner`, `is_primary`) without hardcoded email string.
+  - **Security Audit Log (`audit`):** Connected to `GET /api/admin/audit` with actor/action filters and Export Audit CSV trigger.
+  - **Content & Policy Editor (`content`):** Rendered Phase 7 placeholder card citing target endpoint `GET /api/admin/content`.
+  - **Platform Settings (`settings`):** Rendered Phase 7 placeholder card citing target endpoint `GET /api/admin/settings`.
+  - **Platform Analytics & Reports (`reports`):** Rendered Phase 7 placeholder card citing `GET /api/admin/reports/analytics` alongside real CSV export buttons (`exportUsersCsv`, `exportTicketsCsv`, `exportAuditCsv`) using `workerDownloadCsv` on endpoints `/api/admin/users/export.csv`, `/api/admin/tickets/export.csv`, and `/api/admin/audit/export.csv`.
+  - **Styles & Classes:** Appended `.admin-phase-card`, `.admin-empty-state`, `.admin-detail-section`, `.admin-coupon-badge` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase2-admin`.
+  - **Automated Tests:** Added 4 new regression tests in `tests/customer-portal-regression.test.mjs` verifying user drawer textContent & plan PATCH, coupon creation & deactivation, CSV export endpoints, and BLOCKED card rendering on 404 responses.
 - **Test Suite Status:**
   - `node --check js/app.js`: Clean (0 syntax errors).
-  - `npm.cmd test`: 142/142 tests passing (100% green, 0 failures, 0 skips).
+  - `npm.cmd test`: 146/146 tests passing (100% green, 0 failures, 0 skips).
 
 
