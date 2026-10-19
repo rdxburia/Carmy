@@ -669,3 +669,50 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
 - Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
 - Production remains HOLD and untouched. PR #161 remains open/unmerged.
+
+
+## 2026-10-19 18:50 IST — Phase 0: Baseline Verification & Feature Inventory
+- **Branch Configuration:** Initialized integration branch `feat/frontend-roadmap` based on `origin/feat/ticket-frontend` (SHA: `4b3f8206cc7058643296a399d6c7d016d6ca2e80`). Note: `origin/feat/ticket-frontend-v2` does not exist on origin; cherry-picked v2 ticket enhancements from commit `50e11ad` (`feat(support-v2): add audited view-as-user panel, roster handling, unified 48h chat enable, and test suite`).
+- **Baseline Verification:**
+  - `node --check` across all tracked `.js` and `.mjs` files: 0 syntax errors, 100% clean.
+  - `npm.cmd test`: 139 / 139 tests passed (0 failed, 0 skipped).
+  - Pre-existing test failures before changes: 0 (No pre-existing failures).
+- **Feature Inventory Table:**
+| Area | Feature | Status | File & Function | Evidence / Test |
+| :--- | :--- | :--- | :--- | :--- |
+| Auth & Session | Customer Sign-In (Password Grant) | WORKING | `js/app.js` -> `signIn()`, `authForm()` | Supabase Auth password grant; verified in tests & live staging |
+| Auth & Session | Sign-Out (Global Session Revocation) | WORKING | `js/app.js` -> `logout()` | Calls `POST /api/session/revoke`, clears storage, redirects |
+| Auth & Session | Server-Enforced Idle Timeout (120s) | WORKING | `js/session-guard.js`, `idle-session.js` | `tests/idle-session-auth.test.mjs` (5/5 PASS) |
+| Auth & Session | Customer Password Change | WORKING | `js/app.js` -> `ownerProfileView()` | Supabase `auth.updateUser()` |
+| Admin Shell | Admin Role Resolution | PARTIAL / BROKEN | `js/app.js` -> `checkSuperAdminStatus()` | Relies on hardcoded email fallback; `GET /api/admin/me` integration pending |
+| Admin Shell | Admin Sign-Out | PARTIAL | `js/app.js` -> `logout()` | Global logout works; lacks dedicated admin redirect/clean view state |
+| Admin Shell | Admin Password Change | MISSING | `js/app.js` | Not present in admin workspace shell |
+| Admin Shell | Admin Session Timeout Display | MISSING | `js/app.js` | 15-minute admin timeout constant not displayed |
+| Vehicles | Vehicle Dashboard Overview | WORKING | `js/app.js` -> `dash()` | `tests/customer-portal-regression.test.mjs` (82/82 PASS) |
+| Vehicles | Vehicle Add, Edit, Delete | WORKING | `js/app.js` -> `carForm()`, `saveCar()`, `deleteCar()` | Verified across test harnesses and DB sync |
+| Vehicles | Service History & Logging | WORKING | `js/app.js` -> `renderHistory()`, `recordForm()`, `saveRecord()` | Additive logs, prefill, date formatting verified |
+| Documents | Document Vault Upload & List | WORKING | `js/app.js` -> `docsView()`, upload handlers | R2 storage & mime signature validation |
+| Documents | Document Deletion Security PIN | PARTIAL / BROKEN | `js/app.js` -> `changeDeletePassword()` | Uses browser prompt() and plaintext localStorage PIN; requires TPIN API migration in Phase 4 |
+| Reports | Vehicle A4 Inspection Report | WORKING | `js/app.js` -> `report()` | Formatted statutory A4 report print dialog |
+| Statutory | Form 29 / 30 Ownership Transfer Packet | WORKING | `js/app.js` -> `openTransferWizard()`, `generateTransferPdf()` | Multi-step statutory PDF generation with ordinal dates & non-blank check |
+| Support | Customer Create Support Ticket | WORKING | `js/app.js` -> `submitTicket()`, `wireTicketForm()` | `POST /api/tickets` with car ownership verification |
+| Support | Customer Ticket List & Status Stepper | WORKING | `js/app.js` -> `renderTicketContent()` | Accessible list with unread pills, stepper status, conditional reply |
+| Support | Admin Support Ticket Triage | WORKING | `js/app.js` -> `loadAdminTickets()`, `openAdminTicketDetails()` | Status transitions, SLA breach indicators, 48h countdown, roster handling |
+| Support | Admin Audited View-As-User | WORKING | `js/app.js` -> `openAdminTicketViewAsUser()` | Requires min 10-char reason, calls `POST /api/admin/tickets/:id/view-as-user`, fails closed to disabled "Not available yet" on 404 |
+| Admin Console | Admin Workspace Shell (Desktop & Mobile) | WORKING | `js/app.js` -> `renderAdminShell()` | Isolated topbar, desktop sidebar, 5-tab mobile navigation with More drawer |
+| Admin Console | Overview & Health KPIs | PARTIAL | `js/app.js` -> `renderScreenHome()` | Static KPI mockup; requires `GET /api/admin/overview` |
+| Admin Console | User Directory & Entitlements | PARTIAL | `js/app.js` -> `renderScreenUsers()` | Static mockup; requires `GET /api/admin/users` and detail drawer |
+| Admin Console | Activation Token Generator | PARTIAL | `js/app.js` -> `renderScreenTokens()`, `openTokenGenModal()` | One-time reveal modal works; requires real `POST /api/admin/tokens` |
+| Admin Console | Plans, Pricing & Coupons | PARTIAL | `js/app.js` -> `renderScreenPlans()` | Hardcoded cards; requires `GET /api/admin/plans`, `GET/POST /api/admin/coupons` |
+| Admin Console | Customer Upgrade Requests | PARTIAL | `js/app.js` -> `renderScreenUpgrades()` | Static mockup; requires `GET /api/admin/upgrade-requests` |
+| Admin Console | Team Member Directory & Invite | PARTIAL | `js/app.js` -> `renderScreenTeam()` | Static mockup; requires `GET /api/admin/team/members`, `POST /api/admin/team/members` |
+| Admin Console | Cryptographic Security Audit Log | PARTIAL | `js/app.js` -> `renderScreenAudit()` | Static mockup; requires `GET /api/admin/audit` |
+| Admin Console | Admin Account & Security | MISSING | `js/app.js` | Not present in sidebar or screens |
+| TPIN | TPIN Management & Verification | MISSING | `js/app.js` | Not implemented; slated for Phase 4 |
+| Garage | Workshop Onboarding & Workspace UI | PARTIAL | `garage-onboarding.html`, `js/garage-*.js` | 5-step wizard and workspace exist; needs billing/invoice, plan limits in Phase 5 |
+| Team Member | Team Member First-Login & Restricted Shell | MISSING | `js/app.js` | Slated for Phase 6 |
+- **Phase 0 Frontend Bug Fixes:**
+  - Removed fake success toasts (`Draft changes saved locally.`, `IP allowlist placeholder saved.`, `Plan draft saved. Backend endpoint pending...`) that fired without server responses.
+  - Hardcoded admin error message updated to dynamic user context.
+- **Constraints & Governance:** Frontend-only changes; zero backend, Worker, D1, or Supabase migrations; no production touch; no merges.
+
