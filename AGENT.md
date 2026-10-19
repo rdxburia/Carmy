@@ -214,3 +214,36 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Staging URL smoke PASS
 - After removing the production redirect from the staging Pages branch, GitHub Actions run `39185379833` passed all five live smoke checks: stable Pages login UI, staging-only `js/config.js`, Worker root, missing bearer token 401, tampered JWT 401, and CORS preflight (the report has five named checks; the auth/CORS checks are individually PASS).
 - Live stable URL `https://carmy-ticket-staging.pages.dev/js/config.js` now returns `application/javascript`, contains the staging Supabase URL and staging Worker URL, and does not contain the production Supabase URL. The old immutable deployment URL `https://a0b362e6.carmy-ticket-staging.pages.dev` still serves the earlier redirected build; do not use it. Use only the stable Pages alias.
+
+
+## 2026-10-19 — Autonomous v5 W1–W3 execution record
+- W1: Staging Supabase ref verified as `vejccahjrlwhaniajgez`; SQL reports zero Auth users in this project, so owner-listed QA accounts are absent here. No manual writes to Auth system tables were attempted. Auth Admin creation and password-grant sign-in require a supported Auth/Management API path not present in connected actions.
+- W2: Cloudflare inventory for `carmy-api-staging` has `CACHE_INVALIDATION_SECRET` only; `SUPABASE_SECRET_KEY` is missing. Supabase key tool returns only publishable/anon keys. Never substitute them for privileged credentials or log secret values.
+- W3: Worker script tag `ca37e48aa3b74432954ce6e4a2d9a0b3`, trigger `4f8aa961-d0fc-43d1-90f3-b8016e090b5c`, latest build `c67646ef-3f63-4137-9a20-4e21e454f5d5` succeeded for commit `e2ab6e69a019826e69c7af04e6f823a1a1632721`. Version 28 `130bfe07-5f43-4d90-afd0-3954d5ba3058` was verified to use staging-only D1/R2/rate-limit/Supabase resources.
+- Added staging binding guard test and CI workflow on branch `ci/staging-worker-bindings-20261019`; see `PROGRESS.md` for exact details. Wait for CI/PR and sync test to the Cloudflare trigger branch before changing its build command to execute the guard.
+- Do not modify production resources while any production gate is unmet.
+
+
+## 2026-10-19 — Autonomous Mode v5 execution status
+- W1: Staging project ref verified, but `auth.users=0`, `auth.identities=0`, and `super_admins=0`; no JWT sign-in/admin registry PASS. The full execution details and exact connector errors are in `PROGRESS.md`.
+- W2: `SUPABASE_SECRET_KEY` absent on staging Worker. Cloudflare exact error: `10056: Binding 'SUPABASE_SECRET_KEY' not found.`; Supabase tool returns only public keys; Management API URL is inaccessible through web tool. Never substitute a publishable key.
+- W3: PASS for staging build trigger and guard. Build `c9433d84-ccb7-4d9a-b46b-cf8b74781a2b` succeeded with the guard command and deployed staging Worker version 30 `09d68d44-3f3f-4f7a-a245-93d343663b06`, 100% traffic, isolated D1/R2/rate-limit/Supabase bindings. PR #173 merged; guard workflow passed.
+- W4: Staging login URL https://carmy-ticket-staging.pages.dev; staging API URL https://carmy-api-staging.mr-rny-buria.workers.dev. Deployment metadata is successful, but actual login cannot be proven until Auth users/key are fixed. Keep PR #161 open and unmerged.
+- W5: Real-JWT E2E not run; no synthetic ticket was created.
+- W6: Duplicate-contact migrations and cache invalidation secret names verified in staging Vault/Worker; values never read.
+- W7: Production backup bookmark and export success recorded, but export size/checksum missing. Production schema/aggregate baseline and 0007 impact counts are recorded. Production Worker version 248 is active, but exact Git commit mapping is not available.
+- Production remains HOLD until all five gates pass. No production data/schema/Worker was changed. See the dated PROGRESS.md entry for detailed evidence and next actions.
+
+
+## 2026-10-19 — Staging QA retry checkpoint
+- Verified staging Auth users for both customer accounts and the admin account; all three emails are confirmed in `vejccahjrlwhaniajgez`.
+- Activated the staging-only QA admin registry entry for the admin user UUID, with `created_by=NULL` because no staging owner actor was available.
+- `SUPABASE_SECRET_KEY` is still absent from `carmy-api-staging`; do not put key material in chat, source, or logs. Continue only after the owner securely sets the key on the staging Worker.
+- Real-JWT E2E and all production rollout gates remain HOLD. Do not modify production or merge PR #161.
+
+
+## 2026-10-19 — Staging secret inventory retry
+- Cloudflare API read-only inventory for Worker `carmy-api-staging` succeeded (HTTP 200). Secret binding names returned: `CACHE_INVALIDATION_SECRET`, `SUPABASE_SECRET_KEY`. Secret values were not requested, returned, logged, or copied.
+- This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
+- Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
+- Production remains HOLD and untouched. PR #161 remains open/unmerged.
