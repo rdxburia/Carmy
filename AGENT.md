@@ -193,3 +193,9 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - PR #168 merged at `3e050234079df6157dc718e625be0339584ed3f4`; append-only staging isolation and production HOLD evidence is now on `main`.
 - Current staging status remains: active Worker version 19/deployment `2a9497bb-a110-457f-aded-5c16b77dd75a` with staging D1/R2/rate-limit/Supabase URL bindings; `SUPABASE_SECRET_KEY` absent. Authenticated E2E remains unverified because the connected Supabase tools cannot retrieve the privileged staging key.
 - Production remains untouched pending passing staging E2E and all production preconditions.
+
+
+## 2026-10-19 — Staging duplicate-contact parity restored
+- Read production migration names and compared routine/trigger names only. Production has `check_registration_duplicate`, `reject_duplicate_profile_contacts_on_signup`, and BEFORE INSERT trigger `auth.reject_duplicate_contacts_before_auth_signup`; staging had the helper but lacked the signup guard and trigger.
+- Reconstructed two idempotent migration files on branch `fix/staging-auth-duplicate-guard-v4`: `20261019010000_add_registration_duplicate_check.sql` and `20261019010001_block_duplicate_contacts_during_auth_signup.sql`. Applied staging-only connector migrations `v4_reconstructed_add_registration_duplicate_check` (ledger version `20261019011825`) and `v4_reconstructed_block_duplicate_contacts_during_auth_signup` (ledger version `20261019011830`).
+- Verified staging routine names include both duplicate-check functions and verified `reject_duplicate_contacts_before_auth_signup` exists on `auth.users` as a BEFORE INSERT trigger. No production schema or data was modified. These migrations were applied only to `vejccahjrlwhaniajgez`.
