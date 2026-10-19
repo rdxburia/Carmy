@@ -818,3 +818,40 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - Zero deployments triggered. Production isolation maintained 100%.
 
 
+## 2026-10-19 17:10 IST — Autonomous security fix: JWT signature tampering and staging E2E resolution
+- **Objective:** Resolve staging E2E check 2 failure (`tampered JWT must return 401; actual HTTP status was 200`, Run ID: `AUTOV4-1792408980253-8c6e8c`).
+- **Root Cause Confirmed (Base64URL Padding Trap):**
+  - In a standard 256-bit (32-byte) HMAC-SHA256 signature, Base64URL maps 6 bits per character ($42 \times 6 = 252$ bits).
+  - The 43rd character encodes the remaining 4 bits of the 32nd byte plus **2 unused trailing padding bits** (bits 0 and 1).
+  - The previous tampering code (`customerA.token.slice(0, -1) + (customerA.token.endsWith("a") ? "b" : "a")`) toggled between `'a'` (`011010`) and `'b'` (`011011`), flipping exclusively bit 0. Because bits 0 and 1 are discarded padding bits in Base64URL decoding, the decoded 32-byte signature was **100% byte-identical** to the authentic signature (`Buffer.from('A'.repeat(42) + 'a', 'base64url').equals(Buffer.from('A'.repeat(42) + 'b', 'base64url')) === true`).
+  - Consequently, Supabase `/auth/v1/user` verified the token signature as completely valid and returned HTTP 200. There was zero authentication bypass in the Worker: `worker/src/auth.js` strictly validates tokens against Supabase `/auth/v1/user`.
+- **Deterministic Fix Implemented:**
+  1. `tests/staging-ticket-e2e.mjs`: Added `tamperJwt(token)` which flips character index 0 of the signature segment (`(sig[0] === 'a' ? 'b' : 'a') + sig.slice(1)`). Index 0 mutates the high-order bits of byte 0 of the decoded cryptographic signature, mathematically guaranteeing signature corruption while strictly preserving the standard three-part JWT structure (`header.payload.signature`).
+  2. `tests/idle-session-auth.test.mjs`: Added unit and regression tests asserting:
+     - `requireUser` rejects missing or non-Bearer authorization headers (401).
+     - `requireUser` rejects invalid/tampered tokens when auth provider rejects signature (401).
+     - Deterministic assertion proving that mutating character index 42 produces a byte-identical signature due to Base64URL padding bits, whereas mutating index 0 corrupts byte 0 of the decoded signature.
+- **Verification & Test Results:**
+  - `npm test`: 139 / 139 tests passed (0 failed).
+  - `node --test tests/idle-session-auth.test.mjs`: 5 / 5 passed.
+  - `node --test tests/admin-team-workflow.test.mjs tests/staging-worker-bindings.test.mjs`: 7 / 7 passed.
+  - `node tests/staging-auth-smoke.mjs`: 5 / 5 passed against live staging Worker and Pages.
+  - Live staging Worker probe with tampered token: returned HTTP 401 Unauthorized (`{"ok":false,"error":{"code":"UNAUTHORIZED","message":"Invalid or expired access token."}}`).
+  - Staging E2E Suite (`node --env-file=.env.local tests/staging-ticket-e2e.mjs`):
+    - Run ID: `AUTOV4-1792409966230-1ee037`
+    - Synthetic Ticket ID: `TD-9A6F1411`
+    - Check 1 (Password-grant sign-in): PASS
+    - Check 2 (Unauthenticated and tampered-token requests rejected): PASS (HTTP 401 confirmed)
+    - Check 3 (Customer ticket creation & detail read): PASS
+    - Check 4 (IDOR isolation between customers): PASS
+    - Check 5 (Non-admin denied admin ticket route): PASS (HTTP 403)
+    - Check 6 (Admin chat enablement & bidirectional messaging): PASS
+    - Check 7 (Internal notes isolated from customer view): PASS
+    - Check 8 (Admin assignment & atomic event/audit writes): PASS
+    - Overall: 8 / 8 checks PASSED (100%).
+- **Production Isolation & Release Gates:**
+  - Zero access or modifications to production Worker (`carmy-api`), production D1 (`57c85007-...`), production Supabase (`hlrmuvzmaegnbgzvvfsn`), or production secrets.
+  - No PRs merged. PR #177 and PR #161 remain open.
+
+
+

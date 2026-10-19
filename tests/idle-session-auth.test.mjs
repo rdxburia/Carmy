@@ -38,3 +38,46 @@ test("active session D1 write uses Worker server time, not client header", async
   await requireUser(request,env);
   assert.equal(writeArgs[2],now);
 });
+
+test("requireUser rejects missing or non-Bearer authorization header", async () => {
+  const env = { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "secret" };
+  const noHeader = new Request("https://worker.example/api/tickets");
+  await assert.rejects(() => requireUser(noHeader, env), (e) => e.status === 401 && e.code === "UNAUTHORIZED");
+
+  const badHeader = new Request("https://worker.example/api/tickets", { headers: { Authorization: "Basic dXNlcjpwYXNz" } });
+  await assert.rejects(() => requireUser(badHeader, env), (e) => e.status === 401 && e.code === "UNAUTHORIZED");
+});
+
+test("requireUser rejects invalid or tampered tokens when auth provider rejects signature", async () => {
+  const env = { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "secret" };
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/auth/v1/user")) {
+      return new Response(JSON.stringify({ message: "Invalid token" }), { status: 401 });
+    }
+    throw new Error("unexpected fetch " + url);
+  };
+  const request = new Request("https://worker.example/api/tickets", {
+    headers: { Authorization: "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.bad-signature" }
+  });
+  await assert.rejects(() => requireUser(request, env), (e) => e.status === 401 && e.code === "UNAUTHORIZED");
+});
+
+test("deterministic signature tampering corrupts decoded signature bytes unlike final-character mutation", () => {
+  // A standard 256-bit HS256 signature is 32 bytes = 43 base64url characters.
+  // The 43rd character has 2 unused padding bits in Base64URL.
+  // Mutating index 42 ('a' -> 'b') changes only the unused bit, leaving decoded bytes identical:
+  const sigLastCharA = "A".repeat(42) + "a";
+  const sigLastCharB = "A".repeat(42) + "b";
+  const bufA = Buffer.from(sigLastCharA, "base64url");
+  const bufB = Buffer.from(sigLastCharB, "base64url");
+  assert.equal(bufA.equals(bufB), true, "padding-bit trap: final char mutation produces byte-identical signature");
+
+  // Mutating index 0 (high-order bits of byte 0) guarantees byte-level difference:
+  const sigHeadA = "a" + "A".repeat(42);
+  const sigHeadB = "b" + "A".repeat(42);
+  const bufHeadA = Buffer.from(sigHeadA, "base64url");
+  const bufHeadB = Buffer.from(sigHeadB, "base64url");
+  assert.equal(bufHeadA.equals(bufHeadB), false, "index 0 mutation must alter byte 0 of the decoded signature");
+  assert.notEqual(bufHeadA[0], bufHeadB[0]);
+});
+
