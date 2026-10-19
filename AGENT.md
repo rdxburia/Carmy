@@ -227,3 +227,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 ## 2026-10-19 — Production impact-count correction
 - Correction to Gate 4 index count: migration 0007 creates 7 indexes total (`idx_support_tickets_status`, `idx_support_tickets_assignee`, `idx_support_tickets_sla`, `idx_ticket_events_ticket_id`, `idx_ticket_events_visibility`, `idx_ticket_reads_user`, `idx_audit_log_ticket`), plus 4 append-only triggers. The three added support-ticket columns indexes are only a subset of the total.
 - Rechecked aggregate legacy normalization counts read-only: `open/new=4`, `in_progress/resolved=0`, unknown statuses=0, unknown priorities=0. All 4 rows change status to `pending`; 3 `Normal` and 1 `Urgent` priority change case only.
+
+
+## 2026-10-19 — Staging Pages redirect correction and smoke pass
+- Correction to the earlier W4 note: stable Pages reachability and staging config are now verified from GitHub Actions run `39185379833`. The root cause was `_redirects` on `staging/ticket-e2e-frontend` sending all paths to production GitHub Pages. That rule was removed on the staging branch only, then Pages redeployed. Stable `https://carmy-ticket-staging.pages.dev/js/config.js` now returns JavaScript with staging Supabase/Worker URLs and no production Supabase URL.
+- Smoke PASS: stable Pages login UI/config, Worker root, missing token 401, tampered JWT 401, and CORS preflight. Do not use the old immutable deployment URL `https://a0b362e6.carmy-ticket-staging.pages.dev`; use the stable alias.
