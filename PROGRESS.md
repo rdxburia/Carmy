@@ -703,3 +703,18 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - Admin code evidence: `adminView()` hardcodes `primaryAdminEmail='rnyburia@gmail.com'` and redirects any other email to `dashboard`. This deterministically explains why `qa-admin@carmy-staging.test` cannot open the Admin Console in this frontend. The separate `checkSuperAdminStatus()` API probe does not remove this hardcoded gate.
 - Status: diagnosis only. No files changed in application code, no D1 writes, no deployment, no migration, no secret values read, no PR merge, and no production resource queried or modified. PR #177 remains unmerged; active staging Worker version 31 is not verified as containing its branch code.
 - Next safe step: create a focused frontend fix on a dedicated branch/PR: never render a cached ticket list unless it is positively bound to the current authenticated user; use a per-user cache key or clear it on account switch and fail closed on API errors; include/validate ownership identifiers in list DTOs but rely on server ownership checks; replace hardcoded admin email gating with server-authorized role resolution and fail closed on authorization errors. Add regression tests for A→B account switch, delayed/failed API response, cache without user_id, and QA admin role routing. Then run tests and staging-only authenticated E2E before any deploy/merge. Do not touch production.
+
+
+## 2026-10-19 — Staging QA users provisioned and verified (retry)
+- Owner confirmed the QA users were created in the correct staging Supabase project `vejccahjrlwhaniajgez`, not production `hlrmuvzmaegnbgzvvfsn`.
+- Read-only Auth verification found all three staging users and confirmed each email is confirmed: `qa-customer-a@carmy-staging.test`, `qa-customer-b@carmy-staging.test`, and `qa-admin@carmy-staging.test`. No production Auth users or records were queried in this step.
+- Staging-only `public.super_admins` registry now has the QA admin UUID `d291dbaf-c147-43c5-a27f-25abc4c016f4` with `active=true`; verified by the successful `INSERT ... ON CONFLICT ... RETURNING` result. `created_by` remains NULL because no separate staging owner actor was identified.
+- Rechecked Cloudflare secret inventory for `carmy-api-staging`: `CACHE_INVALIDATION_SECRET` is present; `SUPABASE_SECRET_KEY` remains absent. Secret values were not read. Owner has the privileged `sb_secret_...` key locally but did not provide it through a secure secret-entry mechanism, so it was not copied into chat/docs/source and was not set by this run.
+- Authenticated password-grant sign-in/JWT E2E remains blocked until the privileged key is set on the staging Worker and a supported staging-only HTTP/auth execution route is available. No ticket was created; no existing staging ticket/event was modified. Production remains untouched and PR #161 remains unmerged.
+
+
+## 2026-10-19 — Staging secret inventory retry
+- Cloudflare API read-only inventory for Worker `carmy-api-staging` succeeded (HTTP 200). Secret binding names returned: `CACHE_INVALIDATION_SECRET`, `SUPABASE_SECRET_KEY`. Secret values were not requested, returned, logged, or copied.
+- This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
+- Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
+- Production remains HOLD and untouched. PR #161 remains open/unmerged.

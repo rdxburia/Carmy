@@ -276,3 +276,17 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Admin code evidence: `adminView()` hardcodes `primaryAdminEmail='rnyburia@gmail.com'` and redirects any other email to `dashboard`. This deterministically explains why `qa-admin@carmy-staging.test` cannot open the Admin Console in this frontend. The separate `checkSuperAdminStatus()` API probe does not remove this hardcoded gate.
 - Status: diagnosis only. No files changed in application code, no D1 writes, no deployment, no migration, no secret values read, no PR merge, and no production resource queried or modified. PR #177 remains unmerged; active staging Worker version 31 is not verified as containing its branch code.
 - Next safe step: create a focused frontend fix on a dedicated branch/PR: never render a cached ticket list unless it is positively bound to the current authenticated user; use a per-user cache key or clear it on account switch and fail closed on API errors; include/validate ownership identifiers in list DTOs but rely on server ownership checks; replace hardcoded admin email gating with server-authorized role resolution and fail closed on authorization errors. Add regression tests for A→B account switch, delayed/failed API response, cache without user_id, and QA admin role routing. Then run tests and staging-only authenticated E2E before any deploy/merge. Do not touch production.
+
+
+## 2026-10-19 — Staging QA retry checkpoint
+- Verified staging Auth users for both customer accounts and the admin account; all three emails are confirmed in `vejccahjrlwhaniajgez`.
+- Activated the staging-only QA admin registry entry for the admin user UUID, with `created_by=NULL` because no staging owner actor was available.
+- `SUPABASE_SECRET_KEY` is still absent from `carmy-api-staging`; do not put key material in chat, source, or logs. Continue only after the owner securely sets the key on the staging Worker.
+- Real-JWT E2E and all production rollout gates remain HOLD. Do not modify production or merge PR #161.
+
+
+## 2026-10-19 — Staging secret inventory retry
+- Cloudflare API read-only inventory for Worker `carmy-api-staging` succeeded (HTTP 200). Secret binding names returned: `CACHE_INVALIDATION_SECRET`, `SUPABASE_SECRET_KEY`. Secret values were not requested, returned, logged, or copied.
+- This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
+- Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
+- Production remains HOLD and untouched. PR #161 remains open/unmerged.
