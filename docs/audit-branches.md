@@ -636,3 +636,7 @@ Compared each branch to `main` using GitHub compare API. Classifications are tri
 - Staging D1 aggregate counts unchanged: 4 tickets, 2 events, 0 reads, 0 audit rows, 1 ledger row. No synthetic ticket mutations occurred.
 - Duplicate-contact parity is partial: staging profile phone normalization index applied; attempt to modify `auth.users` was rejected by PostgreSQL ownership (`must be owner of table users`). Supabase Management API/Auth Admin provisioning remains unavailable through connected actions; no QA users created and no real-login E2E pass claimed.
 - Production rollout remains held pending real-login E2E and all five production gates. Antigravity local changes remain unverified.
+
+
+### Staging-only deployment correction — 19 Oct 2026
+- A partial Cloudflare settings PATCH briefly deployed Worker version 25 with only the `ALLOWED_ORIGIN` binding. It was immediately replaced by the previously verified isolated version 24, then by complete version 27. No request or ticket mutation was sent to version 25; that version had no D1, R2, rate-limit, or Supabase binding. Active version 27 was re-verified with the complete staging-only binding set. No production resource was deployed by this correction.
