@@ -231,3 +231,8 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Tests authored: roster privacy/inactive filtering, view-as-user audit order/failure/reason, support/viewer/removed role helper, expired chat, atomic chat+message batch failure, customer internal-note privacy, plus existing assignment roster rejection test. Added new test file to npm test.
 - Verification status: NOT RUN in this environment; no local checkout/Node test runner or staging D1 command execution available. Do not claim PASS. Exact manual commands and results belong in the final report.
 - Safety: no merge, deployment, staging migration, or production operation performed. Do not merge until user explicitly says go.
+
+
+## 2026-10-19 — Follow-up permission hardening
+- Adjusted ticket assignee eligibility to continue checking active support roster members if the Super Admin lookup is unavailable; authorization still fails closed if neither source establishes eligibility.
+- Updated worker/src/ticket-workflow.js on feat/support-ticket-backend-v2. Tests remain NOT RUN; no staging or production database actions were performed.
