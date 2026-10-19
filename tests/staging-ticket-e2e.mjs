@@ -37,6 +37,23 @@ let publicMarker = `${runId}-PUBLIC`;
 let internalMarker = `${runId}-INTERNAL`;
 let replyMarker = `${runId}-REPLY`;
 
+export function tamperJwt(token) {
+  if (!token || typeof token !== "string" || !token.includes(".")) {
+    return "not.a.valid.jwt";
+  }
+  const parts = token.split(".");
+  if (parts.length !== 3 || !parts[2]) {
+    return "not.a.valid.jwt";
+  }
+  const sig = parts[2];
+  // Modifying only the final Base64URL character can fail to invalidate the signature
+  // because the last 2 bits of a 43-character Base64URL string are unused padding bits
+  // discarded by Base64URL decoders. Modifying index 0 alters the high-order bits of byte 0,
+  // guaranteeing byte-level cryptographic signature corruption while preserving the 3-part format.
+  const tamperedSig = (sig[0] === "a" ? "b" : "a") + sig.slice(1);
+  return `${parts[0]}.${parts[1]}.${tamperedSig}`;
+}
+
 async function signIn(email, password) {
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: "POST",
@@ -105,7 +122,7 @@ async function main() {
   await test("2. Unauthenticated and tampered-token requests are rejected", async () => {
     const noToken = await api("/api/tickets");
     assert.equal(noToken.status, 401, "missing bearer token must return 401");
-    const tampered = customerA?.token ? customerA.token.slice(0, -1) + (customerA.token.endsWith("a") ? "b" : "a") : "not.a.valid.jwt";
+    const tampered = tamperJwt(customerA?.token);
     const badToken = await api("/api/tickets", { rawToken: tampered });
     assert.equal(badToken.status, 401, "tampered JWT must return 401");
   });

@@ -1,5 +1,6 @@
 import { requireUser, handleAuthError } from "./auth.js";
-import { requireSuperAdmin, recordSuperAdminAudit } from "./super-admin.js";
+import { requireSuperAdmin, recordSuperAdminAudit, canManageTickets } from "./super-admin.js";
+import { adminTeamApi, viewTicketAsUser } from "./admin-team.js";
 import { createWorkshopOnboarding } from "./workshop-onboarding.js";
 import { error, json } from "./response.js";
 import { listVehicles, getVehicle, patchVehicleRc } from "./vehicles.js";
@@ -158,23 +159,38 @@ export default {
 
       if (parts[0] === "tickets") return ticketApi(request, env, origin, user, userToken, parts, url);
 
-      // All /api/admin/* routes require a verified user and a server-side role lookup.
+      // Admin routes are authorized by the specific server-side role required.
       if (parts[0] === "admin") {
-        const authorizationFailure = await requireSuperAdmin(user, env, origin);
-        if (authorizationFailure) return authorizationFailure;
+        if (parts.length === 2 && parts[1] === "team" && request.method === "POST") {
+          const authorizationFailure = await requireSuperAdmin(user, env, origin);
+          if (authorizationFailure) return authorizationFailure;
+          const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.team_member.upsert", {});
+          if (auditFailure) return auditFailure;
+          return adminTeamApi(request, env, origin, user);
+        }
+        if (parts.length === 2 && parts[1] === "team" && request.method === "GET") {
+          const permission = await canManageTickets(user.id, env);
+          if (permission.unavailable) return error("Team authorization is temporarily unavailable.", 503, origin, "ADMIN_AUTH_UNAVAILABLE");
+          if (!permission.allowed) return error("Support team access required.", 403, origin, "FORBIDDEN");
+          return adminTeamApi(request, env, origin, user);
+        }
         if (parts[1] === "tickets") {
+          const permission = await canManageTickets(user.id, env);
+          if (permission.unavailable) return error("Ticket authorization is temporarily unavailable.", 503, origin, "ADMIN_AUTH_UNAVAILABLE");
+          if (!permission.allowed) return error("Support team access required.", 403, origin, "FORBIDDEN");
+          if (parts.length === 4 && parts[3] === "view-as-user" && request.method === "POST") {
+            return viewTicketAsUser(request, env, origin, user, parts[2]);
+          }
           const action = request.method === "GET"
             ? (parts.length === 2 ? "admin.ticket_workflow.list" : "admin.ticket_workflow.detail")
             : "admin.ticket_workflow.mutate";
-          const metadata = {
-            ticket_id: parts.length > 2 ? parts[2] : null,
-            method: request.method,
-            status: url.searchParams.get("status") || null,
-          };
+          const metadata = { ticket_id: parts.length > 2 ? parts[2] : null, method: request.method, status: url.searchParams.get("status") || null };
           const auditFailure = await recordSuperAdminAudit(user, env, origin, action, metadata);
           if (auditFailure) return auditFailure;
           return ticketApi(request, env, origin, user, userToken, parts, url);
         }
+        const authorizationFailure = await requireSuperAdmin(user, env, origin);
+        if (authorizationFailure) return authorizationFailure;
         if (request.method === "GET" && parts.length === 2 && parts[1] === "me") {
           return json({ ok: true, data: { id: user.id, email: user.email || null, role: "super_admin" } }, 200, origin);
         }
@@ -184,9 +200,7 @@ export default {
           return createAdminInvite(request, env, origin, user);
         }
         if (request.method === "GET" && parts.length === 2 && parts[1] === "support-tickets") {
-          const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.support_tickets.list", {
-            status: url.searchParams.get("status") || null,
-          });
+          const auditFailure = await recordSuperAdminAudit(user, env, origin, "admin.support_tickets.list", { status: url.searchParams.get("status") || null });
           if (auditFailure) return auditFailure;
           return adminListSupportTickets(request, env, origin);
         }

@@ -281,3 +281,54 @@ test("ticket workflow: malformed internal flag is rejected before writes", async
   assert.equal(body.error.code, "INVALID_REQUEST");
   assert.equal(calls.some((call) => call.method === "batch"), false);
 });
+
+
+test("ticket workflow: expired chat window rejects customer reply with CHAT_DISABLED", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", chat_enabled: 1, chat_enabled_until: Math.floor(Date.now() / 1000) - 1, status: "working" },
+  });
+  const request = new Request("https://worker.test/api/tickets/T-1/messages", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Reply after expiry" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["tickets", "T-1", "messages"], new URL(request.url));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "CHAT_DISABLED");
+  assert.equal(calls.some((call) => call.method === "batch"), false);
+});
+
+test("ticket workflow: chat enable and message use one atomic batch; batch failure returns 503", async () => {
+  const { env, calls } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", status: "working", priority: "normal", chat_enabled: 0, assignee_id: null },
+  });
+  env.DB.batch = async (statements) => {
+    calls.push({ method: "batch", statements });
+    throw new Error("simulated message insert failure");
+  };
+  const request = new Request("https://worker.test/api/admin/tickets/T-1", {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_enabled: true, message: "Please send the missing information" }),
+  });
+  const response = await ticketApi(request, env, origin, user, "token", ["admin", "tickets", "T-1"], new URL(request.url));
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "TICKET_UPDATE_UNAVAILABLE");
+  const batch = calls.find((call) => call.method === "batch");
+  assert.ok(batch);
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("UPDATE support_tickets SET")));
+  assert.ok(batch.statements.some((statement) => statement.sql.includes("INSERT INTO ticket_events")));
+  assert.equal(calls.filter((call) => call.method === "batch").length, 1);
+});
+
+test("ticket workflow: customer GET never serializes internal notes", async () => {
+  const { env } = mockEnv({
+    ticket: { id: "T-1", user_id: "user-1", subject: "Help", status: "working", priority: "normal", chat_enabled: 0 },
+    events: [
+      { id: 1, ticket_id: "T-1", actor_type: "admin", event_type: "message", message: "Public update", created_at: 10 },
+      { id: 2, ticket_id: "T-1", actor_type: "admin", event_type: "internal_note", visibility: "internal", message: "SECRET INTERNAL NOTE", created_at: 11 },
+    ],
+  });
+  const response = await ticketApi(new Request("https://worker.test/api/tickets/T-1"), env, origin, user, "token", ["tickets", "T-1"], new URL("https://worker.test/api/tickets/T-1"));
+  const raw = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(raw.includes("Public update"), true);
+  assert.equal(raw.includes("SECRET INTERNAL NOTE"), false);
+});

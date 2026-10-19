@@ -23,30 +23,41 @@ async function ownedTicket(env,id,userId) {
   return env.DB.prepare("SELECT * FROM support_tickets WHERE id = ? AND user_id = ?").bind(id,userId).first();
 }
 
-// Assignees must be active members of the server-managed Super Admin roster.
-// Do not use client-supplied roles, workshop staff, or UI state as authorization.
+// Assignees must be active members of the server-managed Super Admin or support roster.
 async function isActiveTicketAssignee(env,userId) {
-  if (!userId || !env?.SUPABASE_URL || !env?.SUPABASE_SECRET_KEY) {
-    return { allowed: false, unavailable: true };
+  if (!userId || !env?.DB) return { allowed: false, unavailable: true };
+  let superAdminLookupUnavailable = false;
+  if (env?.SUPABASE_URL && env?.SUPABASE_SECRET_KEY) {
+    try {
+      const endpoint = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
+      endpoint.searchParams.set("user_id", `eq.${userId}`);
+      endpoint.searchParams.set("active", "eq.true");
+      endpoint.searchParams.set("select", "user_id");
+      endpoint.searchParams.set("limit", "1");
+      const response = await fetch(endpoint.toString(), {
+        headers: { apikey: env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}` },
+      });
+      if (!response.ok) superAdminLookupUnavailable = true;
+      else {
+        const rows = await response.json();
+        if (!Array.isArray(rows)) superAdminLookupUnavailable = true;
+        else if (rows.some((row) => row?.user_id === userId)) return { allowed: true, unavailable: false };
+      }
+    } catch (err) {
+      superAdminLookupUnavailable = true;
+      console.error("Ticket assignee eligibility lookup failed", err?.message || err);
+    }
+  } else {
+    superAdminLookupUnavailable = true;
   }
   try {
-    const endpoint = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
-    endpoint.searchParams.set("user_id", `eq.${userId}`);
-    endpoint.searchParams.set("active", "eq.true");
-    endpoint.searchParams.set("select", "user_id");
-    endpoint.searchParams.set("limit", "1");
-    const response = await fetch(endpoint.toString(), {
-      headers: {
-        apikey: env.SUPABASE_SECRET_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
-      },
-    });
-    if (!response.ok) return { allowed: false, unavailable: true };
-    const rows = await response.json();
-    if (!Array.isArray(rows)) return { allowed: false, unavailable: true };
-    return { allowed: rows.some((row) => row?.user_id === userId), unavailable: false };
+    const row = await env.DB.prepare(
+      "SELECT user_id FROM team_members WHERE user_id = ? AND active = 1 AND role = 'support' LIMIT 1"
+    ).bind(userId).first();
+    if (row?.user_id === userId) return { allowed: true, unavailable: false };
+    return { allowed: false, unavailable: superAdminLookupUnavailable };
   } catch (err) {
-    console.error("Ticket assignee eligibility lookup failed", err?.message || err);
+    console.error("Ticket assignee team lookup failed", err?.message || err);
     return { allowed: false, unavailable: true };
   }
 }
@@ -112,9 +123,10 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
     const ticket=await ownedTicket(env,ticketId,user.id);
     if(!ticket)return fail("Ticket not found.",404,origin,"NOT_FOUND");
     const events=await env.DB.prepare("SELECT id,ticket_id,actor_type,event_type,message,created_at FROM public_ticket_events WHERE ticket_id=? ORDER BY id ASC").bind(ticketId).all();
+    const publicEvents=(events.results||[]).filter((event)=>event?.visibility!=="internal"&&event?.event_type!=="internal_note").map((event)=>({id:event.id,ticket_id:event.ticket_id,actor_type:event.actor_type,event_type:event.event_type,message:event.message,created_at:event.created_at}));
     const lastId=Number(events.results?.at(-1)?.id||0);
     await env.DB.prepare("INSERT INTO ticket_reads(user_id,ticket_id,last_read_event_id,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id,ticket_id) DO UPDATE SET last_read_event_id=excluded.last_read_event_id,updated_at=excluded.updated_at").bind(user.id,ticketId,lastId,nowSec()).run();
-    return json({ok:true,data:{id:ticket.id,subject:ticket.subject,status:ticket.status,priority:ticket.priority,chat_enabled:Boolean(ticket.chat_enabled)&&Number(ticket.chat_enabled_until||0)>nowSec()&&ticket.status!=="closed",show_agent_name:Boolean(ticket.show_agent_name),events:events.results||[]}},200,origin);
+    return json({ok:true,data:{id:ticket.id,subject:ticket.subject,status:ticket.status,priority:ticket.priority,chat_enabled:Boolean(ticket.chat_enabled)&&Number(ticket.chat_enabled_until||0)>nowSec()&&ticket.status!=="closed",show_agent_name:Boolean(ticket.show_agent_name),events:publicEvents}},200,origin);
   }
   if(parts[0]==="tickets" && ticketId && parts[2]==="messages" && parts.length===3 && method==="POST") {
     const ticket=await ownedTicket(env,ticketId,user.id);
@@ -178,7 +190,7 @@ export async function ticketApi(request,env,origin,user,userToken,parts,url) {
         if (assignee) {
           const eligibility = await isActiveTicketAssignee(env, assignee);
           if (eligibility.unavailable) return fail("Ticket assignment authorization is temporarily unavailable.",503,origin,"ASSIGNEE_LOOKUP_UNAVAILABLE");
-          if (!eligibility.allowed) return fail("Assignee must be an active Super Admin team member.",403,origin,"ASSIGNEE_NOT_ALLOWED");
+          if (!eligibility.allowed) return fail("Assignee must be an active Super Admin or support team member.",403,origin,"ASSIGNEE_NOT_ALLOWED");
         }
         if(!["pending","assigned"].includes(ticket.status))return fail("Assignment can only change while a ticket is pending or assigned.",409,origin,"INVALID_TRANSITION");
         changes.push(["assignee_id",assignee],["status",assignee?"assigned":"pending"]);
