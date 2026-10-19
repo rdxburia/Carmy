@@ -1239,7 +1239,7 @@ async function start(u,force=false){
      }else{
        await nav('dashboard');
      }
-     document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
+     document.body.classList.toggle('td-admin-mode',Boolean(isAdminAuthorized));
      $('app').classList.remove('hidden');
      window.scrollTo({top:0,left:0,behavior:'auto'});
      let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
