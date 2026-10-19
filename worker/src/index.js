@@ -174,10 +174,6 @@ export default {
           if (!permission.allowed) return error("Support team access required.", 403, origin, "FORBIDDEN");
           return adminTeamApi(request, env, origin, user);
         }
-        if (parts.length === 2 && parts[1] === "tickets" && request.method === "GET" ||
-            parts[1] === "tickets" && parts.length >= 3 && parts[2] === "view-as-user" && request.method === "POST") {
-          // handled below after permission check
-        }
         if (parts[1] === "tickets") {
           const permission = await canManageTickets(user.id, env);
           if (permission.unavailable) return error("Ticket authorization is temporarily unavailable.", 503, origin, "ADMIN_AUTH_UNAVAILABLE");
