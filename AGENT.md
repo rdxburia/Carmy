@@ -195,6 +195,27 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Production remains untouched pending passing staging E2E and all production preconditions.
 
 
+## 2026-10-19 — Staging real-JWT E2E harness
+- Added `tests/staging-ticket-e2e.mjs` and `.github/workflows/staging-e2e-harness.yml` on branch `test/staging-ticket-e2e-v4`. The script accepts all credentials only from environment variables, never prints passwords/JWTs, exercises password-grant auth, missing/tampered JWT rejection, ticket create/detail/reply, internal visibility, customer isolation/IDOR, non-admin 403, admin assignment, and aggregate event/read/audit row checks. It retains synthetic ticket history because ticket/audit tables are append-only; it does not delete any rows.
+- Real E2E execution is not complete: staging QA users are absent. Direct auth.users SQL insertion and Auth signup through the available connector were blocked by safety checks; public Auth settings fetch returned HTTP 403 from the tool runtime. The connected Supabase tool catalog has no Management API key-reveal/create or auth-admin user-creation action. No QA passwords or keys recorded in project docs.
+- Staging frontend/API URLs are configured in Cloudflare (`ALLOWED_ORIGIN=https://carmy-ticket-staging.pages.dev`), but this runtime cannot fetch the public Pages/Workers URLs: outbound requests returned `403 Forbidden: requests to <host> are not allowed`, so public login page reachability and authenticated browser E2E are not established. Production remains HOLD.
+
+
+## 2026-10-19 — Staging unauthenticated smoke harness
+- Added `tests/staging-auth-smoke.mjs` and `.github/workflows/staging-auth-smoke.yml` on PR #171 to test the public staging Worker root, missing-token 401, tampered-token 401, and CORS preflight from `https://carmy-ticket-staging.pages.dev` without any credentials. This lets non-authenticated checks run even while QA users are blocked.
+- Workflow is configured to execute against the staging Worker URL only. It does not read/write ticket rows and contains no secrets. Awaiting GitHub Actions result before treating these checks as PASS.
+
+
+## 2026-10-19 — Staging Pages smoke failure fixed
+- GitHub Actions found that `https://carmy-ticket-staging.pages.dev/js/config.js` was being redirected to production GitHub Pages by the staging branch `_redirects` rule. Removed that rule only on `staging/ticket-e2e-frontend`; staging Pages deployment `e7d4689f-af88-4937-850a-a8fc9489304b` is now active for commit `acc363475dab2113a3f251d1407532d9000bd882`. Production GitHub Pages and main `_redirects` were untouched.
+- Re-running the staging smoke suite against the stable staging URL to verify it now serves the staging Supabase config rather than the production config. Previous Worker root, no-token 401, tampered-token 401, and CORS checks passed; the config check exposed and drove this fix.
+
+
+## 2026-10-19 — Staging URL smoke PASS
+- After removing the production redirect from the staging Pages branch, GitHub Actions run `39185379833` passed all five live smoke checks: stable Pages login UI, staging-only `js/config.js`, Worker root, missing bearer token 401, tampered JWT 401, and CORS preflight (the report has five named checks; the auth/CORS checks are individually PASS).
+- Live stable URL `https://carmy-ticket-staging.pages.dev/js/config.js` now returns `application/javascript`, contains the staging Supabase URL and staging Worker URL, and does not contain the production Supabase URL. The old immutable deployment URL `https://a0b362e6.carmy-ticket-staging.pages.dev` still serves the earlier redirected build; do not use it. Use only the stable Pages alias.
+
+
 ## 2026-10-19 — Autonomous v5 W1–W3 execution record
 - W1: Staging Supabase ref verified as `vejccahjrlwhaniajgez`; SQL reports zero Auth users in this project, so owner-listed QA accounts are absent here. No manual writes to Auth system tables were attempted. Auth Admin creation and password-grant sign-in require a supported Auth/Management API path not present in connected actions.
 - W2: Cloudflare inventory for `carmy-api-staging` has `CACHE_INVALIDATION_SECRET` only; `SUPABASE_SECRET_KEY` is missing. Supabase key tool returns only publishable/anon keys. Never substitute them for privileged credentials or log secret values.
