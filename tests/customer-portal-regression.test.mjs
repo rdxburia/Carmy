@@ -2602,6 +2602,103 @@ test("Super Admin Workspace: Token generator creates one-time reveal modal and c
   assert.equal(h.eval("adminRevealedToken"), null, "Token secret must be wiped from memory upon closing the modal");
 });
 
+test("Phase 1 Admin Shell: Account & Security screen displays read-only profile, password meter, and 15-min timeout", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com', user_metadata: { name: 'Lead Admin' } };
+    currentAdminRole = 'super_admin';
+    workerGet = async () => ({ ok: true, data: [] });
+  `);
+
+  await h.eval("nav('admin')");
+  h.eval("switchAdminScreen('account')");
+
+  const name = h.eval("document.getElementById('adminProfileNameDisplay').textContent");
+  const email = h.eval("document.getElementById('adminProfileEmailDisplay').textContent");
+  const role = h.eval("document.getElementById('adminProfileRoleBadge').textContent");
+
+  assert.equal(name, "Lead Admin");
+  assert.equal(email, "rnyburia@gmail.com");
+  assert.equal(role, "Super Admin");
+
+  const html = h.elements.get("adminContent").innerHTML;
+  assert.ok(html.includes("15 Minutes (900 Seconds)"), "Must display read-only 15-minute timeout policy");
+  assert.ok(html.includes("Phase 4 Specification"), "TPIN must have Phase 4 placeholder");
+});
+
+test("Phase 1 Admin Shell: Password change reports error on failure and success only on server ok", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    toasts = [];
+    toast = (msg, type) => { toasts.push({ msg, type }); };
+    workerGet = async () => ({ ok: true, data: [] });
+    db.auth.updateUser = async ({ password }) => {
+      if (password === 'fail-pass123!') {
+        return { error: { message: 'Weak or rejected password' } };
+      }
+      return { data: {}, error: null };
+    };
+  `);
+
+  await h.eval("nav('admin')");
+  h.eval("switchAdminScreen('account')");
+
+  // Test mismatch
+  h.eval(`
+    document.getElementById('adminCurrentPassword').value = 'old-pass';
+    document.getElementById('adminNewPassword').value = 'new-pass-1';
+    document.getElementById('adminConfirmPassword').value = 'new-pass-2';
+  `);
+  await h.eval("handleAdminPasswordChange()");
+  assert.equal(h.eval("toasts[toasts.length - 1].type"), "error");
+  assert.ok(h.eval("toasts[toasts.length - 1].msg").includes("match"));
+
+  // Test server error
+  h.eval(`
+    document.getElementById('adminNewPassword').value = 'fail-pass123!';
+    document.getElementById('adminConfirmPassword').value = 'fail-pass123!';
+  `);
+  await h.eval("handleAdminPasswordChange()");
+  assert.equal(h.eval("document.getElementById('adminPasswordError').textContent"), "Weak or rejected password");
+  assert.equal(h.eval("toasts[toasts.length - 1].type"), "error");
+
+  // Test success
+  h.eval(`
+    document.getElementById('adminNewPassword').value = 'ValidPass123!';
+    document.getElementById('adminConfirmPassword').value = 'ValidPass123!';
+  `);
+  await h.eval("handleAdminPasswordChange()");
+  assert.equal(h.eval("toasts[toasts.length - 1].type"), "ok");
+  assert.equal(h.eval("toasts[toasts.length - 1].msg"), "Password changed");
+  assert.equal(h.eval("document.getElementById('adminNewPassword').value"), "");
+});
+
+test("Phase 1 Admin Shell: adminSignOut wipes admin storage and removes admin mode class", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    localStorage.setItem('carmy_admin_test', '123');
+    sessionStorage.setItem('td-admin-state', 'abc');
+    document.body.classList.add('td-admin-mode');
+    workerPost = async () => ({ ok: true });
+    db.auth.signOut = async () => {};
+  `);
+
+  await h.eval("adminSignOut()");
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), false);
+  assert.equal(h.eval("localStorage.getItem('carmy_admin_test')"), null);
+  assert.equal(h.eval("sessionStorage.getItem('td-admin-state')"), null);
+  assert.equal(h.eval("isSuperAdmin"), false);
+});
+
+
 test("Support Ticket Workflow: Unread badge appears for count > 0 and clears when count is 0 or user signs out", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());

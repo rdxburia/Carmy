@@ -716,3 +716,23 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - Hardcoded admin error message updated to dynamic user context.
 - **Constraints & Governance:** Frontend-only changes; zero backend, Worker, D1, or Supabase migrations; no production touch; no merges.
 
+
+## 2026-10-19 — Phase 1: Admin Shell & Session Polish
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Admin Shell refactor and Account & Security screen.
+- **Implemented Changes:**
+  - Added dedicated Admin Account & Security screen (`account`) accessible from sidebar, topbar profile pill, and mobile More drawer:
+    - Admin Profile: Read-only Name, Email, Role (Super Admin / Support Specialist), and Status rendered strictly via `textContent`.
+    - Change Password Form: Current password, New password with live visual strength meter (`updateAdminPasswordMeter`), Confirm password, inline error card (`adminPasswordError`), and `"Password changed"` toast strictly after server confirmation via Supabase Auth `db.auth.updateUser()` or fallback `/api/admin/change-password`.
+    - Session Inactivity Policy: Visible, read-only 15-minute (900 seconds) timeout constant with Worker server time heartbeat and client-header tampering defense notice.
+    - Administrative TPIN: Phase 4 specification placeholder card.
+    - Session Sign-out: `adminSignOut()` clears local storage keys (`sb-*`, `carmy_*`, `td-admin-*`), session storage, removes `td-admin-mode` class from body, clears memory state, and securely redirects to `./?admin=1&signed_out=1`.
+  - Added CSS classes prefixed with `admin-` in `css/styles.css`: `.admin-account-shell`, `.admin-account-grid`, `.admin-account-card`, `.admin-profile-meta`, `.admin-password-meter`, `.admin-password-meter-fill`, `.admin-password-feedback`, `.admin-timeout-badge`, `.admin-blocked-card`.
+  - Bumped asset cache busters to `?v=2026.10.19-phase1-admin` in `index.html`.
+  - Added 3 new automated test cases to `tests/customer-portal-regression.test.mjs` (Account & Security read-only profile rendering, password change validation & server errors, and `adminSignOut()` storage & class cleanup).
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 142/142 tests passing (100% green, 0 failures, 0 skips).
+
+

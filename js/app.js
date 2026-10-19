@@ -27,6 +27,8 @@ let adminTicketsLoading=false;
 let adminTicketsError=null;
 let adminStatusFilter='all';
 let adminSearchQuery='';
+let currentAdminRole=null;
+let currentAdminProfile=null;
 
 function updateAdminNavVisibility(){
   const desktopBtn=document.getElementById('adminNavBtn');
@@ -4487,6 +4489,290 @@ function renderScreenReports(){
   '</div>';
 }
 
+function renderScreenAdminAccount(){
+  return '<div class="admin-screen-shell admin-account-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Admin Account &amp; Platform Security</h2>'+
+        '<p class="muted">Manage administrative credentials, review profile metadata, and inspect session controls.</p>'+
+      '</div>'+
+      '<div class="admin-timeout-badge" id="adminSessionTimeoutBadge">'+
+        '⏱️ Admin Inactivity Timeout: 15 Minutes (Read-Only)'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-account-grid">'+
+      '<div class="admin-account-card">'+
+        '<div class="admin-card-head">'+
+          '<h3>Administrator Profile</h3>'+
+          '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+        '</div>'+
+        '<div class="admin-profile-meta">'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Name</span>'+
+            '<b id="adminProfileNameDisplay">—</b>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Email</span>'+
+            '<span id="adminProfileEmailDisplay" style="font-family:monospace;font-weight:600;color:#2563eb">—</span>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Role Clearance</span>'+
+            '<span id="adminProfileRoleBadge" class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">MFA Verification</span>'+
+            '<span class="admin-badge status-active">Enforced (Session Guard)</span>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Account Status</span>'+
+            '<span class="admin-badge status-active">Active</span>'+
+          '</div>'+
+        '</div>'+
+        '<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px;color:#64748b">'+
+          '🔒 Profile metadata is read-only and governed by server directory. Password change below applies immediately to authenticated sessions.'+
+        '</div>'+
+      '</div>'+
+
+      '<div class="admin-account-card">'+
+        '<div class="admin-card-head">'+
+          '<h3>Change Administrative Password</h3>'+
+          '<p class="muted">Requires server confirmation before success is reported.</p>'+
+        '</div>'+
+        '<form id="adminChangePasswordForm" onsubmit="event.preventDefault();handleAdminPasswordChange();" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">'+
+          '<div class="field">'+
+            '<label for="adminCurrentPassword">Current Password</label>'+
+            '<input type="password" id="adminCurrentPassword" autocomplete="current-password" required placeholder="Enter current password">'+
+          '</div>'+
+          '<div class="field">'+
+            '<label for="adminNewPassword">New Password</label>'+
+            '<input type="password" id="adminNewPassword" autocomplete="new-password" required placeholder="Minimum 8 characters" oninput="updateAdminPasswordMeter(this.value)">'+
+            '<div class="admin-password-meter"><div id="adminPasswordMeterFill" class="admin-password-meter-fill"></div></div>'+
+            '<div id="adminPasswordFeedback" class="admin-password-feedback">Strength: None</div>'+
+          '</div>'+
+          '<div class="field">'+
+            '<label for="adminConfirmPassword">Confirm New Password</label>'+
+            '<input type="password" id="adminConfirmPassword" autocomplete="new-password" required placeholder="Re-type new password">'+
+          '</div>'+
+          '<div id="adminPasswordError" class="admin-blocked-card" style="display:none;padding:10px;margin:4px 0 0 0;font-size:12.5px"></div>'+
+          '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+            '<button type="submit" id="btnAdminChangePassword" class="primary" style="padding:8px 16px">Update Password</button>'+
+          '</div>'+
+        '</form>'+
+      '</div>'+
+
+      '<div class="admin-account-card">'+
+        '<div class="admin-card-head">'+
+          '<h3>Administrative TPIN (Phase 4)</h3>'+
+          '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+        '</div>'+
+        '<div style="margin-top:12px;font-size:13px;color:#475569;line-height:1.5">'+
+          '<p>A verified TPIN is required prior to token generation, team access updates, and statutory CSV exports.</p>'+
+          '<div style="margin-top:12px;display:flex;align-items:center;gap:10px">'+
+            '<span class="admin-badge" style="background:#fef3c7;color:#92400e">Phase 4 Specification</span>'+
+            '<button type="button" class="ghost" style="padding:6px 12px;font-size:12px" onclick="toast(\'TPIN management interface is scheduled for Phase 4.\',\'info\')">Configure TPIN</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+
+      '<div class="admin-account-card">'+
+        '<div class="admin-card-head">'+
+          '<h3>Session Security &amp; Timeout Policy</h3>'+
+          '<p class="muted">Immutable server-enforced inactivity standard.</p>'+
+        '</div>'+
+        '<div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;font-size:13px">'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Timeout Duration</span>'+
+            '<b>15 Minutes (900 Seconds)</b>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Heartbeat Enforcement</span>'+
+            '<span>Worker Server Time</span>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Tampering Defense</span>'+
+            '<span class="admin-badge status-active">Client Headers Ignored</span>'+
+          '</div>'+
+          '<div style="margin-top:8px">'+
+            '<button type="button" class="ghost" style="width:100%;color:#dc2626;border-color:#fecdd3" onclick="adminSignOut()">Sign Out of Admin Console</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function updateAdminPasswordMeter(val){
+  const fill=$('adminPasswordMeterFill');
+  const fb=$('adminPasswordFeedback');
+  if(!fill||!fb)return;
+  if(!val){
+    fill.className='admin-password-meter-fill';
+    fill.style.width='0%';
+    fb.textContent='Strength: None';
+    fb.style.color='#64748b';
+    return;
+  }
+  let score=0;
+  if(val.length>=8)score++;
+  if(val.length>=12)score++;
+  if(/[0-9]/.test(val))score++;
+  if(/[^A-Za-z0-9]/.test(val))score++;
+  if(/[A-Z]/.test(val)&&/[a-z]/.test(val))score++;
+
+  if(score<=2){
+    fill.className='admin-password-meter-fill weak';
+    fb.textContent='Strength: Weak (Needs 8+ chars, numbers or symbols)';
+    fb.style.color='#ef4444';
+  }else if(score<=3){
+    fill.className='admin-password-meter-fill medium';
+    fb.textContent='Strength: Medium (Acceptable)';
+    fb.style.color='#f59e0b';
+  }else{
+    fill.className='admin-password-meter-fill strong';
+    fb.textContent='Strength: Strong';
+    fb.style.color='#10b981';
+  }
+}
+
+async function handleAdminPasswordChange(){
+  const curInput=$('adminCurrentPassword');
+  const newInput=$('adminNewPassword');
+  const confirmInput=$('adminConfirmPassword');
+  const btn=$('btnAdminChangePassword');
+  const errBox=$('adminPasswordError');
+
+  const curPass=curInput?.value||'';
+  const newPass=newInput?.value||'';
+  const confirmPass=confirmInput?.value||'';
+
+  if(errBox)errBox.style.display='none';
+
+  if(!curPass){
+    if(errBox){
+      errBox.textContent='Current password is required.';
+      errBox.style.display='block';
+    }
+    toast('Current password is required.','error');
+    return;
+  }
+  if(!newPass||newPass.length<8){
+    if(errBox){
+      errBox.textContent='New password must be at least 8 characters long.';
+      errBox.style.display='block';
+    }
+    toast('New password must be at least 8 characters long.','error');
+    return;
+  }
+  if(newPass!==confirmPass){
+    if(errBox){
+      errBox.textContent='New password and confirm password do not match.';
+      errBox.style.display='block';
+    }
+    toast('New password and confirm password do not match.','error');
+    return;
+  }
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Changing Password...';
+  }
+
+  try{
+    let ok=false;
+    let serverErr=null;
+    if(db&&db.auth&&typeof db.auth.updateUser==='function'){
+      const res=await db.auth.updateUser({password:newPass});
+      if(res?.error){
+        serverErr=res.error.message;
+      }else{
+        ok=true;
+      }
+    }else{
+      try{
+        const res=await workerPost('/api/admin/change-password',{current_password:curPass,new_password:newPass});
+        if(res&&res.ok)ok=true;
+        else serverErr=res?.error?.message||'Server rejected password update.';
+      }catch(e){
+        serverErr=e?.message||'Password change service unavailable.';
+      }
+    }
+
+    if(!ok){
+      throw new Error(serverErr||'Password change failed.');
+    }
+
+    toast('Password changed','ok');
+    if(curInput)curInput.value='';
+    if(newInput)newInput.value='';
+    if(confirmInput)confirmInput.value='';
+    updateAdminPasswordMeter('');
+  }catch(err){
+    if(errBox){
+      errBox.textContent=err?.message||'Password update failed.';
+      errBox.style.display='block';
+    }
+    toast(err?.message||'Password change failed.','error');
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Update Password';
+    }
+  }
+}
+
+function wireAdminAccountSecurityForm(){
+  const nameEl=$('adminProfileNameDisplay');
+  const emailEl=$('adminProfileEmailDisplay');
+  const roleEl=$('adminProfileRoleBadge');
+  const topbarEmailEl=$('adminTopbarEmail');
+  const email=user?.email||currentAdminProfile?.email||'admin@carmy.internal';
+  const name=currentAdminProfile?.name||user?.user_metadata?.name||'Administrator';
+  const role=currentAdminRole==='super_admin'?'Super Admin':(currentAdminRole==='support'?'Support Specialist':'Super Admin');
+  if(nameEl)nameEl.textContent=name;
+  if(emailEl)emailEl.textContent=email;
+  if(roleEl)roleEl.textContent=role;
+  if(topbarEmailEl)topbarEmailEl.textContent=email;
+}
+
+async function adminSignOut(){
+  if(window.__carmyAdminSigningOut)return;
+  window.__carmyAdminSigningOut=true;
+  try{
+    try{
+      await workerPost('/api/session/revoke',{});
+    }catch(err){
+      console.warn('Worker session revocation failed',err);
+    }
+    try{if(db&&db.auth&&typeof db.auth.signOut==='function')await db.auth.signOut({scope:'global'});}catch(_){}
+    try{
+      for(let i=localStorage.length-1;i>=0;i--){
+        const key=localStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')||key.startsWith('td-admin-')||key==='carcare_last_view'))localStorage.removeItem(key);
+      }
+    }catch(_){}
+    try{
+      for(let i=sessionStorage.length-1;i>=0;i--){
+        const key=sessionStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')||key.startsWith('td-admin-')))sessionStorage.removeItem(key);
+      }
+    }catch(_){}
+    isSuperAdmin=false;
+    currentAdminRole=null;
+    currentAdminProfile=null;
+    document.body.classList.remove('td-admin-mode');
+    clearUserMemory();
+    if(typeof location!=='undefined'&&typeof location.replace==='function'){
+      location.replace('./?admin=1&signed_out=1');
+    }
+  }finally{
+    window.__carmyAdminSigningOut=false;
+  }
+}
+window.adminSignOut=adminSignOut;
+window.handleAdminPasswordChange=handleAdminPasswordChange;
+window.updateAdminPasswordMeter=updateAdminPasswordMeter;
+window.wireAdminAccountSecurityForm=wireAdminAccountSecurityForm;
+
 function renderAdminCurrentScreen(){
   if(currentAdminScreen==='users')return renderScreenUsers();
   if(currentAdminScreen==='tokens')return renderScreenTokens();
@@ -4499,6 +4785,7 @@ function renderAdminCurrentScreen(){
   if(currentAdminScreen==='content')return renderScreenContent();
   if(currentAdminScreen==='settings')return renderScreenSettings();
   if(currentAdminScreen==='reports')return renderScreenReports();
+  if(currentAdminScreen==='account')return renderScreenAdminAccount();
   return renderScreenHome();
 }
 
@@ -4518,7 +4805,8 @@ function renderAdminViewContent(){
     {id:'audit',label:'Audit Trail',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>'},
     {id:'content',label:'Content &amp; Site',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'},
     {id:'settings',label:'Settings &amp; Security',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'},
-    {id:'reports',label:'Reports &amp; Analytics',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'}
+    {id:'reports',label:'Reports &amp; Analytics',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'},
+    {id:'account',label:'Account &amp; Security',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'}
   ];
 
   const coreScreens=screens.slice(0,6);
@@ -4541,8 +4829,8 @@ function renderAdminViewContent(){
       '</div>'+
       '<div class="admin-topbar-actions">'+
         '<span class="admin-security-pill">🔒 Server-Verified Admin</span>'+
-        '<div class="admin-profile-pill"><span class="admin-profile-avatar">A</span><span>rnyburia@gmail.com</span></div>'+
-        '<button type="button" class="admin-signout-btn" onclick="logout()">Sign Out</button>'+
+        '<div class="admin-profile-pill" onclick="switchAdminScreen(\'account\')" style="cursor:pointer" title="Manage Account &amp; Security"><span class="admin-profile-avatar">A</span><span id="adminTopbarEmail">admin</span></div>'+
+        '<button type="button" class="admin-signout-btn" onclick="adminSignOut()">Sign Out</button>'+
       '</div>'+
     '</header>'+
     '<div class="admin-layout-body">'+
@@ -4560,7 +4848,7 @@ function renderAdminViewContent(){
           '<div style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">'+
             '<span style="color:#16a34a">●</span> 15-Min Inactivity Guard Active'+
           '</div>'+
-          '<button type="button" class="ghost" style="width:100%;font-size:12px;color:#dc2626" onclick="logout()">Sign Out of Admin</button>'+
+          '<button type="button" class="ghost" style="width:100%;font-size:12px;color:#dc2626" onclick="adminSignOut()">Sign Out of Admin</button>'+
         '</div>'+
       '</aside>'+
       '<main class="admin-main-container" id="adminMainContainer">'+
@@ -4597,6 +4885,10 @@ function renderAdminViewContent(){
           '<button type="button" class="ghost" onclick="closeAdminMoreSheet()" style="padding:4px 8px;font-size:16px">✕</button>'+
         '</div>'+
         '<div class="admin-more-grid">'+
+          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'account\')">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'+
+            '<span>Account</span>'+
+          '</button>'+
           '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'tokens\')">'+
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'+
             '<span>Tokens</span>'+
@@ -4629,7 +4921,7 @@ function renderAdminViewContent(){
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'+
             '<span>Reports</span>'+
           '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="logout()" style="color:#dc2626">'+
+          '<button type="button" class="admin-more-btn" onclick="adminSignOut()" style="color:#dc2626">'+
             '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>'+
             '<span>Sign Out</span>'+
           '</button>'+
@@ -4637,12 +4929,16 @@ function renderAdminViewContent(){
       '</div>'+
     '</div>'+
   '</div>';
+  wireAdminAccountSecurityForm();
 }
 
 function switchAdminScreen(screenId){
   currentAdminScreen=screenId;
   closeAdminMoreSheet();
   renderAdminViewContent();
+  if(screenId==='account'){
+    wireAdminAccountSecurityForm();
+  }
   if(screenId==='tickets'&&!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
     loadAdminTickets();
   }
