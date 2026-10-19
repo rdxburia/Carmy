@@ -671,3 +671,9 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - **Checks not run:** `npm test` could not be executed because this connection provides GitHub file/API operations but no local Node shell. D1 migration tracking has not been queried in this pass; no migration was applied. Staging E2E remains NOT RUN.
 - **Safety outcomes:** no merge, no deployment, no staging migration apply, no production operations/data reads, and no changes to `feat/ticket-frontend-v2`.
 - **Next actions:** execute the configured `npm test` suite in a Node-capable checkout; inspect staging migration ledger/schema before any apply; then perform staging E2E only after schema/tracking are consistent. Production remains HOLD; branch is NOT READY TO MERGE based on evidence currently available.
+
+
+## 2026-10-19 — Read-only staging D1 tracking check
+- Queried only the staging D1 UUID explicitly configured in `wrangler.staging.toml` (`803810b8-77d0-42bb-bdd6-7e8b1cc4afdb`); no production database was queried.
+- Read-only SQL results: `d1_migrations` contains only `0007_support_ticket_workflow.sql` (applied_at `2026-10-18 19:33:58`); the `team_members` table is absent; `support_tickets` has the seven 0007 workflow columns; aggregate ticket count is 4. No ticket row content was selected. Queries reported `changed_db=false` and `rows_written=0`.
+- **Decision:** do not apply anything through a hand-written SQL call. Wrangler migration application is not available in this execution environment, so 0008 remains pending and the D1 ledger was not modified. Use Wrangler with `wrangler.staging.toml` after tests are run and reviewed. Production remains HOLD.
