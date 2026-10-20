@@ -1116,6 +1116,22 @@
     const totalAmount = inv.amount || (subtotal + gstAmount);
     const isSaved = Boolean(inv.saved && !inv.is_preview);
 
+    let taxRowsHtml = '';
+    const rawTaxLines = inv.tax_lines || inv.taxes;
+    if (!inv.isGst) {
+      taxRowsHtml = '<tr><td style="padding:8px 0">Tax / GST</td><td style="text-align:right">Exempt</td></tr>';
+    } else if (Array.isArray(rawTaxLines) && rawTaxLines.length > 0 && rawTaxLines.every(tl => tl && typeof tl.label === 'string' && tl.label.trim())) {
+      taxRowsHtml = rawTaxLines.map(tl => {
+        const amt = tl.amount !== undefined ? Number(tl.amount) : (gstAmount / rawTaxLines.length);
+        return '<tr><td style="padding:8px 0">' + safe(tl.label) + '</td><td style="text-align:right">' + money(amt) + '</td></tr>';
+      }).join('');
+    } else {
+      const blockedNotice = typeof window.renderBackendBlockedCard === 'function'
+        ? window.renderBackendBlockedCard('/api/garage/invoices/:id/taxes', 'GET', 'Tax breakdown labels (tax_lines[].label) missing from server response.')
+        : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/garage/invoices/:id/taxes</code> (tax_lines[].label missing)</div>';
+      taxRowsHtml = '<tr class="backend-blocked-row"><td colspan="2" style="padding:6px 0">' + blockedNotice + '</td></tr>';
+    }
+
     $('printInvoiceDetails').innerHTML = `
       <div class="ebill-preview-wrap">
         <div class="ebill-header">
@@ -1157,7 +1173,7 @@
             ${inv.other ? `<tr><td style="padding:8px 0">Other Charges / Diagnostic</td><td style="text-align:right">${money(inv.other)}</td></tr>` : ''}
             ${inv.discount ? `<tr><td style="padding:8px 0;color:#166534">Discount</td><td style="text-align:right;color:#166534">-${money(inv.discount)}</td></tr>` : ''}
             <tr style="border-top:1px solid #e2e8f0;font-weight:600"><td style="padding:8px 0">Subtotal</td><td style="text-align:right">${money(subtotal)}</td></tr>
-            <tr><td style="padding:8px 0">GST Split ${inv.isGst ? '(CGST 9% + SGST 9%)' : '(Exempt)'}</td><td style="text-align:right">${money(gstAmount)}</td></tr>
+            ${taxRowsHtml}
             <tr style="border-top:2px solid #0f172a;font-size:16px;font-weight:800">
               <td style="padding:10px 0">
                 Total Amount

@@ -6823,6 +6823,13 @@ function getAdminRolePermissions(role){
       label:'Team Lead',
       allowedScreens:['home','tickets','team','account'],
       canMutateTickets:true,
+      canUpdateAssignedTicketStatus:true,
+      canAddInternalNotes:true,
+      canAssignTickets:true,
+      canChangePriority:true,
+      canEnableChat:true,
+      canRevealContact:true,
+      canViewAsUser:true,
       canViewAudit:false,
       canManageUsers:false,
       canManageTokens:false,
@@ -6838,6 +6845,13 @@ function getAdminRolePermissions(role){
       label:'Support Agent',
       allowedScreens:['home','tickets','account'],
       canMutateTickets:true,
+      canUpdateAssignedTicketStatus:true,
+      canAddInternalNotes:true,
+      canAssignTickets:true,
+      canChangePriority:true,
+      canEnableChat:true,
+      canRevealContact:true,
+      canViewAsUser:true,
       canViewAudit:false,
       canManageUsers:false,
       canManageTokens:false,
@@ -6853,6 +6867,13 @@ function getAdminRolePermissions(role){
       label:'Support Executive',
       allowedScreens:['home','tickets','account'],
       canMutateTickets:false,
+      canUpdateAssignedTicketStatus:true,
+      canAddInternalNotes:true,
+      canAssignTickets:false,
+      canChangePriority:false,
+      canEnableChat:false,
+      canRevealContact:false,
+      canViewAsUser:false,
       canViewAudit:false,
       canManageUsers:false,
       canManageTokens:false,
@@ -6867,6 +6888,13 @@ function getAdminRolePermissions(role){
     label:normRole==='owner'?'Owner / Super Admin':'Super Admin',
     allowedScreens:['home','users','tokens','plans','upgrades','tickets','garages','team','audit','content','settings','reports','account'],
     canMutateTickets:true,
+    canUpdateAssignedTicketStatus:true,
+    canAddInternalNotes:true,
+    canAssignTickets:true,
+    canChangePriority:true,
+    canEnableChat:true,
+    canRevealContact:true,
+    canViewAsUser:true,
     canViewAudit:true,
     canManageUsers:true,
     canManageTokens:true,
@@ -6875,6 +6903,18 @@ function getAdminRolePermissions(role){
     canManageTeam:true,
     defaultScreen:'home'
   };
+}
+
+/* UI-ONLY: Check if ticket is assigned to the current active specialist / executive. Server must enforce later. */
+function isTicketAssignedToCurrentSpecialist(ticket){
+  if(!ticket)return false;
+  const myId=String(currentAdminProfile?.id||user?.id||'').trim();
+  const myEmail=String(currentAdminProfile?.email||user?.email||'').trim().toLowerCase();
+  const assigneeId=String(ticket.assignee_id||'').trim();
+  const assigneeEmail=String(ticket.assignee_email||'').trim().toLowerCase();
+  if(assigneeId && (assigneeId===myId || assigneeId==='me' || assigneeId===myEmail))return true;
+  if(assigneeEmail && assigneeEmail===myEmail)return true;
+  return false;
 }
 
 async function loadTeamMe(force=false){
@@ -8150,6 +8190,11 @@ async function openAdminTicketDetails(ticketId){
 
   const perms=getAdminRolePermissions(currentAdminRole);
   const canMutate=perms.canMutateTickets;
+  const isExec=currentAdminRole==='support_executive';
+  const isAssignedToMe=isTicketAssignedToCurrentSpecialist(ticket);
+  /* UI-ONLY: Support Executive can only update status if ticket is assigned to them. Server must enforce later. */
+  const canUpdateStatus=canMutate||(perms.canUpdateAssignedTicketStatus&&isAssignedToMe);
+  const canAddNote=canMutate||perms.canAddInternalNotes;
 
   let chatBoxHtml='';
   if(chatActive){
@@ -8200,32 +8245,32 @@ async function openAdminTicketDetails(ticketId){
       '<div>'+
         '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">STATUS WORKFLOW</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<select id="adminTicketStatusSelect" '+(canMutate?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+transitionOptions+'</select>'+
-          '<button type="button" class="primary" '+(canMutate?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminStatusChange(\''+tid+'\')">Update</button>'+
+          '<select id="adminTicketStatusSelect" '+(canUpdateStatus?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px" title="'+(isExec&&!isAssignedToMe?'Support Executive: Status updates restricted to tickets assigned to you (UI-ONLY)':'')+'">'+transitionOptions+'</select>'+
+          '<button type="button" class="primary" '+(canUpdateStatus?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminStatusChange(\''+tid+'\')" title="'+(isExec&&!isAssignedToMe?'Support Executive: Can only update assigned tickets':'')+'">Update</button>'+
         '</div>'+
       '</div>'+
       '<div>'+
         '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">ASSIGN SPECIALIST</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<select id="adminTicketAssigneeSelect" '+(canMutate?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+          '<select id="adminTicketAssigneeSelect" '+(perms.canAssignTickets?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
             '<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
             '<option value="'+esc(user?.id||'me')+'" '+(ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>'+
             rosterOptions+
             (adminRosterBlocked?'<option disabled>(Team roster unavailable - BLOCKED: GET /api/admin/team missing)</option>':'')+
           '</select>'+
-          '<button type="button" class="ghost" '+(canMutate?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')">Save</button>'+
+          '<button type="button" class="ghost" '+(perms.canAssignTickets?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')" title="'+(!perms.canAssignTickets?'Ticket assignment is restricted for this role':'')+'">Save</button>'+
         '</div>'+
       '</div>'+
       '<div>'+
         '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">PRIORITY</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<select id="adminTicketPrioritySelect" '+(canMutate?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+          '<select id="adminTicketPrioritySelect" '+(perms.canChangePriority?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
             '<option value="low" '+(ticket.priority==='low'?'selected':'')+'>Low</option>'+
             '<option value="normal" '+(ticket.priority==='normal'?'selected':'')+'>Normal</option>'+
             '<option value="high" '+(ticket.priority==='high'?'selected':'')+'>High</option>'+
             '<option value="urgent" '+(ticket.priority==='urgent'?'selected':'')+'>Urgent</option>'+
           '</select>'+
-          '<button type="button" class="ghost" '+(canMutate?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminPriorityChange(\''+tid+'\')">Save</button>'+
+          '<button type="button" class="ghost" '+(perms.canChangePriority?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminPriorityChange(\''+tid+'\')" title="'+(!perms.canChangePriority?'Priority modification is restricted for this role':'')+'">Save</button>'+
         '</div>'+
       '</div>'+
     '</div>'+
@@ -8255,9 +8300,20 @@ async function openAdminTicketDetails(ticketId){
       '<div style="display:flex;justify-content:flex-end;margin-top:8px">'+
         '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Send Update</button>'+
       '</div>'+
-    '</div>') : ('<div class="admin-readonly-notice">👁️ <b>Read-Only Support Executive Mode</b>: You have inspection clearance. Status transitions, assignee changes, priority modifications, and message sending are restricted to Support Agents, Team Leads and Super Admins.</div>'))+
+    '</div>') : (perms.canAddInternalNotes ? ('<div style="margin-top:14px;background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:12px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12.5px;font-weight:700;color:#854d0e">'+
+        '<span>📝 Internal Staff Note (Support Executive)</span>'+
+        '<span style="font-size:11px;color:#a16207;background:#fef9c3;padding:2px 8px;border-radius:999px">Staff Only · Not visible to user</span>'+
+      '</div>'+
+      '<input type="hidden" name="adminMsgTarget" value="internal">'+
+      '<textarea id="adminReplyText" rows="3" placeholder="Compose internal note for specialist team..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #cbd5e1;padding:8px;box-sizing:border-box"></textarea>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'+
+        '<small class="muted">Public customer replies, reassignment and priority changes are restricted.</small>'+
+        '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Add Internal Note</button>'+
+      '</div>'+
+    '</div>') : ('<div class="admin-readonly-notice">👁️ <b>Read-Only Mode</b>: You have inspection clearance. Status transitions, assignee changes, priority modifications, and message sending are restricted.</div>')))+
     '<div class="ticket-action-bar">'+
-      '<button type="button" class="ghost" id="btnAdminViewAsUser" style="color:'+(adminViewAsUserBlocked?'#94a3b8':'#b45309')+'" '+(adminViewAsUserBlocked?'disabled title="Backend endpoint not available"':'')+' onclick="openAdminTicketViewAsUser(\''+tid+'\')">'+(adminViewAsUserBlocked?'Not available yet':'👁️ View As User (Audit Logged)')+'</button>'+
+      '<button type="button" class="ghost" id="btnAdminViewAsUser" style="color:'+(adminViewAsUserBlocked||!perms.canViewAsUser?'#94a3b8':'#b45309')+'" '+(adminViewAsUserBlocked||!perms.canViewAsUser?'disabled title="View-as-user is restricted for this role"':'')+' onclick="openAdminTicketViewAsUser(\''+tid+'\')">'+(adminViewAsUserBlocked?'Not available yet':(perms.canViewAsUser?'👁️ View As User (Audit Logged)':'👁️ View As User (Restricted)'))+'</button>'+
       '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
     '</div>'+
   '</div>';
@@ -8348,7 +8404,14 @@ function populateAdminModalEvents(ticket){
 
 async function handleAdminStatusChange(ticketId){
   const perms=getAdminRolePermissions(currentAdminRole);
-  if(!perms.canMutateTickets){
+  const ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
+  /* UI-ONLY: Support Executive can only update tickets assigned to them in browser. Server must enforce later. */
+  if(currentAdminRole==='support_executive'){
+    if(!isTicketAssignedToCurrentSpecialist(ticket)){
+      toast('Permission denied: Support Executives can only update status for tickets assigned to them. (UI-ONLY check)','error');
+      return;
+    }
+  } else if(!perms.canMutateTickets){
     toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
     return;
   }
@@ -8371,8 +8434,8 @@ async function handleAdminStatusChange(ticketId){
 
 async function handleAdminAssigneeChange(ticketId){
   const perms=getAdminRolePermissions(currentAdminRole);
-  if(!perms.canMutateTickets){
-    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+  if(!perms.canAssignTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot reassign tickets.','error');
     return;
   }
   const sel=$('adminTicketAssigneeSelect');
@@ -8391,8 +8454,8 @@ async function handleAdminAssigneeChange(ticketId){
 
 async function handleAdminPriorityChange(ticketId){
   const perms=getAdminRolePermissions(currentAdminRole);
-  if(!perms.canMutateTickets){
-    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+  if(!perms.canChangePriority){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify ticket priority.','error');
     return;
   }
   const sel=$('adminTicketPrioritySelect');
@@ -8411,8 +8474,8 @@ async function handleAdminPriorityChange(ticketId){
 
 async function handleAdminChatToggle(ticketId,enabled){
   const perms=getAdminRolePermissions(currentAdminRole);
-  if(!perms.canMutateTickets){
-    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+  if(!perms.canEnableChat){
+    toast('Permission denied: Role "'+perms.label+'" cannot toggle customer chat.','error');
     return;
   }
   try{
@@ -8444,7 +8507,17 @@ async function handleAdminShowNameToggle(ticketId,enabled){
 
 async function handleAdminSendReply(ticketId){
   const perms=getAdminRolePermissions(currentAdminRole);
-  if(!perms.canMutateTickets){
+  const isInternal=document.querySelector('input[name="adminMsgTarget"]:checked')?.value==='internal' || document.querySelector('input[name="adminMsgTarget"][type="hidden"]')?.value==='internal' || currentAdminRole==='support_executive';
+  if(currentAdminRole==='support_executive'){
+    if(!perms.canAddInternalNotes){
+      toast('Permission denied: Role "'+perms.label+'" cannot add internal notes.','error');
+      return;
+    }
+    if(!isInternal){
+      toast('Permission denied: Support Executives can only add internal notes, not public messages.','error');
+      return;
+    }
+  } else if(!perms.canMutateTickets){
     toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
     return;
   }
@@ -8457,7 +8530,6 @@ async function handleAdminSendReply(ticketId){
     textEl.focus();
     return;
   }
-  const isInternal=document.querySelector('input[name="adminMsgTarget"]:checked')?.value==='internal';
   btn.disabled=true;
   btn.textContent='Submitting...';
   try{
@@ -8509,8 +8581,8 @@ async function loadAdminSupportRoster(){
 
 async function handleAdminEnableChatWithMsg(ticketId){
   const perms=getAdminRolePermissions(currentAdminRole);
-  if(!perms.canMutateTickets){
-    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+  if(!perms.canEnableChat){
+    toast('Permission denied: Role "'+perms.label+'" cannot enable customer chat.','error');
     return;
   }
   const msgInput=$('adminEnableChatMsg');
@@ -8544,6 +8616,11 @@ async function handleAdminEnableChatWithMsg(ticketId){
 let adminViewAsUserBlocked=false;
 
 async function openAdminTicketViewAsUser(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canViewAsUser){
+    toast('Permission denied: Role "'+perms.label+'" cannot view sessions as user.','error');
+    return;
+  }
   const btn=$('btnAdminViewAsUser');
   if(adminViewAsUserBlocked){
     if(btn){
@@ -9378,6 +9455,7 @@ window.renderPriorityBadge=renderPriorityBadge;
 window.renderAdminListContent=renderAdminListContent;
 window.loadTeamMe=loadTeamMe;
 window.getAdminRolePermissions=getAdminRolePermissions;
+window.isTicketAssignedToCurrentSpecialist=isTicketAssignedToCurrentSpecialist;
 window.checkForcedPasswordChange=checkForcedPasswordChange;
 window.submitForcedPasswordChange=submitForcedPasswordChange;
 window.checkForcedProfileCompletion=checkForcedProfileCompletion;

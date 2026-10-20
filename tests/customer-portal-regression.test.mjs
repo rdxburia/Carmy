@@ -4042,48 +4042,98 @@ test("Multi-Role Team Phase 6: support_agent role shell allows tickets and restr
   assert.equal(h.eval("currentAdminScreen"), "tickets", "currentAdminScreen must remain on allowed screen");
 });
 
-test("Multi-Role Team Phase 6: support_executive role enables read-only inspection, renders .admin-readonly-notice, and blocks mutation actions", async (t) => {
+test("Multi-Role Team Phase 6: support_executive role allows status update on assigned tickets and internal notes, while blocking unassigned status, assignment, priority, chat, view-as-user, and team management", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
     setCurrentAdminRole('support_executive');
-    adminTickets = [{
-      id: 't-audit-1',
-      subject: 'Suspicious login check',
-      category: 'account',
-      status: 'open',
-      priority: 'normal',
-      email: 'user@example.com',
-      message: 'Please check recent activities.',
-      created_at: new Date().toISOString(),
-      events: []
-    }];
+    currentAdminProfile = { id: 'exec-1', email: 'exec@torqdesk.com', role: 'support_executive' };
+    adminTickets = [
+      {
+        id: 't-unassigned-1',
+        subject: 'General Question',
+        category: 'account',
+        status: 'open',
+        priority: 'normal',
+        email: 'user@example.com',
+        assignee_id: null,
+        message: 'Please help.',
+        created_at: new Date().toISOString(),
+        events: []
+      },
+      {
+        id: 't-assigned-1',
+        subject: 'Assigned to Executive',
+        category: 'account',
+        status: 'open',
+        priority: 'normal',
+        email: 'user2@example.com',
+        assignee_id: 'exec-1',
+        message: 'Assigned task.',
+        created_at: new Date().toISOString(),
+        events: []
+      }
+    ];
+    toast = (msg, type) => { globalThis.__lastToast = { msg, type }; };
   `);
 
   const perms = h.eval("getAdminRolePermissions('support_executive')");
   assert.equal(perms.canMutateTickets, false);
-  assert.equal(perms.canViewAudit, false);
-  assert.equal(perms.canManageUsers, false);
-  assert.equal(perms.canManageTokens, false);
-  assert.equal(perms.canManagePlans, false);
-  assert.equal(perms.canManageGarages, false);
+  assert.equal(perms.canUpdateAssignedTicketStatus, true);
+  assert.equal(perms.canAddInternalNotes, true);
+  assert.equal(perms.canAssignTickets, false);
+  assert.equal(perms.canChangePriority, false);
+  assert.equal(perms.canEnableChat, false);
+  assert.equal(perms.canRevealContact, false);
+  assert.equal(perms.canViewAsUser, false);
   assert.equal(perms.canManageTeam, false);
 
-  await h.eval("openAdminTicketDetails('t-audit-1')");
-  const modal = h.elements.get('adminTicketDetailModal');
-  assert.ok(modal, "Detail modal should be rendered");
-  assert.ok(modal.innerHTML.includes("admin-readonly-notice"), "Must render .admin-readonly-notice");
-  assert.ok(modal.innerHTML.includes("Read-Only Support Executive Mode"), "Must state Read-Only Support Executive Mode");
-  assert.ok(modal.innerHTML.includes("disabled"), "Status / priority controls must be disabled");
+  // 1. Unassigned ticket: status update blocked (UI-ONLY)
+  await h.eval("openAdminTicketDetails('t-unassigned-1')");
+  const unassignedModal = h.elements.get('adminTicketDetailModal');
+  assert.ok(unassignedModal, "Detail modal rendered");
+  assert.ok(unassignedModal.innerHTML.includes("Internal Staff Note (Support Executive)"), "Must render internal note composer");
+  assert.ok(unassignedModal.innerHTML.includes("disabled"), "Status control must be disabled for unassigned ticket");
 
-  // Verify mutation is blocked
+  await h.eval("handleAdminStatusChange('t-unassigned-1')");
+  let lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied") && lastToast?.msg?.includes("assigned to them"), "Status update on unassigned ticket must be blocked");
+
+  // Reassignment, priority, and chat must be blocked
+  await h.eval("handleAdminAssigneeChange('t-unassigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Assignee change must be blocked");
+
+  await h.eval("handleAdminPriorityChange('t-unassigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Priority change must be blocked");
+
+  await h.eval("handleAdminChatToggle('t-unassigned-1', true)");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Chat toggle must be blocked");
+
+  await h.eval("openAdminTicketViewAsUser('t-unassigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "View-as-user must be blocked");
+
+  // 2. Assigned ticket: status control is enabled and update succeeds
+  await h.eval("openAdminTicketDetails('t-assigned-1')");
+  const assignedModal = h.elements.get('adminTicketDetailModal');
+  assert.ok(!assignedModal.innerHTML.includes("title=\"Support Executive: Status updates restricted to tickets assigned to you (UI-ONLY)\""), "Status select must be enabled for assigned ticket");
+
+  // 3. Adding internal note succeeds
+  let patchPayload = null;
   h.eval(`
-    toast = (msg, type) => { globalThis.__lastToast = { msg, type }; };
+    workerPatch = async (path, body) => {
+      patchPayload = body;
+      return { ok: true };
+    };
+    document.getElementById('adminReplyText').value = 'Reviewed customer inquiry, pending parts.';
   `);
-  await h.eval("handleAdminStatusChange('t-audit-1')");
-  const lastToast = h.eval("globalThis.__lastToast");
-  assert.ok(lastToast?.msg?.includes("Permission denied"), "Mutation action must be blocked with permission toast");
+  await h.eval("handleAdminSendReply('t-assigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Internal note recorded"), "Internal note must succeed");
 });
 
 test("Multi-Role Team Phase 6: Forced first-login password change overlay blocks access when password_change_required is flagged, enforces new password, and clears flag upon submission", async (t) => {
@@ -4828,10 +4878,11 @@ test("Phase 9 Owner Decisions: WhatsApp bill send shows template preview; 'Sent'
   assert.equal(sentPayload.send_join_invite, false);
 });
 
-test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', server totals/GST split, and 'Preview only' badge", async (t) => {
+test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', server tax labels or BLOCKED on missing labels, and 'Preview only' badge", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
+  // 1. Missing server tax_lines on GST invoice renders BLOCKED
   h.eval(`
     data = { profile: { name: 'City Auto Care', city: 'Shimla' }, invoices: [] };
     openPrintableInvoice({
@@ -4851,11 +4902,38 @@ test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', serv
     });
   `);
 
-  const detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
+  let detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
   assert.ok(detailsHtml.includes("Powered by Torq Desk"), "Must include 'Powered by Torq Desk' footer");
   assert.ok(detailsHtml.includes("Preview only"), "Must show 'Preview only' badge for unsaved invoice");
-  assert.ok(detailsHtml.includes("GST Split (CGST 9% + SGST 9%)"), "Must show GST split");
+  assert.ok(detailsHtml.includes("BLOCKED"), "Must show BLOCKED when tax_lines is missing on GST invoice");
+  assert.ok(!detailsHtml.includes("9%"), "Must NOT hard-code 9% tax label");
   assert.ok(detailsHtml.includes("Pending owner decision"), "Must show GSTIN Pending owner decision");
+
+  // 2. Server-returned tax_lines renders exact server labels
+  h.eval(`
+    openPrintableInvoice({
+      id: 'INV-202',
+      customer: 'Suresh Raina',
+      phone: '9816011111',
+      vehicle: 'Mahindra Thar',
+      reg: 'HP 01T 0007',
+      date: '2026-10-20',
+      parts: 4000,
+      labour: 1000,
+      other: 0,
+      discount: 0,
+      isGst: true,
+      amount: 5900,
+      saved: false,
+      tax_lines: [
+        { label: 'Central GST (CGST)', amount: 450 },
+        { label: 'State GST (SGST)', amount: 450 }
+      ]
+    });
+  `);
+  detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
+  assert.ok(detailsHtml.includes("Central GST (CGST)"), "Must render server tax label Central GST");
+  assert.ok(detailsHtml.includes("State GST (SGST)"), "Must render server tax label State GST");
 });
 
 test("Phase 9 Owner Decisions: Non-approved roles are completely absent; only 3 approved team roles and super_admin exist", async (t) => {
@@ -4878,7 +4956,15 @@ test("Phase 9 Owner Decisions: Non-approved roles are completely absent; only 3 
   const execPerms = h.eval("getAdminRolePermissions('support_executive')");
   assert.equal(execPerms.role, 'support_executive');
   assert.equal(execPerms.label, 'Support Executive');
-  assert.equal(execPerms.canMutateTickets, false, "Support Executive must be read-only");
+  assert.equal(execPerms.canMutateTickets, false, "Support Executive has canMutateTickets false");
+  assert.equal(execPerms.canUpdateAssignedTicketStatus, true, "Support Executive can update assigned ticket status");
+  assert.equal(execPerms.canAddInternalNotes, true, "Support Executive can add internal notes");
+  assert.equal(execPerms.canAssignTickets, false, "Support Executive cannot assign tickets");
+  assert.equal(execPerms.canChangePriority, false, "Support Executive cannot change priority");
+  assert.equal(execPerms.canEnableChat, false, "Support Executive cannot enable chat");
+  assert.equal(execPerms.canRevealContact, false, "Support Executive cannot reveal contact");
+  assert.equal(execPerms.canViewAsUser, false, "Support Executive cannot view as user");
+  assert.equal(execPerms.canManageTeam, false, "Support Executive cannot manage team");
 
   const superAdminPerms = h.eval("getAdminRolePermissions('super_admin')");
   assert.equal(superAdminPerms.role, 'super_admin');

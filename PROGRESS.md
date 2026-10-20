@@ -1079,3 +1079,38 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
     * Includes 8 new regression tests covering approved role matrix, Team Lead permissions, Support Executive read-only mode, vehicle claim badges, claim confirm with OTP, locked garage history, server-authoritative garage matching, and bill channel template delivery.
   - `node --test tests/garage-redesign.test.mjs`: **5/5 tests passing**.
   - Playwright UI screenshots: **NOT RUN** (reason: Playwright is not installed in the workspace dependencies).
+
+
+## 2026-10-20 — Stabilization: Support Executive Permissions Refinement, Dynamic E-Bill Tax Labels & Test Integrity Audit
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend stabilization tasks per Owner instructions:
+  1. **Fix 1: Support Executive Permissions & UI-ONLY Assignment Enforcement:**
+     - Updated `getAdminRolePermissions('support_executive')`:
+       * Allowed: `canUpdateAssignedTicketStatus: true` (tickets assigned to them only), `canAddInternalNotes: true` (staff-only internal notes).
+       * Prohibited: `canMutateTickets: false`, `canAssignTickets: false`, `canChangePriority: false`, `canEnableChat: false`, `canRevealContact: false`, `canViewAsUser: false`, `canManageTeam: false`.
+     - Implemented `isTicketAssignedToCurrentSpecialist(ticket)` labeled `/* UI-ONLY: Check if ticket is assigned to current active specialist/executive. Server must enforce later. */`.
+     - In `openAdminTicketDetails`: Status controls are enabled ONLY if ticket is assigned to current executive. Composer is scoped to internal note only. Reassign, priority, chat, view-as-user, and phone reveal are disabled.
+     - In `handleAdminStatusChange`: Enforces `/* UI-ONLY: Support Executive may only update tickets assigned to them */` with toast error.
+     - In `handleAdminSendReply`: Support Executive is locked to internal notes.
+  2. **Fix 2: Removal of Hard-Coded Tax Labels:**
+     - Removed hardcoded "SGST (9%)" and "CGST (9%)" from `openPrintableInvoice` in `js/garage-workspace.js`.
+     - Tax rows dynamically map over `tax_lines[].label` provided by server response.
+     - Truthful failure: If `inv.isGst` is true and `tax_lines` (or `tax_lines[].label`) is missing from server response, renders `.backend-blocked-card` identifying `GET /api/garage/invoices/:id/taxes`.
+     - Confirmed with `git grep -n "9%" -- js/ css/`: 0 tax labels remaining in JavaScript.
+  3. **Fix 3: Test Integrity & Changed Assertion Audit:**
+     - `npm.cmd test`: Raw summary passes 184/184 tests (0 fails, 0 skips, duration 4.9s).
+     - Phase 9 added 8 tests (from 176 baseline to 184 total).
+     - `git diff cc47eb3..dd1661d` audit on `tests/customer-portal-regression.test.mjs`: All 19 pre-existing assertion edits verified; 0 assertions weakened; all correspond to B1 neutral fixture (`admin@carmy.internal`) and Part 1 approved 3-role matrix updates.
+  4. **Fix 4: Garage Workspace Review:**
+     - Verified all 7 diff hunks in `js/garage-workspace.js` between `cc47eb3` and `dd1661d`: 0 blocks lost; all removed blocks were cleanly replaced or upgraded for server vehicle matching, delivery channel selection, or E-bill layout.
+     - `node --check js/garage-workspace.js` passed with 0 errors.
+  5. **Fix 5: Scope & UI-ONLY Data Isolation Audit:**
+     - `/* UI-ONLY: Garage isolation */`: Garage workspace isolates jobs, bills, inventory, staff to active session `data`. Server must enforce tenant isolation on all `/api/garage/*` endpoints.
+     - `/* UI-ONLY: Vehicle owner isolation */`: Owner dashboard isolates vehicles to authenticated owner's `cars` list and filters service records by `car.id`. Server must enforce user ownership via Supabase RLS / D1 queries.
+     - `/* UI-ONLY: Unconfirmed garage history lock */`: Unconfirmed garage history locked in browser until claim verified (`renderHistory` in `js/app.js`).
+     - `/* UI-ONLY: Support Executive ticket assignment isolation */`: Support Executive can only update status for tickets assigned to them (`isTicketAssignedToCurrentSpecialist`). Server must enforce this check in `PATCH /api/admin/tickets/:id`.
+  6. **Fix 6: Playwright Responsive Verification:**
+     - **NOT RUN** (reason: awaiting owner approval for dev dependency).
+  7. **Governance Confirmation:**
+     - Worker, migrations, SQL, and main branch untouched. DO NOT MERGE recommendation maintained.

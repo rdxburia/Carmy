@@ -295,3 +295,15 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Zero Worker edits, zero DB migrations, zero SQL modifications, zero workflow changes. Main branch untouched; zero production deployments.
 - Stash `stash@{0}` preserved untouched.
 - Test suites: `npm.cmd test` passed 184/184 tests green; `node --test tests/garage-redesign.test.mjs` passed 5/5 tests green; `node --check` passed across all modified JS files.
+
+
+## 2026-10-20 — Stabilization: Support Executive Permissions Refinement, Dynamic Tax Labels & Test Integrity
+- Scope: Stabilized branch `feat/frontend-roadmap` per Owner instructions:
+  1. Support Executive permission spec: `canUpdateAssignedTicketStatus: true` (assigned tickets only), `canAddInternalNotes: true` (internal notes only). Prohibited: assign tickets, change priority, enable chat, reveal contact, view as user, manage team.
+  2. Enforced UI-ONLY check: `isTicketAssignedToCurrentSpecialist(ticket)` in `js/app.js` (server must enforce later).
+  3. Dynamic E-Bill tax labels: Removed hardcoded "SGST (9%)" and "CGST (9%)" from `js/garage-workspace.js`. Renders `tax_lines[].label` from server or displays BLOCKED card.
+  4. Test integrity: 184/184 tests passing. Verified all 19 assertion changes from `cc47eb3` were non-weakening role/fixture updates.
+  5. Garage workspace review: 0 blocks lost; all replaced/upgraded cleanly.
+  6. Documented UI-ONLY data isolation checks across garage workspace, owner vehicles, unconfirmed history, and support executive assignment.
+  7. Playwright: NOT RUN (awaiting owner approval for dev dependency).
+- Worker, migrations, SQL, workflows, and main branch untouched. Maintained DO NOT MERGE recommendation.
