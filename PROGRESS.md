@@ -1003,12 +1003,45 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
    - Runs upon user authentication in `start()`.
    - Calls `GET /api/profile/status`. If missing or 404, fails closed: renders `#profileGateOverlay` with `.backend-blocked-card` for `GET /api/profile/status` and sign-out button.
    - If `email_verified`, `mobile_verified`, or `profile_complete` is false, displays non-dismissable modal overlay listing missing items with action to complete verification or sign out.
-   - Super admin / team members bypass vehicle-owner profile gate (`rnyburia@gmail.com` or team role).
+   - Super admin / team members bypass vehicle-owner profile gate (verified server team role: `super_admin`, `admin`, `support_lead`, `billing_admin`, `auditor`). No hardcoded email gates.
    - Mobile number update in Account screen requires fresh OTP verification via `POST /api/profile/mobile-change/send` and `/verify`; blocked with `.backend-blocked-card` if route is disabled.
 
 ### Automated Test Suite:
 - `node --check js/backend-config.js`: Clean (0 syntax errors).
 - `node --check js/app.js`: Clean (0 syntax errors).
 - `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
-- `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips, duration 4.2s).
-  * 9 new Phase 8 tests covering: Capability switch & 404 fallback, Step 2 password validation & duplicate error, Step 3 Email OTP & lockout, Step 4 Mobile mandatory & +91 format, Step 5 Profile validation & "Profile saved" ok check, Profile gate fail-closed & non-dismissable overlay, Profile mobile change OTP, Zero credential leak in storage/console & XSS sanitization, 360px & 1280px responsive layout.
+- `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips).
+  * 9 Phase 8 tests covering: Capability switch & 404 fallback, Step 2 password validation & duplicate error, Step 3 Email OTP & lockout, Step 4 Mobile mandatory & +91 format, Step 5 Profile validation & "Profile saved" ok check, Profile gate fail-closed & non-dismissable overlay, Profile mobile change OTP, Zero credential leak in storage/console & XSS sanitization, 360px & 1280px responsive layout.
+
+
+## 2026-10-20 — Phase 8 Part B: Hardening, Server-Role Enforcement, Production Cleanup & Verification
+
+- **Branch:** `feat/frontend-roadmap` (Commit: `ce3b1bc`)
+- **Fixes Applied (B1–B7):**
+  1. **B1: Hardcoded Email Removal & Server Role Verification:**
+     - Removed all 4 gate/bypass references to `rnyburia@gmail.com` in `js/app.js` (`checkProfileGate` L1622, `nav` L2116, `start` L2492, and `adminView` L9285).
+     - Gating and administrative mode switching now strictly rely on server roles (`super_admin`, `admin`, `support_lead`, `billing_admin`, `auditor`) loaded from `GET /api/team/me` and user object claims. Missing routes fail closed.
+     - Replaced line 8047 error message with generic text: `Confirm the deployed Worker is using the active Super Admin registry entry for this account.`
+     - Replaced all owner email literals in `tests/customer-portal-regression.test.mjs` with neutral test fixtures (`email: 'admin@carmy.internal', role: 'super_admin'`).
+  2. **B2: Status Labels:**
+     - All 10 unbuilt Phase 8 backend endpoints documented and verified as `BLOCKED / MISSING` (Worker routes not implemented on this branch).
+  3. **B3: Production Code Cleanup:**
+     - Removed `manualOverride` completely from `js/backend-config.js` (0 occurrences across `js/`).
+     - Removed `setBackendCapabilities` from `js/backend-config.js` and removed its window/module exports.
+     - Verified `window.setBackendCapabilities` is strictly `undefined` on normal page load.
+     - Isolated test capability simulation strictly to `tests/customer-portal-regression.test.mjs` test harness.
+  4. **B4: Strict Assertion Restoration:**
+     - Restored strict assertion at line 4411 in `tests/customer-portal-regression.test.mjs`: `assert.equal(h.eval("document.getElementById('profileGateOverlay')"), null, "Overlay must be removed")`.
+  5. **B5: Form 29/30 Test 11 Verification:**
+     - Verified Form 29/30 Test 11 (`PDF generation after saving and reloading form data from the database`) passes 100% (23/23 transfer tests pass).
+  6. **B6: Responsive Verification:**
+     - Playwright marked as **NOT RUN** (reason: Playwright is not installed in the workspace dependencies; `package.json` contains only `wrangler` and `pdfjs-dist`).
+  7. **B7: Commit & Push:**
+     - Committed as `ce3b1bc` on `feat/frontend-roadmap`.
+     - Pushed `feat/frontend-roadmap` to `origin` tracking branch (push only, no force, no merge, no deploy).
+     - Stash `stash@{0}` preserved untouched.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `node --check js/backend-config.js`: Clean (0 syntax errors).
+  - `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
+  - `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips, duration 3.8s).
