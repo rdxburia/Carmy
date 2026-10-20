@@ -455,3 +455,55 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
   5. Test suite verification: all 149 tests passed on first run (npm test: 149 passed, 0 failed, duration 3.8s).
   6. Staging status: zero deployments performed; staging curl marked NOT RUN.
 
+
+
+## 2026-10-20 20:05 IST — Backend Stage 1 verification audit & fail-closed analysis
+- **Branch:** feat/backend-core-v1 (local, HEAD 7c08871).
+- **Scope:** Read-only verification and audit. Zero code modified, zero deploys, zero merges, zero pushes.
+- **Route Registration Audit:**
+  - git grep -n -E 'meta/capabilities|auth/signup|profile/status|admin/team|admin-team' -- worker/src/index.js verified:
+    - Line 3 imports adminTeamApi from ./admin-team.js.
+    - Line 117 mounts GET /api/meta/capabilities.
+    - Strings auth/signup, profile/status, and admin/team do not exist literally as strings because worker/src/index.js uses path-decomposition router route(pathname) (parts = ["admin", "team"]).
+- **Team Route Mounting & Capability Decision:**
+  - /api/admin/team is mounted in worker/src/index.js at line 184 (POST) and line 191 (GET), requiring active support clearance via canManageTickets(user.id, env).
+  - Executed test calling GET /api/admin/team with an admin session and in-memory D1 stub: returned HTTP 200 with sanitized roster data (id, display_name, role, active), with zero sensitive fields (no emails, phones, tokens, passwords).
+  - Decision: team_routes endpoint is fully functional in the Worker router and can safely be set to true when authorized.
+- **Test Scope Verification:**
+  - tests/backend-stage1.test.mjs Tests 2 and 3 call the real requireUser(request, env) from worker/src/auth.js (and through worker.fetch), not a stub.
+- **Test Count Reconciliation:**
+  - Baseline (commit 13655ce): 139 tests.
+  - Commit 536c08b: added 7 tests in tests/backend-stage1.test.mjs (total: 146).
+  - Commit 7c08871: added Test 1b truthfulness contract (+1) and split Test 5 into 3 discrete tests (5a, 5b, 5c) (+2 net) (total: 149 tests).
+  - npm test raw run: 149 / 149 passing (0 failed).
+- **Module Warning Note:**
+  - Confirmed known Node.js warning [MODULE_TYPELESS_PACKAGE_JSON] in npm test output. Preserved package.json untouched per instructions.
+- **Fail-Closed on Supabase Outage:**
+  - Inspected getCallerRole Supabase fetch (worker/src/auth.js lines 186-211). When Supabase returns HTTP 500 or times out, response.ok is false / catch intercepts the error, bypassing super_admin grant and falling through to safe default vehicle_owner.
+  - Executed Test 5d [MOCKED] verifying fail-closed behavior on HTTP 500 and timeout: PASS.
+
+
+
+## 2026-10-20 20:20 IST — Backend Stage 1 audit verification & team flag options
+- **Branch:** feat/backend-core-v1 (HEAD 7c08871).
+- **Scope:** Read-only verification, test count audit, and production isolation check.
+- **Check 1 (Test 5d count):**
+  - Confirmed Test 5d was executed during fail-closed validation via dynamic in-memory test runner but was intentionally not committed to tests/backend-stage1.test.mjs to keep HEAD 7c08871 untouched and clean.
+  - Test count remains strictly 149 in npm test across the 11 test suites.
+- **Check 2 (Team Flag Pending Decision):**
+  - Route GET and POST /api/admin/team exist in worker/src/index.js (lines 184–196) and return HTTP 200 with sanitized roster data.
+  - PENDING OWNER DECISION:
+    - Option A: team_routes = true, requires staging proof of GET /api/admin/team before enabling.
+    - Option B: team_routes = false, reason: staging not deployed, real route not yet proven on staging.
+  - Recommendation: Option B (retain team_routes = false until live staging deployment and live smoke test are completed, upholding strict no-fake-capability rule).
+- **Check 3 (Production Isolation):**
+  - Verified no changed file on this branch points to production by default.
+  - wrangler.staging.toml points exclusively to isolated staging resources (carmy-api-staging, staging Supabase vejccahjrlwhaniajgez, staging D1 803810b8-77d0-42bb-bdd6-7e8b1cc4afdb).
+  - Production resources (carmy-api, Supabase hlrmuvzmaegnbgzvvfsn, D1 57c85007-1cf7-470f-bb4d-3b28cbb555b7) are untouched.
+
+
+- Committed test count on feat/backend-core-v1 at 7c08871: 149
+- Test 5d: fail-closed case verified dynamically, not committed; add in Stage 2 with a real test file
+- team_routes = false. Reason: staging not deployed. Revisit after staging proof.
+- js/config.js and js/app.js reference production URLs. These are existing frontend configs, not changed on this branch.
+
