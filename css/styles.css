@@ -4298,7 +4298,7 @@ body.td-admin-mode #admin.view.active {
   color: #0f172a;
 }
 
-/* Phase 6 — Team Roles, Auditor Mode, and First-Login Overlays */
+/* Phase 6 — Approved Team Roles (Team Lead, Support Agent, Support Executive) and First-Login Overlays */
 .team-role-badge {
   display: inline-flex;
   align-items: center;
@@ -4314,21 +4314,22 @@ body.td-admin-mode #admin.view.active {
   color: #3730a3;
   border: 1px solid #c7d2fe;
 }
-.team-role-badge.role-support-lead {
+.team-role-badge.role-team-lead {
   background: #dcfce7;
   color: #166534;
   border: 1px solid #bbf7d0;
 }
-.team-role-badge.role-billing-admin {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+.team-role-badge.role-support-agent {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
 }
-.team-role-badge.role-auditor {
+.team-role-badge.role-support-executive {
   background: #f1f5f9;
   color: #475569;
   border: 1px solid #cbd5e1;
 }
+.admin-readonly-notice,
 .admin-auditor-notice {
   background: #f8fafc;
   border: 1px solid #cbd5e1;
@@ -4778,3 +4779,149 @@ body.td-admin-mode #admin.view.active {
 
 
 
+
+.admin-readonly-notice { background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1e3a8a; margin: 12px 0; }
+
+/* ==========================================================================
+   Owner Decisions — Vehicle Claims, Garage Matching, Bill Delivery & E-Bill
+   ========================================================================== */
+
+/* Vehicle Claim Badges (Owner Fleet View) */
+.vehicle-claim-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+.vehicle-claim-badge.verified {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.vehicle-claim-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.vehicle-claim-badge.unclaimed {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* Pending Confirmation Cards */
+.pending-claims-container {
+  margin-bottom: 20px;
+}
+.pending-claim-card {
+  border-left: 4px solid #f59e0b;
+  background: #fffdf5;
+  border: 1px solid #fef3c7;
+  border-left: 4px solid #f59e0b;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.pending-claim-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 10px 0 14px;
+}
+@media (max-width: 480px) {
+  .pending-claim-details {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+.pending-claim-reg,
+.pending-claim-garage {
+  font-size: 14px;
+  color: #0f172a;
+}
+.pending-claim-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Locked Garage History Card */
+.locked-garage-history-card {
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  border-radius: 8px;
+  text-align: center;
+  padding: 36px 16px;
+}
+
+/* Garage Vehicle Match Preview */
+.garage-vehicle-match-box {
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.garage-match-preview {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.garage-match-preview.match-found {
+  color: #166534;
+}
+.garage-match-preview.pending-confirm {
+  color: #92400e;
+}
+.garage-match-preview.no-match {
+  color: #475569;
+}
+.garage-marketing-consent-note {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* E-Bill Preview (Spec Fancy Invoice) */
+.ebill-preview-wrap {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+.ebill-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #0f172a;
+  margin-bottom: 16px;
+}
+.ebill-preview-badge {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.ebill-footer-powered {
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px dashed #cbd5e1;
+  font-weight: 500;
+}

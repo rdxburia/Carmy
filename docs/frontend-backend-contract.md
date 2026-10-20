@@ -25,19 +25,19 @@
 
 Torq Desk defines four primary administrative roles in addition to customer vehicle owners and garage workspace operators:
 
-| Feature / Screen | `super_admin` / `owner` | `support_lead` | `billing_admin` | `auditor` | Customer / Owner |
+| Feature / Screen | `super_admin` / `owner` | `team_lead` | `support_agent` | `support_executive` | Customer / Owner |
 |---|---|---|---|---|---|
 | **Overview Screen** (`home`) | Full Access | Full Access | Full Access | Read-Only | N/A |
 | **Users & Accounts** (`users`) | Read / Write | Restricted | Restricted | Restricted | Own Profile Only |
-| **Activation Tokens** (`tokens`) | Read / Write | Restricted | Read / Write | Restricted | Voucher Redeem Only |
-| **Plans & Pricing** (`plans`) | Read / Write | Restricted | Read / Write | Restricted | Plan Status View |
-| **Upgrade Requests** (`upgrades`) | Read / Write | Restricted | Read / Write | Restricted | Submit Upgrade Only |
-| **Support Tickets** (`tickets`) | Read / Write | Read / Write | Restricted | Read-Only Inspection | Submit / View Own |
+| **Activation Tokens** (`tokens`) | Read / Write | Restricted | Restricted | Restricted | Voucher Redeem Only |
+| **Plans & Pricing** (`plans`) | Read / Write | Restricted | Restricted | Restricted | Plan Status View |
+| **Upgrade Requests** (`upgrades`) | Read / Write | Restricted | Restricted | Restricted | Submit Upgrade Only |
+| **Support Tickets** (`tickets`) | Read / Write | Read / Write | Read / Write | Read-Only Inspection | Submit / View Own |
 | **Garage Network** (`garages`) | Read / Write | Restricted | Restricted | Restricted | Workspace Portal |
-| **Team & Access** (`team`) | Read / Write | Restricted | Restricted | Restricted | N/A |
-| **Security Audit Trail** (`audit`) | Full Access | Restricted | Restricted | Read-Only Inspection | N/A |
+| **Team & Access** (`team`) | Read / Write | Read / Write | Restricted | Restricted | N/A |
+| **Security Audit Trail** (`audit`) | Full Access | Restricted | Restricted | Restricted | N/A |
 | **Account & Security** (`account`) | Full Access | Full Access | Full Access | Full Access | Own Profile Only |
-| **High-Privilege Mutations** | TPIN Verified | TPIN Verified | TPIN Verified | BLOCKED (Read-Only) | Password Re-auth |
+| **High-Privilege Mutations** | TPIN Verified | TPIN Verified | Restricted | BLOCKED (Read-Only) | Password Re-auth |
 
 ---
 
@@ -77,18 +77,18 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
 
 #### 3.2.1. Current Specialist Identity & Role
 - **Method & Route:** `GET /api/team/me`
-- **Clearance:** Authenticated Administrator (`super_admin`, `support_lead`, `billing_admin`, `auditor`)
+- **Clearance:** Authenticated Administrator (`super_admin`, `team_lead`, `support_agent`, `support_executive`)
 - **Request Headers:** `Authorization: Bearer <supabase_jwt>`
 - **Response `200 OK`:**
   ```json
   {
-    "role": "support_lead",
+    "role": "team_lead",
     "profile": {
       "id": "usr_99a8b7c6",
       "email": "specialist@torqdesk.com",
       "name": "Sarah Specialist",
       "phone": "+91 98160 55555",
-      "role": "support_lead",
+      "role": "team_lead",
       "password_change_required": false,
       "temp_password_active": false,
       "profile_incomplete": false,
@@ -297,7 +297,7 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
 
 #### 3.4.3. Activation Tokens Management
 - **List Tokens:** `GET /api/admin/tokens`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Response `200 OK`:**
     ```json
     {
@@ -317,7 +317,7 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
     ```
   - **Blocked Card Fallback:** `#adminTokensContainer` renders `.admin-blocked-card` identifying `GET /api/admin/tokens`.
 - **Generate Token:** `POST /api/admin/tokens`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin` (TPIN Protected)
+  - **Clearance:** `super_admin`, `owner` (TPIN Protected)
   - **Body:**
     ```json
     {
@@ -330,12 +330,12 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
     ```
   - **Response `200 OK`:** `{ "ok": true }`
 - **Revoke Token:** `DELETE /api/admin/tokens/:token`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Response `200 OK`:** `{ "ok": true }`
 
 #### 3.4.4. Plans & Coupons Management
 - **List Coupons:** `GET /api/admin/plans`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Response `200 OK`:**
     ```json
     {
@@ -353,16 +353,16 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
     ```
   - **Blocked Card Fallback:** `#adminPlansContainer` renders `.admin-blocked-card` identifying `GET /api/admin/plans`.
 - **Create Coupon:** `POST /api/admin/plans/coupons`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Body:** `{ "code": "TORQ20", "discount_percent": 20, "max_redemptions": 500, "expires_at": "2026-12-31" }`
   - **Response `200 OK`:** `{ "ok": true }`
 - **Delete Coupon:** `DELETE /api/admin/plans/coupons/:id`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Response `200 OK`:** `{ "ok": true }`
 
 #### 3.4.5. Upgrade Requests Triage
 - **List Requests:** `GET /api/admin/upgrade-requests`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Response `200 OK`:**
     ```json
     {
@@ -382,7 +382,7 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
     ```
   - **Blocked Card Fallback:** `#adminUpgradesContainer` renders `.admin-blocked-card` identifying `GET /api/admin/upgrade-requests`.
 - **Triage Action:** `POST /api/admin/upgrade-requests/:id/:action`
-  - **Clearance:** `super_admin`, `owner`, `billing_admin`
+  - **Clearance:** `super_admin`, `owner`
   - **Action Parameter:** `approve` | `reject` | `pending`
   - **Body:** `{ "note": "Payment verified via bank transfer ref #UTR991823" }`
   - **Response `200 OK`:** `{ "ok": true }`
@@ -430,8 +430,8 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
         {
           "id": "mem_01",
           "email": "lead@torqdesk.com",
-          "name": "Vikram Support Lead",
-          "role": "support_lead",
+          "name": "Vikram Team Lead",
+          "role": "team_lead",
           "status": "active",
           "last_login": "2026-10-19T18:00:00Z"
         }
@@ -441,7 +441,7 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
   - **Blocked Card Fallback:** `#adminTeamContainer` renders `.admin-blocked-card` identifying `GET /api/admin/team`.
 - **Invite Member:** `POST /api/admin/team/invites`
   - **Clearance:** `super_admin`, `owner` (TPIN Protected)
-  - **Body:** `{ "email": "newlead@torqdesk.com", "role": "support_lead" }`
+  - **Body:** `{ "email": "teamlead@torqdesk.com", "role": "team_lead" }`
   - **Response `200 OK`:** `{ "ok": true, "invite_id": "inv_88a7" }`
 - **Revoke Member:** `DELETE /api/admin/team/members/:id`
   - **Clearance:** `super_admin`, `owner`
@@ -449,7 +449,7 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
 
 #### 3.4.8. Security Audit Trail
 - **List Audit Events:** `GET /api/admin/audit`
-  - **Clearance:** `super_admin`, `owner`, `auditor`
+  - **Clearance:** `super_admin`, `owner`
   - **Response `200 OK`:**
     ```json
     {
@@ -471,8 +471,8 @@ Torq Desk defines four primary administrative roles in addition to customer vehi
 
 #### 3.4.9. CSV Data Exports
 - `GET /api/admin/users/export.csv` — Clearance: `super_admin`, `owner` (TPIN Protected)
-- `GET /api/admin/tickets/export.csv` — Clearance: `super_admin`, `owner`, `support_lead`, `auditor` (TPIN Protected)
-- `GET /api/admin/audit/export.csv` — Clearance: `super_admin`, `owner`, `auditor` (TPIN Protected)
+- `GET /api/admin/tickets/export.csv` — Clearance: `super_admin`, `owner`, `team_lead` (TPIN Protected)
+- `GET /api/admin/audit/export.csv` — Clearance: `super_admin`, `owner` (TPIN Protected)
 - **Response `200 OK`:** Raw CSV streams (`Content-Type: text/csv`).
 
 ---
@@ -535,12 +535,12 @@ For full workflow details, refer to existing `worker/src/ticket-workflow.js`:
 - Customer Inquiries: `GET /api/tickets`, `GET /api/tickets/:id`, `POST /api/tickets/:id/messages`
 - Admin Ticket Roster: `GET /api/admin/tickets`
 - Admin Ticket Detail: `GET /api/admin/tickets/:id`
-- Specialist Workflow Status Transition: `PATCH /api/admin/tickets/:id/status` (`support_lead`, `super_admin`)
-- Specialist Assignment: `PATCH /api/admin/tickets/:id/assign` (`support_lead`, `super_admin`)
-- Priority Adjustment: `PATCH /api/admin/tickets/:id/priority` (`support_lead`, `super_admin`)
-- Real-Time Chat Toggle: `PATCH /api/admin/tickets/:id/chat` (`support_lead`, `super_admin`)
-- Specialist Public & Internal Notes: `POST /api/admin/tickets/:id/messages` (`support_lead`, `super_admin`)
-- **Auditor Restriction:** `auditor` role has inspection clearance only (`canMutateTickets: false`); mutations return `403 Forbidden` and UI replaces message input with `.admin-auditor-notice`.
+- Specialist Workflow Status Transition: `PATCH /api/admin/tickets/:id/status` (`team_lead`, `support_agent`, `super_admin`)
+- Specialist Assignment: `PATCH /api/admin/tickets/:id/assign` (`team_lead`, `support_agent`, `super_admin`)
+- Priority Adjustment: `PATCH /api/admin/tickets/:id/priority` (`team_lead`, `support_agent`, `super_admin`)
+- Real-Time Chat Toggle: `PATCH /api/admin/tickets/:id/chat` (`team_lead`, `support_agent`, `super_admin`)
+- Specialist Public & Internal Notes: `POST /api/admin/tickets/:id/messages` (`team_lead`, `support_agent`, `super_admin`)
+- **Support Executive Restriction:** `support_executive` role has inspection clearance only (`canMutateTickets: false`); mutations return `403 Forbidden` and UI replaces message input with `.admin-readonly-notice`.
 
 ---
 

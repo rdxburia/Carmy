@@ -282,3 +282,16 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - Core rules enforced: Zero mock data anywhere (truthful `.backend-blocked-card` on missing routes), zero fake success ("Verified" and "Profile saved" only after ok), zero credentials stored in storage/DOM/console, all dynamic text via `textContent`, browser checks labeled `/* UI-ONLY: ... */`, safe-area insets and zero horizontal scroll at 360px & 1280px.
 - Zero Worker edits, zero DB migrations, zero SQL modifications, zero workflow changes. Main branch untouched; zero production deployments.
 - Test suites: `npm.cmd test` passed 175/175 tests green; `node --check` passed across `js/backend-config.js`, `js/app.js`, and `tests/customer-portal-regression.test.mjs`.
+
+
+## 2026-10-20 — Owner Decisions: Approved 3-Role Matrix Purge, Vehicle Claims, Garage Matching & E-Bill
+- Scope: Implemented final Owner Decisions on branch `feat/frontend-roadmap`:
+  1. Purged `support_lead`, `billing_admin`, and `auditor` from frontend and docs. Enforced strictly the 3 approved team roles (`team_lead`, `support_agent`, `support_executive`) and owner role (`super_admin`).
+  2. Owner Vehicle Claim UI with 3 badge states (`Verified (linked)`, `Pending confirmation`, `Unclaimed (created by garage)`), mobile OTP confirmation (`POST /api/vehicle-claims/:id/otp/send` and `/verify`), and locked garage history card.
+  3. Garage side vehicle matching preview from `POST /api/garage/vehicle-match` (strictly server-authoritative; client never decides), mandatory customer name on `no_match`, bill channel delivery with WhatsApp template preview, and unchecked "Send join invite" with marketing consent note.
+  4. E-Bill preview with "Powered by Torq Desk" footer, "Preview only" badge, and server-rendered GST split.
+  5. Documented capabilities in `docs/backend-switch.md` and updated `docs/frontend-backend-contract.md`.
+  6. Pending owner decisions preserved as PENDING: Mobile OTP provider & Garage GSTIN mandatory requirement.
+- Zero Worker edits, zero DB migrations, zero SQL modifications, zero workflow changes. Main branch untouched; zero production deployments.
+- Stash `stash@{0}` preserved untouched.
+- Test suites: `npm.cmd test` passed 184/184 tests green; `node --test tests/garage-redesign.test.mjs` passed 5/5 tests green; `node --check` passed across all modified JS files.

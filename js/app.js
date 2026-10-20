@@ -1619,7 +1619,8 @@ function finishSignup() {
 
 /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
 async function checkProfileGate(u) {
-  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'support_lead' || u.role === 'billing_admin' || u.role === 'auditor'));
+  /* UI-ONLY: Team and admin role check in browser. Backend enforces server-side. */
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'team_lead' || u.role === 'support_agent' || u.role === 'support_executive'));
   if (isCandidateAdmin) return true;
 
   if (typeof backendAvailable === 'function' && !backendAvailable('profile_status')) {
@@ -2113,7 +2114,8 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
- const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'support_lead' || user.role === 'billing_admin' || user.role === 'auditor')));
+ /* UI-ONLY: Admin clearance check in browser. Backend enforces server-side. */
+ const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'team_lead' || user.role === 'support_agent' || user.role === 'support_executive')));
  document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(v==='admin'&&!isPrimaryAdmin){
@@ -2489,7 +2491,8 @@ async function start(u,force=false){
      updateIdentityUI();
      try{await checkSuperAdminStatus();}catch(_){}
      try{await loadTeamMe();}catch(_){}
-     const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'support_lead' || u.role === 'billing_admin' || u.role === 'auditor')));
+     /* UI-ONLY: Admin clearance check in browser. Backend enforces server-side. */
+     const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'team_lead' || u.role === 'support_agent' || u.role === 'support_executive')));
      setAppLoadingStatus('Preparing your garage...','Rendering your dashboard');
      setAppLoadingProgress(90);
      // The designated admin lands directly in the console. The Worker still
@@ -6811,12 +6814,28 @@ function renderAdminProfileCardInner(){
   '</div>';
 }
 
+/* UI-ONLY: Approved team roles permission matrix (Team Lead, Support Agent, Support Executive, Super Admin) */
 function getAdminRolePermissions(role){
   const normRole=(role||'').toLowerCase().trim();
-  if(normRole==='support_lead'||normRole==='support'){
+  if(normRole==='team_lead'){
     return {
-      role:'support_lead',
-      label:'Support Lead',
+      role:'team_lead',
+      label:'Team Lead',
+      allowedScreens:['home','tickets','team','account'],
+      canMutateTickets:true,
+      canViewAudit:false,
+      canManageUsers:false,
+      canManageTokens:false,
+      canManagePlans:false,
+      canManageGarages:false,
+      canManageTeam:true,
+      defaultScreen:'tickets'
+    };
+  }
+  if(normRole==='support_agent'){
+    return {
+      role:'support_agent',
+      label:'Support Agent',
       allowedScreens:['home','tickets','account'],
       canMutateTickets:true,
       canViewAudit:false,
@@ -6828,34 +6847,19 @@ function getAdminRolePermissions(role){
       defaultScreen:'tickets'
     };
   }
-  if(normRole==='billing_admin'||normRole==='billing'){
+  if(normRole==='support_executive'){
     return {
-      role:'billing_admin',
-      label:'Billing Admin',
-      allowedScreens:['home','plans','tokens','upgrades','account'],
+      role:'support_executive',
+      label:'Support Executive',
+      allowedScreens:['home','tickets','account'],
       canMutateTickets:false,
       canViewAudit:false,
-      canManageUsers:false,
-      canManageTokens:true,
-      canManagePlans:true,
-      canManageGarages:false,
-      canManageTeam:false,
-      defaultScreen:'plans'
-    };
-  }
-  if(normRole==='auditor'){
-    return {
-      role:'auditor',
-      label:'Auditor',
-      allowedScreens:['home','audit','tickets','account'],
-      canMutateTickets:false,
-      canViewAudit:true,
       canManageUsers:false,
       canManageTokens:false,
       canManagePlans:false,
       canManageGarages:false,
       canManageTeam:false,
-      defaultScreen:'audit'
+      defaultScreen:'tickets'
     };
   }
   return {
@@ -8154,12 +8158,12 @@ async function openAdminTicketDetails(ticketId){
         '<div style="font-weight:700;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:6px">● Chat Active with Customer</div>'+
         countdownText+
       '</div>'+
-      (canMutate?'<button type="button" class="ghost" style="color:#dc2626;padding:4px 10px;font-size:12px" onclick="handleAdminChatToggle(\''+tid+'\',false)">Disable Chat</button>':'<button type="button" class="ghost" disabled style="color:#94a3b8;padding:4px 10px;font-size:12px" title="Auditor mode: mutations disabled">Disable Chat</button>')+
+      (canMutate?'<button type="button" class="ghost" style="color:#dc2626;padding:4px 10px;font-size:12px" onclick="handleAdminChatToggle(\''+tid+'\',false)">Disable Chat</button>':'<button type="button" class="ghost" disabled style="color:#94a3b8;padding:4px 10px;font-size:12px" title="Support Executive mode: mutations disabled">Disable Chat</button>')+
     '</div>';
   }else{
     chatBoxHtml='<div class="ticket-chat-toggle-box">'+
       '<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#0f172a">💬 Customer Chat Window (48h Window)</div>'+
-      '<p class="muted" style="margin:0 0 8px 0;font-size:12px">Enabling chat opens a 48-hour direct reply window in the customer\'s Help tab.'+(canMutate?'':' (Auditor view: read-only)')+'</p>'+
+      '<p class="muted" style="margin:0 0 8px 0;font-size:12px">Enabling chat opens a 48-hour direct reply window in the customer\'s Help tab.'+(canMutate?'':' (Support Executive view: read-only)')+'</p>'+
       (canMutate?('<textarea id="adminEnableChatMsg" rows="2" placeholder="Optional initial message to customer (e.g. Please reply with your odometer photo)..." style="width:100%;font-size:12.5px;border-radius:6px;border:1px solid #cbd5e1;padding:6px;box-sizing:border-box;margin-bottom:8px"></textarea>'+
       '<button type="button" class="primary" id="btnAdminEnableChat" style="padding:6px 14px;font-size:12.5px" onclick="handleAdminEnableChatWithMsg(\''+tid+'\')">Enable Chat (48h Window)</button>'):'<button type="button" class="primary" disabled style="padding:6px 14px;font-size:12.5px;opacity:0.6;cursor:not-allowed">Enable Chat (Restricted)</button>')+
     '</div>';
@@ -8251,7 +8255,7 @@ async function openAdminTicketDetails(ticketId){
       '<div style="display:flex;justify-content:flex-end;margin-top:8px">'+
         '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Send Update</button>'+
       '</div>'+
-    '</div>') : ('<div class="admin-auditor-notice">👁️ <b>Read-Only Auditor Mode</b>: You have inspection clearance. Status transitions, assignee changes, priority modifications, and message sending are restricted to Support Specialists and Super Admins.</div>'))+
+    '</div>') : ('<div class="admin-readonly-notice">👁️ <b>Read-Only Support Executive Mode</b>: You have inspection clearance. Status transitions, assignee changes, priority modifications, and message sending are restricted to Support Agents, Team Leads and Super Admins.</div>'))+
     '<div class="ticket-action-bar">'+
       '<button type="button" class="ghost" id="btnAdminViewAsUser" style="color:'+(adminViewAsUserBlocked?'#94a3b8':'#b45309')+'" '+(adminViewAsUserBlocked?'disabled title="Backend endpoint not available"':'')+' onclick="openAdminTicketViewAsUser(\''+tid+'\')">'+(adminViewAsUserBlocked?'Not available yet':'👁️ View As User (Audit Logged)')+'</button>'+
       '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
@@ -9126,9 +9130,9 @@ function openTeamInviteModal(){
       '<div class="field">'+
         '<label>Role Clearance</label>'+
         '<select id="teamInviteRole">'+
-          '<option value="support_lead">Support Lead (Ticket Triage)</option>'+
-          '<option value="billing_admin">Billing Admin (Plans &amp; Tokens)</option>'+
-          '<option value="auditor">Compliance Auditor (Read-Only Audit Log)</option>'+
+          '<option value="team_lead">Team Lead (Ticket Triage &amp; Team)</option>'+
+          '<option value="support_agent">Support Agent (Ticket Handling)</option>'+
+          '<option value="support_executive">Support Executive (Ticket Inspection)</option>'+
           '<option value="super_admin">Super Admin (Full Administrative Access)</option>'+
         '</select>'+
       '</div>'+
@@ -9157,7 +9161,7 @@ async function sendTeamInvite(){
     return;
   }
   const email=document.getElementById('teamInviteEmail')?.value.trim().toLowerCase()||'';
-  const role=document.getElementById('teamInviteRole')?.value||'support_lead';
+  const role=document.getElementById('teamInviteRole')?.value||'team_lead';
   const status=document.getElementById('teamInviteStatus');
   const button=document.getElementById('teamInviteSubmitBtn');
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
@@ -9282,7 +9286,8 @@ function saveFestivalBanner(){
 }
 
 async function adminView(){
-  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (user && (user.role==='admin'||user.role==='super_admin'||user.role==='support_lead'||user.role==='billing_admin'||user.role==='auditor'));
+  /* UI-ONLY: Admin clearance check in browser. Backend enforces server-side. */
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (user && (user.role==='admin'||user.role==='super_admin'||user.role==='team_lead'||user.role==='support_agent'||user.role==='support_executive'));
   if(!isCandidateAdmin){
     nav('dashboard');
     return;
@@ -9487,7 +9492,8 @@ function carsView(){
  const startIndex=(fleetPage-1)*fleetPageSize;
  const pageItems=fleetPageSize===0?list:list.slice(startIndex,startIndex+fleetPageSize);
 
- let html='<div class="step5-toolbar fleet-toolbar">'+
+ let html='<div id="pendingVehicleClaimsSection" class="pending-claims-container"></div>'+
+    '<div class="step5-toolbar fleet-toolbar">'+
    '<div class="fleet-title-wrap">'+
      '<b>Vehicle Fleet &amp; Registrations <span class="fleet-count-badge">'+total+'</span></b>'+
      '<span class="muted">Each vehicle keeps its own independent service history, documents, and compliance records.</span>'+
@@ -9532,7 +9538,7 @@ function carsView(){
              '</div>'+
            '</div>'+
            '<div class="vehicle-card-center">'+
-             '<div class="vehicle-pills">'+
+             '<div class="vehicle-pills">'+getVehicleClaimBadge(c)+
                '<span class="doc-badge '+ins[1]+'">INS: '+ins[0]+'</span>'+
                '<span class="doc-badge '+puc[1]+'">PUC: '+puc[0]+'</span>'+
                (c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':(isActive?'<span class="status ok">ACTIVE VEHICLE</span>':''))+
@@ -9569,6 +9575,7 @@ function carsView(){
    '</div>';
  }
  container.innerHTML=html;
+ if(typeof loadVehicleClaims==='function')loadVehicleClaims();
 }
 
 window.setFleetFilter=function(f){fleetFilter=f;fleetPage=1;carsView()};
@@ -9668,6 +9675,14 @@ function renderHistory(){
   const tb=$('historyTable');if(tb)tb.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle to view its maintenance records.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
   const sumEl=$('historySpendSummary');if(sumEl)sumEl.innerHTML='';
   return;
+ }
+ /* UI-ONLY: Garage-created history is locked until the claim is confirmed */
+ const isClaimPending = car.claim_status === 'pending' || car.claim_status === 'pending_confirmation' || Boolean(car.is_garage_unconfirmed);
+ if (isClaimPending) {
+   const tb=$('historyTable');
+   if(tb)tb.innerHTML='<div class="card locked-garage-history-card" role="alert" style="text-align:center;padding:36px 16px"><div class="locked-icon" style="font-size:32px;margin-bottom:8px" aria-hidden="true">🔒</div><h3 style="margin:0 0 6px 0">History Locked</h3><p class="muted" style="margin:0">History from a garage is waiting for your confirmation.</p></div>';
+   const sumEl=$('historySpendSummary');if(sumEl)sumEl.innerHTML='';
+   return;
  }
  let currentYear=$('year')?.value||'all';
  let currentType=$('historyType')?.value||'all';
@@ -10730,3 +10745,235 @@ function close(){modal.hidden=true;document.body.classList.remove('md-info-open'
 document.addEventListener('click',e=>{const t=e.target.closest('[data-info-tab]');if(t){open(t.dataset.infoTab);return}const o=e.target.closest('[data-info-open]');if(o){open(o.dataset.infoOpen);return}if(e.target.closest('[data-info-close]'))close()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)close()});
 })();
+
+
+/* UI-ONLY: Vehicle claim status badge */
+function getVehicleClaimBadge(c) {
+  const status = (c?.claim_status || c?.verification_status || 'verified').toLowerCase();
+  if (status === 'pending' || status === 'pending_confirmation') {
+    return '<span class="vehicle-claim-badge pending" data-claim-status="pending">Pending confirmation</span>';
+  }
+  if (status === 'unclaimed') {
+    return '<span class="vehicle-claim-badge unclaimed" data-claim-status="unclaimed">Unclaimed (created by garage)</span>';
+  }
+  return '<span class="vehicle-claim-badge verified" data-claim-status="verified">Verified (linked)</span>';
+}
+
+let pendingClaimsList = [];
+
+/* UI-ONLY: Vehicle claims fetch & render. Backend enforces server-side. */
+async function loadVehicleClaims() {
+  const container = document.getElementById('pendingVehicleClaimsSection');
+  if (!container) return;
+
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    container.innerHTML = typeof renderBackendBlockedCard === 'function'
+      ? renderBackendBlockedCard('/api/vehicle-claims', 'GET', 'Vehicle claims capability is BLOCKED because the backend route is not deployed.')
+      : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/vehicle-claims</code></div>';
+    return;
+  }
+
+  try {
+    const res = await authApiRequest('/api/vehicle-claims', { method: 'GET' });
+    if (!res || !res.ok || !Array.isArray(res.data)) {
+      container.innerHTML = typeof renderBackendBlockedCard === 'function'
+        ? renderBackendBlockedCard('/api/vehicle-claims', 'GET', 'Vehicle claims route returned 404 or an error.')
+        : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/vehicle-claims</code></div>';
+      return;
+    }
+
+    pendingClaimsList = res.data;
+    if (pendingClaimsList.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const cardsHtml = pendingClaimsList.map(claim => {
+      const reg = esc(claim.registration_no || claim.vehicle_number || '');
+      const garage = esc(claim.garage_name || '');
+      return '<div class="card pending-claim-card" id="claimCard-' + esc(claim.id) + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+          '<span class="vehicle-claim-badge pending">Pending confirmation</span>' +
+          '<small class="muted">Claim ID: ' + esc(claim.id) + '</small>' +
+        '</div>' +
+        '<div class="pending-claim-details" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">' +
+          '<div>' +
+            '<span class="muted" style="font-size:11px;display:block;text-transform:uppercase">Vehicle Number</span>' +
+            '<b class="pending-claim-reg">' + reg + '</b>' +
+          '</div>' +
+          '<div>' +
+            '<span class="muted" style="font-size:11px;display:block;text-transform:uppercase">Garage Name</span>' +
+            '<b class="pending-claim-garage">' + garage + '</b>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pending-claim-actions" style="display:flex;gap:10px;flex-wrap:wrap">' +
+          '<button type="button" class="primary btn-claim-confirm" onclick="startClaimConfirm(\'' + esc(claim.id) + '\')">Confirm (owner)</button>' +
+          '<button type="button" class="ghost btn-claim-reject" onclick="rejectVehicleClaim(\'' + esc(claim.id) + '\')">Not my vehicle (owner)</button>' +
+        '</div>' +
+        '<div id="claimActionBlocked-' + esc(claim.id) + '" style="margin-top:8px"></div>' +
+      '</div>';
+    }).join('');
+
+    container.innerHTML = '<div class="pending-claims-wrapper" style="margin-bottom:16px">' +
+      '<h4 style="margin:0 0 8px 0;font-size:14px;color:#0f172a">Action Required: Garage Vehicle Claims</h4>' +
+      cardsHtml +
+    '</div>';
+  } catch (err) {
+    container.innerHTML = typeof renderBackendBlockedCard === 'function'
+      ? renderBackendBlockedCard('/api/vehicle-claims', 'GET', 'Vehicle claims route is missing or unreachable.')
+      : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/vehicle-claims</code></div>';
+  }
+}
+
+async function startClaimConfirm(claimId) {
+  const blockedEl = document.getElementById('claimActionBlocked-' + claimId);
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/send', 'POST', 'Vehicle claim OTP send route is BLOCKED.');
+    }
+    return;
+  }
+
+  try {
+    const res = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/otp/send', { method: 'POST' });
+    if (!res || !res.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/send', 'POST', res?.error || 'Vehicle claim OTP send returned an error.');
+      }
+      return;
+    }
+    openClaimOtpModal(claimId);
+  } catch (err) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/send', 'POST', 'Route missing or unreachable.');
+    }
+  }
+}
+
+function openClaimOtpModal(claimId) {
+  const old = document.getElementById('claimOtpModal');
+  if (old) old.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'claimOtpModal';
+  modal.className = 'profile-gate-overlay';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+
+  modal.innerHTML = '<div class="profile-gate-box">' +
+    '<div class="profile-gate-head">' +
+      '<div class="profile-gate-icon" aria-hidden="true">📱</div>' +
+      '<h2 class="profile-gate-title">Verify Ownership Claim</h2>' +
+      '<p class="profile-gate-desc">Confirming this vehicle requires a fresh mobile OTP sent to your registered number (+91).</p>' +
+      '<small class="muted">Pending owner decision (Mobile OTP provider pending)</small>' +
+    '</div>' +
+    '<div class="field" style="margin-top:10px">' +
+      '<label>6-Digit OTP</label>' +
+      '<input type="text" id="claimOtpInput" maxlength="6" inputmode="numeric" placeholder="Enter 6-digit code" class="otp-code-input" style="width:100%;font-size:18px;letter-spacing:4px;text-align:center;padding:10px">' +
+      '<div id="claimOtpError" style="color:#e11d48;font-size:12px;margin-top:4px"></div>' +
+    '</div>' +
+    '<div id="claimOtpBlocked"></div>' +
+    '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">' +
+      '<button type="button" class="ghost" onclick="closeClaimOtpModal()">Cancel</button>' +
+      '<button type="button" class="primary" id="claimOtpSubmitBtn" onclick="submitClaimOtp(\'' + esc(claimId) + '\')">Verify &amp; Confirm</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+}
+
+function closeClaimOtpModal() {
+  const m = document.getElementById('claimOtpModal');
+  if (m) m.remove();
+}
+
+async function submitClaimOtp(claimId) {
+  const input = document.getElementById('claimOtpInput');
+  const errEl = document.getElementById('claimOtpError');
+  const blockedEl = document.getElementById('claimOtpBlocked');
+  const code = (input?.value || '').trim();
+
+  if (!code || !/^[0-9]{6}$/.test(code)) {
+    if (errEl) errEl.textContent = 'Please enter a valid 6-digit OTP.';
+    return;
+  }
+  if (errEl) errEl.textContent = '';
+
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/verify', 'POST', 'Vehicle claim OTP verify route is BLOCKED.');
+    }
+    return;
+  }
+
+  try {
+    const vRes = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/otp/verify', {
+      method: 'POST',
+      body: { code }
+    });
+    if (!vRes || !vRes.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/verify', 'POST', vRes?.error || 'Invalid OTP code.');
+      }
+      return;
+    }
+
+    const cRes = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/confirm', {
+      method: 'POST'
+    });
+    if (!cRes || !cRes.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/confirm', 'POST', cRes?.error || 'Claim confirmation failed.');
+      }
+      return;
+    }
+
+    if (input) input.value = '';
+    closeClaimOtpModal();
+    toast('Vehicle confirmed');
+    await loadCars();
+    await loadData(true);
+    carsView();
+  } catch (err) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/confirm', 'POST', 'Route missing or unreachable.');
+    }
+  }
+}
+
+async function rejectVehicleClaim(claimId) {
+  const blockedEl = document.getElementById('claimActionBlocked-' + claimId);
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/reject', 'POST', 'Vehicle claim reject route is BLOCKED.');
+    }
+    return;
+  }
+
+  try {
+    const res = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/reject', {
+      method: 'POST'
+    });
+    if (!res || !res.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/reject', 'POST', res?.error || 'Reject request failed.');
+      }
+      return;
+    }
+
+    toast('Claim rejected');
+    await loadCars();
+    carsView();
+  } catch (err) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/reject', 'POST', 'Route missing or unreachable.');
+    }
+  }
+}
+
+window.getVehicleClaimBadge = getVehicleClaimBadge;
+window.loadVehicleClaims = loadVehicleClaims;
+window.startClaimConfirm = startClaimConfirm;
+window.openClaimOtpModal = openClaimOtpModal;
+window.closeClaimOtpModal = closeClaimOtpModal;
+window.submitClaimOtp = submitClaimOtp;
+window.rejectVehicleClaim = rejectVehicleClaim;

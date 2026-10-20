@@ -33,7 +33,10 @@
     profile: false,
     profile_status: false,
     profile_mobile_change: false,
-    garage_types: false
+    garage_types: false,
+    vehicle_claims: false,
+    garage_vehicle_match: false,
+    bill_send: false
   });
 
   const backendCapabilities = Object.assign({}, DEFAULT_CAPABILITIES);

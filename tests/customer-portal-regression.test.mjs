@@ -136,9 +136,11 @@ function createAppHarness(overrides = {}) {
         },
         value: '',
         disabled: false,
-        setAttribute: () => {},
-        getAttribute: () => null,
-        removeAttribute: () => {},
+        checked: false,
+        _attrs: {},
+        setAttribute(k, v) { if (!this._attrs) this._attrs = {}; this[k] = v; this._attrs[k] = String(v); },
+        getAttribute(k) { return (this._attrs && this._attrs[k] !== undefined) ? this._attrs[k] : (this[k] ? String(this[k]) : null); },
+        removeAttribute(k) { delete this[k]; if (this._attrs) delete this._attrs[k]; },
         addEventListener: () => {},
         removeEventListener: () => {},
         focus: () => {},
@@ -474,7 +476,25 @@ function createAppHarness(overrides = {}) {
     context.renderMobileChangeBlocked = context.window.renderMobileChangeBlocked;
     context.openMobileChangeOtpModal = context.window.openMobileChangeOtpModal;
     context.submitMobileChangeOtp = context.window.submitMobileChangeOtp;
+    context.getVehicleClaimBadge = context.window.getVehicleClaimBadge;
+    context.loadVehicleClaims = context.window.loadVehicleClaims;
+    context.startClaimConfirm = context.window.startClaimConfirm;
+    context.openClaimOtpModal = context.window.openClaimOtpModal;
+    context.closeClaimOtpModal = context.window.closeClaimOtpModal;
+    context.submitClaimOtp = context.window.submitClaimOtp;
+    context.rejectVehicleClaim = context.window.rejectVehicleClaim;
   }
+  store.set('td-garage-auth-v2', '1');
+  try {
+    const garageCode = fs.readFileSync(path.join(root, 'js/garage-workspace.js'), 'utf8');
+    vm.runInContext(garageCode, context);
+    if (context.window) {
+      context.checkGarageVehicleMatch = context.window.checkGarageVehicleMatch;
+      context.onBillChannelChange = context.window.onBillChannelChange;
+      context.sendBillNotification = context.window.sendBillNotification;
+      context.openPrintableInvoice = context.window.openPrintableInvoice;
+    }
+  } catch (e) {}
   return { context, store, elements, makeEl, mockDb, teardown, eval: (expr) => vm.runInContext(expr, context) };
 }
 
@@ -3910,12 +3930,12 @@ test("Multi-Role Team Phase 6: loadTeamMe calls GET /api/team/me and sets curren
     workerGet = async (path) => {
       if (path === '/api/team/me') {
         return {
-          role: 'support_lead',
+          role: 'team_lead',
           profile: {
             id: 'mem_123',
             name: 'Sarah Specialist',
             email: 'sarah@carmy.internal',
-            role: 'support_lead'
+            role: 'team_lead'
           }
         };
       }
@@ -3924,7 +3944,7 @@ test("Multi-Role Team Phase 6: loadTeamMe calls GET /api/team/me and sets curren
   `);
 
   await h.eval("loadTeamMe(true)");
-  assert.equal(h.eval("getCurrentAdminRole()"), "support_lead");
+  assert.equal(h.eval("getCurrentAdminRole()"), "team_lead");
   assert.equal(h.eval("getCurrentAdminProfile().name"), "Sarah Specialist");
 });
 
@@ -3951,12 +3971,12 @@ test("Multi-Role Team Phase 6: 404 response on GET /api/team/me renders .admin-b
   assert.ok(cardHtml.includes("GET"), "Must specify HTTP method GET");
 });
 
-test("Multi-Role Team Phase 6: support_lead role shell restricts sidebar and navigation to allowed screens and hides tokens, plans, garages, team, audit", async (t) => {
+test("Multi-Role Team Phase 6: team_lead role shell restricts sidebar and navigation to allowed screens and allows tickets and team triage", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    setCurrentAdminRole('support_lead');
+    setCurrentAdminRole('team_lead');
     currentAdminScreen = 'tickets';
     if (!document.getElementById('adminContent')) {
       const c = document.createElement('div');
@@ -3966,20 +3986,20 @@ test("Multi-Role Team Phase 6: support_lead role shell restricts sidebar and nav
     renderAdminViewContent();
   `);
 
-  const perms = h.eval("getAdminRolePermissions('support_lead')");
-  assert.deepEqual([...perms.allowedScreens], ['home', 'tickets', 'account']);
+  const perms = h.eval("getAdminRolePermissions('team_lead')");
+  assert.deepEqual([...perms.allowedScreens], ['home', 'tickets', 'team', 'account']);
   assert.equal(perms.canMutateTickets, true);
   assert.equal(perms.canManageUsers, false);
   assert.equal(perms.canManageTokens, false);
   assert.equal(perms.canManageGarages, false);
-  assert.equal(perms.canManageTeam, false);
+  assert.equal(perms.canManageTeam, true);
 
   const sidebarHtml = h.eval("document.getElementById('adminContent').innerHTML");
-  assert.ok(sidebarHtml.includes("Support Lead Console"), "Must display Support Lead Console in topbar");
+  assert.ok(sidebarHtml.includes("Team Lead Console"), "Must display Team Lead Console in topbar");
   assert.ok(sidebarHtml.includes("Support Tickets"), "Must include Support Tickets in sidebar");
+  assert.ok(sidebarHtml.includes("Team &amp; Access"), "Must include Team & Access in sidebar");
   assert.ok(!sidebarHtml.includes("Activation Tokens"), "Must hide Activation Tokens from sidebar");
   assert.ok(!sidebarHtml.includes("Garage Network"), "Must hide Garage Network from sidebar");
-  assert.ok(!sidebarHtml.includes("Team &amp; Access"), "Must hide Team & Access from sidebar");
   assert.ok(!sidebarHtml.includes("Audit Trail"), "Must hide Audit Trail from sidebar");
 
   // Attempt to switch to disallowed screen
@@ -3987,13 +4007,13 @@ test("Multi-Role Team Phase 6: support_lead role shell restricts sidebar and nav
   assert.equal(h.eval("currentAdminScreen"), "tickets", "currentAdminScreen must not switch to disallowed screen");
 });
 
-test("Multi-Role Team Phase 6: billing_admin role shell allows plans, tokens, upgrades and restricts tickets/team navigation", async (t) => {
+test("Multi-Role Team Phase 6: support_agent role shell allows tickets and restricts team/tokens/plans navigation", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    setCurrentAdminRole('billing_admin');
-    currentAdminScreen = 'plans';
+    setCurrentAdminRole('support_agent');
+    currentAdminScreen = 'tickets';
     if (!document.getElementById('adminContent')) {
       const c = document.createElement('div');
       c.id = 'adminContent';
@@ -4002,33 +4022,32 @@ test("Multi-Role Team Phase 6: billing_admin role shell allows plans, tokens, up
     renderAdminViewContent();
   `);
 
-  const perms = h.eval("getAdminRolePermissions('billing_admin')");
-  assert.deepEqual([...perms.allowedScreens], ['home', 'plans', 'tokens', 'upgrades', 'account']);
-  assert.equal(perms.canManageTokens, true);
-  assert.equal(perms.canManagePlans, true);
-  assert.equal(perms.canMutateTickets, false);
+  const perms = h.eval("getAdminRolePermissions('support_agent')");
+  assert.deepEqual([...perms.allowedScreens], ['home', 'tickets', 'account']);
+  assert.equal(perms.canManageTokens, false);
+  assert.equal(perms.canManagePlans, false);
+  assert.equal(perms.canMutateTickets, true);
   assert.equal(perms.canManageTeam, false);
   assert.equal(perms.canManageGarages, false);
 
   const html = h.eval("document.getElementById('adminContent').innerHTML");
-  assert.ok(html.includes("Billing Admin Console"), "Must display Billing Admin Console");
-  assert.ok(html.includes("Plans &amp; Limits"), "Must include Plans & Limits");
-  assert.ok(html.includes("Activation Tokens"), "Must include Activation Tokens");
-  assert.ok(html.includes("Upgrade Requests"), "Must include Upgrade Requests");
-  assert.ok(!html.includes("Support Tickets"), "Must hide Support Tickets");
+  assert.ok(html.includes("Support Agent Console"), "Must display Support Agent Console");
+  assert.ok(html.includes("Support Tickets"), "Must include Support Tickets");
+  assert.ok(!html.includes("Activation Tokens"), "Must hide Activation Tokens");
   assert.ok(!html.includes("Team &amp; Access"), "Must hide Team & Access");
+  assert.ok(!html.includes("Plans &amp; Limits"), "Must hide Plans & Limits");
 
   // Attempt disallowed navigation
   h.eval("switchAdminScreen('team')");
-  assert.equal(h.eval("currentAdminScreen"), "plans", "currentAdminScreen must remain on allowed screen");
+  assert.equal(h.eval("currentAdminScreen"), "tickets", "currentAdminScreen must remain on allowed screen");
 });
 
-test("Multi-Role Team Phase 6: auditor role enables read-only inspection, renders .admin-auditor-notice, and blocks mutation actions", async (t) => {
+test("Multi-Role Team Phase 6: support_executive role enables read-only inspection, renders .admin-readonly-notice, and blocks mutation actions", async (t) => {
   const h = createAppHarness();
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    setCurrentAdminRole('auditor');
+    setCurrentAdminRole('support_executive');
     adminTickets = [{
       id: 't-audit-1',
       subject: 'Suspicious login check',
@@ -4042,9 +4061,9 @@ test("Multi-Role Team Phase 6: auditor role enables read-only inspection, render
     }];
   `);
 
-  const perms = h.eval("getAdminRolePermissions('auditor')");
+  const perms = h.eval("getAdminRolePermissions('support_executive')");
   assert.equal(perms.canMutateTickets, false);
-  assert.equal(perms.canViewAudit, true);
+  assert.equal(perms.canViewAudit, false);
   assert.equal(perms.canManageUsers, false);
   assert.equal(perms.canManageTokens, false);
   assert.equal(perms.canManagePlans, false);
@@ -4054,8 +4073,8 @@ test("Multi-Role Team Phase 6: auditor role enables read-only inspection, render
   await h.eval("openAdminTicketDetails('t-audit-1')");
   const modal = h.elements.get('adminTicketDetailModal');
   assert.ok(modal, "Detail modal should be rendered");
-  assert.ok(modal.innerHTML.includes("admin-auditor-notice"), "Must render .admin-auditor-notice");
-  assert.ok(modal.innerHTML.includes("Read-Only Auditor Mode"), "Must state Read-Only Auditor Mode");
+  assert.ok(modal.innerHTML.includes("admin-readonly-notice"), "Must render .admin-readonly-notice");
+  assert.ok(modal.innerHTML.includes("Read-Only Support Executive Mode"), "Must state Read-Only Support Executive Mode");
   assert.ok(modal.innerHTML.includes("disabled"), "Status / priority controls must be disabled");
 
   // Verify mutation is blocked
@@ -4573,8 +4592,328 @@ test("Phase 8 Responsive Styling: 360px and 1280px viewports enforce zero horizo
   assert.ok(css.includes('max-width: 100%'), "Must enforce max-width containment");
 });
 
+test("Phase 9 Owner Decisions: Vehicle list shows 3 badges (Verified, Pending confirmation, Unclaimed) with text label always present", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
 
+  // 1. Badge generator function
+  const verifiedBadge = h.eval("getVehicleClaimBadge({ claim_status: 'verified' })");
+  assert.ok(verifiedBadge.includes("vehicle-claim-badge verified"), "Must have class vehicle-claim-badge verified");
+  assert.ok(verifiedBadge.includes("Verified (linked)"), "Must have label 'Verified (linked)'");
 
+  const pendingBadge = h.eval("getVehicleClaimBadge({ claim_status: 'pending' })");
+  assert.ok(pendingBadge.includes("vehicle-claim-badge pending"), "Must have class vehicle-claim-badge pending");
+  assert.ok(pendingBadge.includes("Pending confirmation"), "Must have label 'Pending confirmation'");
 
+  const pendingConfBadge = h.eval("getVehicleClaimBadge({ claim_status: 'pending_confirmation' })");
+  assert.ok(pendingConfBadge.includes("Pending confirmation"), "Must recognize pending_confirmation");
 
+  const unclaimedBadge = h.eval("getVehicleClaimBadge({ claim_status: 'unclaimed' })");
+  assert.ok(unclaimedBadge.includes("vehicle-claim-badge unclaimed"), "Must have class vehicle-claim-badge unclaimed");
+  assert.ok(unclaimedBadge.includes("Unclaimed (created by garage)"), "Must have label 'Unclaimed (created by garage)'");
 
+  // 2. Render inside carsView()
+  h.eval(`
+    cars = [
+      { id: 'c1', registration_no: 'HP01A1111', make_model: 'Swift', claim_status: 'verified' },
+      { id: 'c2', registration_no: 'HP02B2222', make_model: 'i20', claim_status: 'pending' },
+      { id: 'c3', registration_no: 'HP03C3333', make_model: 'Nexon', claim_status: 'unclaimed' }
+    ];
+    carsView();
+  `);
+  const listHtml = h.eval("document.getElementById('carsList').innerHTML");
+  assert.ok(listHtml.includes("Verified (linked)"), "carsList must contain Verified badge");
+  assert.ok(listHtml.includes("Pending confirmation"), "carsList must contain Pending confirmation badge");
+  assert.ok(listHtml.includes("Unclaimed (created by garage)"), "carsList must contain Unclaimed badge");
+});
+
+test("Phase 9 Owner Decisions: Pending confirmation card shows vehicle number and garage name only after server response; missing route shows BLOCKED", async (t) => {
+  let claimsResponse = { ok: false };
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/vehicle-claims')) {
+        return new Response(JSON.stringify(claimsResponse), { status: claimsResponse.ok ? 200 : 404 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Missing route or capability false -> renders BLOCKED card
+  h.eval("setBackendCapabilities({ vehicle_claims: false });");
+  h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML = '';");
+  await h.eval("loadVehicleClaims()");
+  const blockedHtml = h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML");
+  assert.ok(blockedHtml.includes("backend-blocked-card"), "Must render backend-blocked-card when disabled");
+  assert.ok(blockedHtml.includes("GET /api/vehicle-claims"), "Must state GET /api/vehicle-claims");
+
+  // 2. Capability true, server returns claims -> renders vehicle number, garage name, Confirm & Reject buttons
+  h.eval("setBackendCapabilities({ vehicle_claims: true });");
+  claimsResponse = {
+    ok: true,
+    data: [
+      { id: 'clm-1', registration_no: 'HP01A9999', garage_name: 'Super Speed Garage' }
+    ]
+  };
+  await h.eval("loadVehicleClaims()");
+  const claimsHtml = h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML");
+  assert.ok(claimsHtml.includes("HP01A9999"), "Must display vehicle registration number");
+  assert.ok(claimsHtml.includes("Super Speed Garage"), "Must display garage name");
+  assert.ok(claimsHtml.includes("Confirm (owner)"), "Must have 'Confirm (owner)' button");
+  assert.ok(claimsHtml.includes("Not my vehicle (owner)"), "Must have 'Not my vehicle (owner)' button");
+});
+
+test("Phase 9 Owner Decisions: Confirm claim requires fresh mobile OTP; reject claim calls reject route", async (t) => {
+  let lastRoute = '';
+  let lastMethod = '';
+
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      lastRoute = String(url);
+      lastMethod = opts?.method || 'GET';
+      if (lastRoute.includes('/otp/send') || lastRoute.includes('/otp/verify') || lastRoute.includes('/confirm') || lastRoute.includes('/reject')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ vehicle_claims: true });");
+  h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML = '';");
+  h.eval("document.getElementById('claimActionBlocked-clm-100').innerHTML = '';");
+
+  // 1. Confirm initiation calls POST /api/vehicle-claims/:id/otp/send
+  await h.eval("startClaimConfirm('clm-100')");
+  assert.ok(lastRoute.includes('/api/vehicle-claims/clm-100/otp/send'), "Must send OTP for confirmation");
+  assert.equal(lastMethod, 'POST');
+  assert.ok(h.elements.get('claimOtpModal'), "Must open OTP modal");
+
+  // 2. Submit OTP verifies and confirms
+  h.eval("document.getElementById('claimOtpInput').value = '654321'");
+  await h.eval("submitClaimOtp('clm-100')");
+  assert.ok(lastRoute.includes('/api/vehicle-claims/clm-100/confirm'), "Must call confirm route after verify");
+  assert.equal(h.eval("document.getElementById('claimOtpModal')"), null, "Modal must be closed after confirmation");
+
+  // 3. Reject claim calls POST /api/vehicle-claims/:id/reject
+  await h.eval("rejectVehicleClaim('clm-100')");
+  assert.ok(lastRoute.includes('/api/vehicle-claims/clm-100/reject'), "Must call reject route");
+  assert.equal(lastMethod, 'POST');
+});
+
+test("Phase 9 Owner Decisions: Garage-created history is locked behind card when claim is pending", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    car = { id: 'car-pending-1', registration_no: 'HP01P0001', claim_status: 'pending' };
+    records = [{ id: 'rec-1', car_id: 'car-pending-1', service_date: '2026-10-18', workshop: 'Secret Garage', total_cost: 5000 }];
+    renderHistory();
+  `);
+
+  const historyHtml = h.eval("document.getElementById('historyTable').innerHTML");
+  assert.ok(historyHtml.includes("locked-garage-history-card"), "Must render locked-garage-history-card");
+  assert.ok(historyHtml.includes("History from a garage is waiting for your confirmation."), "Must render locked message");
+  assert.ok(!historyHtml.includes("Secret Garage"), "Must NOT render garage service history while claim is pending");
+  assert.equal(h.eval("document.getElementById('historySpendSummary').innerHTML"), "", "Spend summary must be empty");
+});
+
+test("Phase 9 Owner Decisions: Garage vehicle match preview is strictly server-decided; customer name required on no_match", async (t) => {
+  let serverMatchData = {
+    match_state: 'exact_match',
+    preview_text: 'Matches existing owner'
+  };
+
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/garage/vehicle-match')) {
+        return new Response(JSON.stringify({ ok: true, data: serverMatchData }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ garage_vehicle_match: true });");
+
+  // 1. Exact match preview from server
+  serverMatchData = { match_state: 'exact_match', preview_text: 'Matches existing owner' };
+  h.eval(`
+    document.getElementById('testMatchBox').innerHTML = '';
+    document.getElementById('testCustomerInput').value = '';
+  `);
+  await h.eval("checkGarageVehicleMatch('HP01A1234', '9816012345', 'testMatchBox', '#testCustomerInput')");
+  let matchContent = h.eval("document.getElementById('testMatchBox').textContent");
+  assert.ok(matchContent.includes("Matches existing owner"), "Must display server exact match text");
+
+  // 2. Pending claim preview from server
+  serverMatchData = { match_state: 'pending_claim', preview_text: 'Will be sent for owner confirmation' };
+  await h.eval("checkGarageVehicleMatch('HP01A1234', '9816099999', 'testMatchBox', '#testCustomerInput')");
+  matchContent = h.eval("document.getElementById('testMatchBox').textContent");
+  assert.ok(matchContent.includes("Will be sent for owner confirmation"), "Must display server pending claim text");
+
+  // 3. No match preview: Customer name is required
+  serverMatchData = { match_state: 'no_match', preview_text: 'New vehicle record will be created' };
+  await h.eval("checkGarageVehicleMatch('HP99X9999', '9800000000', 'testMatchBox', '#testCustomerInput')");
+  matchContent = h.eval("document.getElementById('testMatchBox').textContent");
+  assert.ok(matchContent.includes("New vehicle record will be created"), "Must display server no-match text");
+  assert.equal(h.eval("document.getElementById('testCustomerInput').getAttribute('required')"), "required", "Customer name must be required when no match");
+
+  // 4. Missing capability shows BLOCKED card
+  h.eval("setBackendCapabilities({ garage_vehicle_match: false });");
+  await h.eval("checkGarageVehicleMatch('HP99X9999', '9800000000', 'testMatchBox', '#testCustomerInput')");
+  const blockedMatch = h.eval("document.getElementById('testMatchBox').innerHTML");
+  assert.ok(blockedMatch.includes("backend-blocked-card"), "Must show BLOCKED card when capability false");
+  assert.ok(blockedMatch.includes("POST /api/garage/vehicle-match"), "Must name vehicle-match route");
+});
+
+test("Phase 9 Owner Decisions: WhatsApp bill send shows template preview; 'Sent' only after server ok; Join invite is unchecked by default with consent note", async (t) => {
+  let templateResponse = {
+    ok: true,
+    data: {
+      template_name: 'service_invoice_v1',
+      preview_text: 'Dear Customer, your invoice is ready.',
+      template_approved: true
+    }
+  };
+  let sendResponse = { ok: true };
+  let sentPayload = null;
+
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      const u = String(url);
+      if (u.includes('/api/garage/bills/template')) {
+        return new Response(JSON.stringify(templateResponse), { status: templateResponse.ok ? 200 : 400 });
+      }
+      if (u.includes('/api/garage/bills/send')) {
+        sentPayload = opts?.body ? JSON.parse(opts.body) : null;
+        return new Response(JSON.stringify(sendResponse), { status: sendResponse.ok ? 200 : 400 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ bill_send: true });");
+
+  // 1. WhatsApp template approved preview
+  h.eval(`
+    document.getElementById('invBillChannel').value = 'whatsapp';
+    document.getElementById('invWhatsAppDetails').style.display = 'none';
+  `);
+  await h.eval("onBillChannelChange()");
+  assert.ok(h.eval("document.getElementById('invWhatsAppTemplateName').textContent").includes("service_invoice_v1"));
+  assert.equal(h.eval("document.getElementById('invWhatsAppPreviewText').textContent"), "Dear Customer, your invoice is ready.");
+  assert.equal(h.eval("document.getElementById('invWhatsAppStatus').textContent"), "Template Approved & Ready");
+
+  // 2. Unapproved template shows server error as is
+  templateResponse = {
+    ok: true,
+    data: {
+      template_name: 'custom_bill',
+      template_approved: false,
+      error: "WhatsApp template 'custom_bill' is pending Meta approval."
+    }
+  };
+  await h.eval("onBillChannelChange()");
+  assert.equal(h.eval("document.getElementById('invWhatsAppStatus').textContent"), "WhatsApp template 'custom_bill' is pending Meta approval.");
+
+  // 3. Send join invite checkbox must be unchecked by default
+  assert.equal(Boolean(h.eval("document.getElementById('invSendJoinInvite').checked")), false, "Send join invite must be false by default");
+
+  // 4. Send bill calls POST /api/garage/bills/send with send_join_invite flag
+  await h.eval("sendBillNotification({ id: 'INV-55', customer: 'Ramesh', phone: '9816000000' }, 'whatsapp', false)");
+  assert.equal(sentPayload.invoice_id, 'INV-55');
+  assert.equal(sentPayload.channel, 'whatsapp');
+  assert.equal(sentPayload.send_join_invite, false);
+});
+
+test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', server totals/GST split, and 'Preview only' badge", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    data = { profile: { name: 'City Auto Care', city: 'Shimla' }, invoices: [] };
+    openPrintableInvoice({
+      id: 'INV-201',
+      customer: 'Suresh Raina',
+      phone: '9816011111',
+      vehicle: 'Mahindra Thar',
+      reg: 'HP 01T 0007',
+      date: '2026-10-20',
+      parts: 4000,
+      labour: 1000,
+      other: 0,
+      discount: 0,
+      isGst: true,
+      amount: 5900,
+      saved: false
+    });
+  `);
+
+  const detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
+  assert.ok(detailsHtml.includes("Powered by Torq Desk"), "Must include 'Powered by Torq Desk' footer");
+  assert.ok(detailsHtml.includes("Preview only"), "Must show 'Preview only' badge for unsaved invoice");
+  assert.ok(detailsHtml.includes("GST Split (CGST 9% + SGST 9%)"), "Must show GST split");
+  assert.ok(detailsHtml.includes("Pending owner decision"), "Must show GSTIN Pending owner decision");
+});
+
+test("Phase 9 Owner Decisions: Non-approved roles are completely absent; only 3 approved team roles and super_admin exist", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // Check 3 approved team roles
+  const teamLeadPerms = h.eval("getAdminRolePermissions('team_lead')");
+  assert.equal(teamLeadPerms.role, 'team_lead');
+  assert.equal(teamLeadPerms.label, 'Team Lead');
+  assert.equal(teamLeadPerms.canMutateTickets, true);
+  assert.equal(teamLeadPerms.canManageTeam, true);
+
+  const agentPerms = h.eval("getAdminRolePermissions('support_agent')");
+  assert.equal(agentPerms.role, 'support_agent');
+  assert.equal(agentPerms.label, 'Support Agent');
+  assert.equal(agentPerms.canMutateTickets, true);
+  assert.equal(agentPerms.canManageTeam, false);
+
+  const execPerms = h.eval("getAdminRolePermissions('support_executive')");
+  assert.equal(execPerms.role, 'support_executive');
+  assert.equal(execPerms.label, 'Support Executive');
+  assert.equal(execPerms.canMutateTickets, false, "Support Executive must be read-only");
+
+  const superAdminPerms = h.eval("getAdminRolePermissions('super_admin')");
+  assert.equal(superAdminPerms.role, 'super_admin');
+  assert.equal(superAdminPerms.canMutateTickets, true);
+
+  // Fallback for unapproved roles: defaults to super_admin or owner
+  const unapprovedPerms = h.eval("getAdminRolePermissions('auditor')");
+  assert.equal(unapprovedPerms.role, 'super_admin');
+
+  // Verify CSS contains badges for 3 approved roles and 0 for unapproved
+  const css = fs.readFileSync(path.join(root, 'css/styles.css'), 'utf8');
+  assert.ok(css.includes('.role-team-lead'), "Must contain .role-team-lead");
+  assert.ok(css.includes('.role-support-agent'), "Must contain .role-support-agent");
+  assert.ok(css.includes('.role-support-executive'), "Must contain .role-support-executive");
+  assert.ok(!css.includes('.role-support-lead'), "Must NOT contain .role-support-lead");
+  assert.ok(!css.includes('.role-billing-admin'), "Must NOT contain .role-billing-admin");
+});
+
+test("Phase 9 Security & XSS: All dynamic claim, garage and customer text rendered via textContent and safe escaping", async (t) => {
+  const h = createAppHarness({
+    fetch: async () => new Response(JSON.stringify({
+      ok: true,
+      data: [{
+        id: 'clm-xss',
+        registration_no: '<script>alert(1)</script>HP01A',
+        garage_name: '<img src=x onerror=alert(2)>Best Garage'
+      }]
+    }), { status: 200 })
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ vehicle_claims: true });");
+  h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML = '';");
+  await h.eval("loadVehicleClaims()");
+  const claimsHtml = h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML");
+  assert.ok(!claimsHtml.includes("<script>alert(1)</script>"), "Registration script must be escaped");
+  assert.ok(!claimsHtml.includes("<img src=x onerror=alert(2)>"), "Garage img tag must be escaped");
+});

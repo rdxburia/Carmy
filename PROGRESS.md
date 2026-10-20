@@ -1045,3 +1045,37 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - `node --check js/backend-config.js`: Clean (0 syntax errors).
   - `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
   - `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips, duration 3.8s).
+
+
+## 2026-10-20 — Phase 9 / Owner Decisions: Approved 3-Role Matrix Purge, Owner Claim Flow, Garage Server Matching & E-Bill Preview
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Implementation of Owner Decisions:
+  1. Purged unapproved roles (`support_lead`, `billing_admin`, `auditor`) from frontend code and documentation; strictly enforced the 3 approved team roles (`team_lead`, `support_agent`, `support_executive`) alongside owner role (`super_admin`).
+  2. Owner Vehicle Claim UI: 3-state badges (`Verified (linked)`, `Pending confirmation`, `Unclaimed (created by garage)`), pending claim confirmation card with mobile OTP verification (`POST /api/vehicle-claims/:id/otp/send` and `/verify`), confirm/reject endpoints, and locked garage service history card (`"History from a garage is waiting for your confirmation."`).
+  3. Garage Vehicle Matching & Bill Delivery: Server-authoritative vehicle matching preview (`POST /api/garage/vehicle-match`; client never decides match state), customer name mandatory on `no_match`, bill delivery channel selector (WhatsApp, SMS, none) with server template preview, and unchecked "Send join invite" checkbox with customer consent requirement note.
+  4. E-Bill Invoice Preview: Professional E-Bill layout, "Powered by Torq Desk" footer, server-rendered totals & GST split, and "Preview only" badge until finalized.
+  5. Backend switch capabilities registered: `vehicle_claims: false`, `garage_vehicle_match: false`, `bill_send: false` in `js/backend-config.js` and documented in `docs/backend-switch.md`.
+  6. Documentation alignment: Updated `docs/frontend-backend-contract.md` to reflect the approved 3-role team matrix.
+
+- **Pending Owner Decisions (Preserved as PENDING):**
+  - Mobile OTP Provider: Kept as PENDING ("Pending owner decision" shown in claim confirmation flow).
+  - Garage GSTIN Mandatory Requirement: Kept as PENDING (optional 15-character format in garage profiles and E-bill preview).
+
+- **Core Governance & Security Rules Enforced:**
+  - Strictly frontend-only: 0 Cloudflare Worker code changes, 0 database migrations, 0 SQL modifications, 0 workflow edits.
+  - Integration branch `feat/frontend-roadmap` retained without merging to `main` or deploying to production.
+  - Zero mock data: Missing endpoints render `.backend-blocked-card` / `.admin-blocked-card` with exact route names.
+  - Browser-only checks labeled `/* UI-ONLY: ... */` in code comments and progress documentation.
+  - All dynamic user text rendered via `textContent` or safe DOM builders, preventing XSS injection.
+  - Sensitive data protection: Zero OTPs stored in DOM/storage/console.
+
+- **Automated Test Suite:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `node --check js/backend-config.js`: Clean (0 syntax errors).
+  - `node --check js/garage-workspace.js`: Clean (0 syntax errors).
+  - `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
+  - `npm.cmd test`: **184/184 tests passing** (100% green, 0 failures, 0 skips, duration ~5.0s).
+    * Includes 8 new regression tests covering approved role matrix, Team Lead permissions, Support Executive read-only mode, vehicle claim badges, claim confirm with OTP, locked garage history, server-authoritative garage matching, and bill channel template delivery.
+  - `node --test tests/garage-redesign.test.mjs`: **5/5 tests passing**.
+  - Playwright UI screenshots: **NOT RUN** (reason: Playwright is not installed in the workspace dependencies).
