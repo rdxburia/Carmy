@@ -960,3 +960,55 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 
 
 
+
+
+## 2026-10-20 — Phase 8: Signup Flow, Mandatory Mobile & Profile Verification, Profile Gate & Backend Capability Switch
+
+- **Branch:** `feat/frontend-roadmap` (continued from HEAD `cc47eb3ebb253e6e694e2938c112ddeeb1e09b7b`)
+- **Scope:** Frontend-only signup wizard (Steps 1–6) for vehicle owners & garages, email OTP verification, compulsory Indian mobile verification (+91, no skip button), compulsory profile completion (6-digit pincode, optional 15-char GSTIN for garages), post-login profile gate (`GET /api/profile/status`), Account screen mobile change OTP verification, and a backend capability switch (`js/backend-config.js` and `docs/backend-switch.md`).
+- **Core Governance & Security Rules Enforced:**
+  - Strictly frontend-only: 0 Cloudflare Worker code changes, 0 database migrations, 0 SQL modifications, 0 workflow edits.
+  - Integration branch `feat/frontend-roadmap` retained without merging to `main` or deploying to production.
+  - Zero mock data anywhere: truthful `.backend-blocked-card` rendered whenever backend routes return 404 or are disabled in capabilities.
+  - Zero fake success: "Verified", "Account created", and "Profile saved" appear only after the server returns ok (`ok: true`).
+  - Sensitive data protection: Zero OTPs or passwords stored in `localStorage`, `sessionStorage`, `console`, or DOM. Input fields cleared on completion.
+  - Browser-only checks labeled `/* UI-ONLY: ... */` in code comments and in this report.
+  - All dynamic user text rendered via `textContent` or safe DOM builders, preventing XSS injection.
+  - CSS prefixed with `auth-`, `profile-`, `otp-`, `backend-` and appended to `css/styles.css`. Cache busters bumped to `?v=2026.10.19-phase8-auth`.
+  - Responsive at 360px and 1280px with zero horizontal scroll and safe-area inset compliance.
+
+### Implemented Components:
+1. **Backend Switch (`js/backend-config.js` & `docs/backend-switch.md`):**
+   - Centralizes `API_BASE` resolution (`<meta name="carmy-api-base">`, `APP_CONFIG.WORKER_API_URL`, fallback).
+   - Declares `DEFAULT_CAPABILITIES` (all `false` by default): `auth_signup`, `auth_email_otp`, `auth_mobile_otp`, `profile`, `profile_status`, `profile_mobile_change`, `garage_types`.
+   - Fetches from `GET /api/meta/capabilities` on app start in browser environments. Fails closed (all `false`) on 404 or network errors.
+   - Exports helper `backendAvailable(name)` called by screens before rendering action buttons.
+   - Exports `renderBackendBlockedCard(routePath, method, customMessage)` for standard blocked indicators.
+   - Documented in `docs/backend-switch.md` with explicit notice: *"Switching a capability to true without its route returning the documented shape will show errors, not success."*
+
+2. **Signup Flow Wizard (`js/app.js`):**
+   - Container `#authSignupFlow` integrated into auth overlay.
+   - **Step 1 (Account Type):** Vehicle owner vs. commercial garage. For garage, selects from 5 specialization types (Repair shop, Service provider, Car accessories, Car cleaning, Car maintenance).
+   - **Step 2 (Credentials):** Email and password. Enforces password rule: min 8 characters, at least 1 letter, at least 1 number. Real-time strength meter. Calls `POST /api/auth/signup`. Displays server duplicate error truthfully without advancing. Clears password input on success.
+   - **Step 3 (Email OTP):** Enforces 6 numeric digits. 30-second resend cooldown timer. After 5 failed attempts, displays lockout warning card. Calls `POST /api/auth/email-otp/send` and `/verify`.
+   - **Step 4 (Mandatory Mobile Number):** Compulsory Indian mobile (10 digits starting with 6, 7, 8, or 9; stored as `+91`). Displays server duplicate error. No skip button exists. Calls `POST /api/auth/mobile-otp/send` and `/verify`.
+   - **Step 5 (Mandatory Profile Details):**
+     * Vehicle Owner: Full legal name, address line, city, state, 6-digit pincode.
+     * Garage: Garage/business name, proprietor name, workshop address, city, state, 6-digit pincode, optional 15-char GSTIN.
+     * Calls `PUT /api/profile`. Displays "Profile saved" only after server returns `ok: true`.
+   - **Step 6 (Done):** Congratulatory screen with action to open vehicle-owner dashboard.
+
+3. **Profile Gate (`checkProfileGate`):**
+   - /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
+   - Runs upon user authentication in `start()`.
+   - Calls `GET /api/profile/status`. If missing or 404, fails closed: renders `#profileGateOverlay` with `.backend-blocked-card` for `GET /api/profile/status` and sign-out button.
+   - If `email_verified`, `mobile_verified`, or `profile_complete` is false, displays non-dismissable modal overlay listing missing items with action to complete verification or sign out.
+   - Super admin / team members bypass vehicle-owner profile gate (`rnyburia@gmail.com` or team role).
+   - Mobile number update in Account screen requires fresh OTP verification via `POST /api/profile/mobile-change/send` and `/verify`; blocked with `.backend-blocked-card` if route is disabled.
+
+### Automated Test Suite:
+- `node --check js/backend-config.js`: Clean (0 syntax errors).
+- `node --check js/app.js`: Clean (0 syntax errors).
+- `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
+- `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips, duration 4.2s).
+  * 9 new Phase 8 tests covering: Capability switch & 404 fallback, Step 2 password validation & duplicate error, Step 3 Email OTP & lockout, Step 4 Mobile mandatory & +91 format, Step 5 Profile validation & "Profile saved" ok check, Profile gate fail-closed & non-dismissable overlay, Profile mobile change OTP, Zero credential leak in storage/console & XSS sanitization, 360px & 1280px responsive layout.

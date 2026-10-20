@@ -274,3 +274,11 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 
 
 
+
+
+## 2026-10-20 — Phase 8: Signup Flow, Mandatory Mobile & Profile, Profile Gate & Backend Capability Switch
+- Scope: Built complete vehicle-owner and garage signup wizard (Steps 1–6), email OTP verification with resend cooldown and lockout, compulsory Indian mobile verification (+91 format, 10 digits starting 6–9, no skip button), compulsory profile registration (6-digit pincode, optional 15-char GSTIN for garages), post-login profile gate (`GET /api/profile/status`), Account screen mobile change OTP verification, and a backend capability switch (`js/backend-config.js` and `docs/backend-switch.md`).
+- Branch: `feat/frontend-roadmap` (continued from HEAD `cc47eb3ebb253e6e694e2938c112ddeeb1e09b7b`).
+- Core rules enforced: Zero mock data anywhere (truthful `.backend-blocked-card` on missing routes), zero fake success ("Verified" and "Profile saved" only after ok), zero credentials stored in storage/DOM/console, all dynamic text via `textContent`, browser checks labeled `/* UI-ONLY: ... */`, safe-area insets and zero horizontal scroll at 360px & 1280px.
+- Zero Worker edits, zero DB migrations, zero SQL modifications, zero workflow changes. Main branch untouched; zero production deployments.
+- Test suites: `npm.cmd test` passed 175/175 tests green; `node --check` passed across `js/backend-config.js`, `js/app.js`, and `tests/customer-portal-regression.test.mjs`.

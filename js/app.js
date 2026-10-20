@@ -349,6 +349,9 @@ async function workerDelete(path){
 async function workerPatch(path,payload){
   return workerRequest(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
 }
+async function workerPut(path,payload){
+  return workerRequest(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+}
 async function workerDownloadCsv(path,filename){
   let token=await getAccessToken();
   const res=await fetch(WORKER_API+path,{
@@ -713,6 +716,1165 @@ function handleAuthRedirectError(){
  }
  try{history.replaceState(null,document.title,window.location.pathname+window.location.search)}catch(e){}
 }
+
+/* ==========================================================================
+   PHASE 8: MULTI-STEP SIGNUP FLOW & BACKEND SWITCH INTEGRATION
+   ========================================================================== */
+
+/* Phase 8 auth & profile API helper */
+async function authApiRequest(path, options = {}) {
+  const base = (typeof window !== 'undefined' && window.API_BASE) || (typeof API_BASE !== 'undefined' ? API_BASE : '') || (typeof WORKER_API !== 'undefined' ? WORKER_API : '');
+  const headers = {
+    'Accept': 'application/json',
+    ...(options.headers || {})
+  };
+  let body = options.body;
+  if (body && typeof body === 'object' && !(typeof FormData !== 'undefined' && body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(body);
+  }
+  try {
+    if (typeof getAccessToken === 'function') {
+      const token = await getAccessToken().catch(() => null);
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
+    }
+  } catch (_) {}
+
+  const res = await fetch(base + path, {
+    ...options,
+    headers,
+    body
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {}
+
+  if (!res.ok) {
+    const errorMsg = data?.error?.message || data?.error || data?.message || ('Request failed (' + res.status + ')');
+    return { ok: false, status: res.status, error: errorMsg, data };
+  }
+  return data || { ok: true, status: res.status };
+}
+
+const signupState = {
+  currentStep: 1, // 1: Account Type, 2: Credentials, 3: Email OTP, 4: Mobile OTP, 5: Profile, 6: Complete
+  accountType: 'vehicle_owner', // 'vehicle_owner' | 'garage'
+  garageType: 'Repair shop',
+  email: '',
+  emailOtpSent: false,
+  emailOtpVerified: false,
+  emailOtpFailedAttempts: 0,
+  emailOtpLocked: false,
+  emailOtpCooldown: 0,
+  emailOtpTimer: null,
+  mobile: '',
+  mobileOtpSent: false,
+  mobileOtpVerified: false,
+  mobileOtpFailedAttempts: 0,
+  mobileOtpCooldown: 0,
+  mobileOtpTimer: null,
+  profileSaved: false,
+  errorMessage: ''
+};
+
+function resetSignupState() {
+  if (signupState.emailOtpTimer) {
+    clearInterval(signupState.emailOtpTimer);
+    signupState.emailOtpTimer = null;
+  }
+  if (signupState.mobileOtpTimer) {
+    clearInterval(signupState.mobileOtpTimer);
+    signupState.mobileOtpTimer = null;
+  }
+  signupState.currentStep = 1;
+  signupState.accountType = 'vehicle_owner';
+  signupState.garageType = 'Repair shop';
+  signupState.email = '';
+  signupState.emailOtpSent = false;
+  signupState.emailOtpVerified = false;
+  signupState.emailOtpFailedAttempts = 0;
+  signupState.emailOtpLocked = false;
+  signupState.emailOtpCooldown = 0;
+  signupState.mobile = '';
+  signupState.mobileOtpSent = false;
+  signupState.mobileOtpVerified = false;
+  signupState.mobileOtpFailedAttempts = 0;
+  signupState.mobileOtpCooldown = 0;
+  signupState.profileSaved = false;
+  signupState.errorMessage = '';
+
+  const ids = ['authStepPassword', 'authStepEmail', 'authStepEmailOtp', 'authStepMobile', 'authStepMobileOtp'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+function cancelSignupFlow() {
+  resetSignupState();
+  signup = false;
+  updateAuthModeUI();
+}
+
+function selectSignupAccountType(type) {
+  signupState.accountType = type === 'garage' ? 'garage' : 'vehicle_owner';
+  renderSignupFlow();
+}
+
+function selectSignupGarageType(type) {
+  signupState.garageType = type;
+}
+
+function nextSignupStep(step) {
+  signupState.errorMessage = '';
+  signupState.currentStep = step;
+  renderSignupFlow();
+}
+
+function prevSignupStep(step) {
+  signupState.errorMessage = '';
+  signupState.currentStep = step;
+  renderSignupFlow();
+}
+
+function toggleSignupPasswordVisibility() {
+  const input = document.getElementById('authStepPassword');
+  const btn = document.getElementById('authStepPasswordToggle');
+  if (!input || !btn) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  btn.textContent = isPass ? 'Hide' : 'Show';
+  btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+}
+
+function evaluatePasswordStrength(val) {
+  const v = String(val || '');
+  const hasLen = v.length >= 8;
+  const hasLetter = /[A-Za-z]/.test(v);
+  const hasNum = /\d/.test(v);
+  const hasSpecial = /[^A-Za-z0-9]/.test(v);
+  const isValid = hasLen && hasLetter && hasNum;
+
+  let level = 0;
+  let label = '';
+  if (v.length > 0) {
+    if (!hasLen || !hasLetter || !hasNum) {
+      level = 1;
+      label = 'Weak (Needs 8+ chars, letter & number)';
+    } else if (hasLen && hasLetter && hasNum && (v.length >= 10 || hasSpecial)) {
+      level = 3;
+      label = 'Strong';
+    } else {
+      level = 2;
+      label = 'Good';
+    }
+  }
+  return { isValid, level, label, hasLen, hasLetter, hasNum };
+}
+
+function updateSignupPasswordMeter() {
+  const input = document.getElementById('authStepPassword');
+  const meter = document.getElementById('authStepStrengthMeter');
+  const label = document.getElementById('authStepStrengthLabel');
+  if (!input || !meter) return;
+  const res = evaluatePasswordStrength(input.value);
+  meter.className = 'auth-strength ' + (res.level ? 's' + res.level : '');
+  if (label) label.textContent = res.label;
+}
+
+function renderSignupFlow() {
+  const container = document.getElementById('authSignupFlow');
+  if (!container) return;
+
+  const steps = [
+    { num: 1, label: 'Account' },
+    { num: 2, label: 'Credentials' },
+    { num: 3, label: 'Email OTP' },
+    { num: 4, label: 'Mobile' },
+    { num: 5, label: 'Profile' },
+    { num: 6, label: 'Ready' }
+  ];
+
+  const bubblesHtml = `
+    <div class="auth-step-bubbles" aria-label="Signup steps">
+      ${steps.map(s => `
+        <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'active' : ''} ${s.num < signupState.currentStep ? 'done' : ''}">
+          <div class="auth-step-bubble-num">${s.num < signupState.currentStep ? '✓' : s.num}</div>
+          <div class="auth-step-bubble-label">${s.label}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  let stepHtml = '';
+
+  if (signupState.currentStep === 1) {
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Choose Account Type</div>
+        <p class="auth-step-desc">Select how you will be using Torq Desk.</p>
+        <div class="auth-type-grid">
+          <button type="button" class="auth-type-card ${signupState.accountType === 'vehicle_owner' ? 'active' : ''}" onclick="selectSignupAccountType('vehicle_owner')">
+            <div class="auth-type-card-title">🚗 Vehicle Owner</div>
+            <div class="auth-type-card-desc">Personal garage for service logs, documents, insurance & Form 29/30 transfer packets.</div>
+          </button>
+          <button type="button" class="auth-type-card ${signupState.accountType === 'garage' ? 'active' : ''}" onclick="selectSignupAccountType('garage')">
+            <div class="auth-type-card-title">🔧 Garage / Workshop</div>
+            <div class="auth-type-card-desc">Commercial garage for managing repair jobs, multi-vehicle fleets, customer invoicing & staff.</div>
+          </button>
+        </div>
+        ${signupState.accountType === 'garage' ? `
+          <div class="auth-garage-select-wrap">
+            <label for="authGarageTypeSelect"><b>Garage Specialization</b></label>
+            <select id="authGarageTypeSelect" class="auth-garage-type-select" onchange="selectSignupGarageType(this.value)">
+              <option value="Repair shop" ${signupState.garageType === 'Repair shop' ? 'selected' : ''}>Repair shop</option>
+              <option value="Service provider" ${signupState.garageType === 'Service provider' ? 'selected' : ''}>Service provider</option>
+              <option value="Car accessories" ${signupState.garageType === 'Car accessories' ? 'selected' : ''}>Car accessories</option>
+              <option value="Car cleaning" ${signupState.garageType === 'Car cleaning' ? 'selected' : ''}>Car cleaning</option>
+              <option value="Car maintenance" ${signupState.garageType === 'Car maintenance' ? 'selected' : ''}>Car maintenance</option>
+            </select>
+          </div>
+        ` : ''}
+        <button type="button" class="primary auth-step-btn" onclick="nextSignupStep(2)">Continue to Account Details</button>
+        <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Back to Login</button>
+      </div>
+    `;
+  } else if (signupState.currentStep === 2) {
+    const isSignupAvailable = typeof backendAvailable === 'function' ? backendAvailable('auth_signup') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Create Account Credentials</div>
+        <p class="auth-step-desc">Enter your email and create a secure password.</p>
+        
+        <div class="auth-field">
+          <label for="authStepEmail">Email Address</label>
+          <input id="authStepEmail" type="email" placeholder="name@example.com" value="${esc(signupState.email)}">
+        </div>
+        
+        <div class="auth-field">
+          <label for="authStepPassword">Password</label>
+          <div class="auth-password-control">
+            <input id="authStepPassword" type="password" placeholder="Minimum 8 characters">
+            <button class="auth-password-toggle" id="authStepPasswordToggle" type="button" onclick="toggleSignupPasswordVisibility()">Show</button>
+          </div>
+          <div class="auth-password-meta">
+            <div class="auth-strength" id="authStepStrengthMeter" aria-label="Password strength">
+              <span class="auth-strength-bar"><i></i><i></i><i></i></span>
+              <b id="authStepStrengthLabel"></b>
+            </div>
+          </div>
+        </div>
+
+        <div id="authStepErrorMsg" class="auth-message error" style="display:${signupState.errorMessage ? 'block' : 'none'};"></div>
+
+        ${isSignupAvailable ? `
+          <button type="button" class="primary auth-step-btn" id="authStepSubmitCredsBtn" onclick="submitSignupCreds()">Create Account</button>
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/auth/signup', 'POST', 'Account creation route is not enabled on this backend deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="prevSignupStep(1)">Back</button>
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 3) {
+    const isEmailOtpAvailable = typeof backendAvailable === 'function' ? backendAvailable('auth_email_otp') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Verify Email Address</div>
+        <p class="auth-step-desc">Enter the 6-digit verification code sent to <strong id="authStepEmailDisplay"></strong>.</p>
+        
+        ${isEmailOtpAvailable ? `
+          ${signupState.emailOtpLocked ? `
+            <div class="otp-lockout-card" role="alert">
+              <strong>Account Verification Locked:</strong> Too many failed attempts. Temporarily locked for 15 minutes.
+            </div>
+          ` : `
+            <div class="otp-input-wrap">
+              <input id="authStepEmailOtp" class="otp-digit-box" type="text" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="••••••" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+              <div id="authStepEmailOtpError" class="auth-message error" style="display:none;"></div>
+            </div>
+            <button type="button" class="primary auth-step-btn" id="authStepVerifyEmailBtn" onclick="submitEmailOtp()">Verify Code</button>
+            <div class="otp-resend-row">
+              <span class="otp-cooldown-text" id="authStepEmailCooldownText">${signupState.emailOtpCooldown > 0 ? `Resend in ${signupState.emailOtpCooldown}s` : 'Didn’t get a code?'}</span>
+              <button type="button" class="otp-resend-btn" id="authStepEmailResendBtn" onclick="resendEmailOtp()" ${signupState.emailOtpCooldown > 0 ? 'disabled' : ''}>Resend OTP</button>
+            </div>
+          `}
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/auth/email-otp/verify', 'POST', 'Email OTP verification route is not enabled on this deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 4) {
+    const isMobileOtpAvailable = typeof backendAvailable === 'function' ? backendAvailable('auth_mobile_otp') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Link Mobile Number</div>
+        <p class="auth-step-desc">A verified Indian mobile number is mandatory for all accounts.</p>
+        
+        ${isMobileOtpAvailable ? `
+          <div class="auth-field">
+            <label for="authStepMobile">Mobile Number</label>
+            <div class="auth-mobile-input-wrap">
+              <span class="auth-mobile-prefix">🇮🇳 +91</span>
+              <input id="authStepMobile" class="auth-mobile-input" type="tel" maxlength="10" placeholder="98160 12345" value="${esc(signupState.mobile ? signupState.mobile.replace(/^\+91/, '') : '')}" ${signupState.mobileOtpSent ? 'readonly' : ''}>
+            </div>
+            <div id="authStepMobileError" class="auth-message error" style="display:none;"></div>
+          </div>
+
+          ${signupState.mobileOtpSent ? `
+            <div class="otp-input-wrap">
+              <label for="authStepMobileOtp">Enter 6-digit Mobile OTP</label>
+              <input id="authStepMobileOtp" class="otp-digit-box" type="text" maxlength="6" inputmode="numeric" placeholder="••••••" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            </div>
+            <button type="button" class="primary auth-step-btn" id="authStepVerifyMobileBtn" onclick="submitMobileOtp()">Verify Mobile Number</button>
+            <div class="otp-resend-row">
+              <span class="otp-cooldown-text" id="authStepMobileCooldownText">${signupState.mobileOtpCooldown > 0 ? `Resend in ${signupState.mobileOtpCooldown}s` : 'Didn’t get the SMS?'}</span>
+              <button type="button" class="otp-resend-btn" id="authStepMobileResendBtn" onclick="resendMobileOtp()" ${signupState.mobileOtpCooldown > 0 ? 'disabled' : ''}>Resend OTP</button>
+            </div>
+          ` : `
+            <button type="button" class="primary auth-step-btn" id="authStepSendMobileBtn" onclick="sendMobileOtp()">Send Verification OTP</button>
+          `}
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/auth/mobile-otp/verify', 'POST', 'Mobile OTP verification route is not enabled on this deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 5) {
+    const isProfileAvailable = typeof backendAvailable === 'function' ? backendAvailable('profile') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">${signupState.accountType === 'garage' ? 'Complete Garage Profile' : 'Complete Vehicle Owner Profile'}</div>
+        <p class="auth-step-desc">Mandatory details required for statutory Form 29/30 packets and vehicle records.</p>
+        
+        <div class="profile-form-grid">
+          ${signupState.accountType === 'garage' ? `
+            <div class="auth-field full">
+              <label for="authProfileGarageName">Garage / Business Name *</label>
+              <input id="authProfileGarageName" type="text" placeholder="e.g. Apex Auto Care">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfileOwnerName">Proprietor / Owner Name *</label>
+              <input id="authProfileOwnerName" type="text" placeholder="e.g. Rajesh Kumar">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfileGarageAddress">Workshop Address *</label>
+              <input id="authProfileGarageAddress" type="text" placeholder="e.g. Plot 42, Phase 1, Industrial Area">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileCity">City *</label>
+              <input id="authProfileCity" type="text" placeholder="e.g. Chandigarh">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileState">State *</label>
+              <input id="authProfileState" type="text" placeholder="e.g. Punjab">
+            </div>
+            <div class="auth-field">
+              <label for="authProfilePincode">Pincode (6 digits) *</label>
+              <input id="authProfilePincode" type="text" maxlength="6" placeholder="e.g. 160002" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileGstin">GSTIN (Optional, 15 chars)</label>
+              <input id="authProfileGstin" type="text" maxlength="15" placeholder="e.g. 03AAAAA0000A1Z5">
+            </div>
+          ` : `
+            <div class="auth-field full">
+              <label for="authProfileFullName">Full Legal Name *</label>
+              <input id="authProfileFullName" type="text" placeholder="e.g. Ramesh Sharma">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfileAddress">Address Line *</label>
+              <input id="authProfileAddress" type="text" placeholder="e.g. House No. 204, Sector 15">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileCity">City *</label>
+              <input id="authProfileCity" type="text" placeholder="e.g. Shimla">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileState">State *</label>
+              <input id="authProfileState" type="text" placeholder="e.g. Himachal Pradesh">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfilePincode">Pincode (6 digits) *</label>
+              <input id="authProfilePincode" type="text" maxlength="6" placeholder="e.g. 171001" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            </div>
+          `}
+        </div>
+
+        <div id="authProfileErrorMsg" class="auth-message error" style="display:none;"></div>
+        <div id="authProfileSuccessMsg" class="auth-message ok" style="display:none;"></div>
+
+        ${isProfileAvailable ? `
+          <button type="button" class="primary auth-step-btn" id="authProfileSaveBtn" onclick="submitSignupProfile()">Save Profile</button>
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/profile', 'PUT', 'Profile registration route is not enabled on this deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 6) {
+    stepHtml = `
+      <div class="auth-step-card" style="text-align:center;">
+        <div style="font-size:48px;line-height:1;margin-bottom:12px;">🎉</div>
+        <div class="auth-step-title">Account Created &amp; Verified!</div>
+        <p class="auth-step-desc">Your profile is saved and your account is ready to use.</p>
+        <button type="button" class="primary auth-step-btn" onclick="finishSignup()">Go to Dashboard</button>
+      </div>
+    `;
+  }
+
+  container.innerHTML = bubblesHtml + stepHtml;
+
+  // Post-render bindings
+  if (signupState.currentStep === 2) {
+    const passInput = document.getElementById('authStepPassword');
+    if (passInput) {
+      passInput.addEventListener('input', updateSignupPasswordMeter);
+      updateSignupPasswordMeter();
+    }
+  } else if (signupState.currentStep === 3) {
+    const emailDisp = document.getElementById('authStepEmailDisplay');
+    if (emailDisp) {
+      emailDisp.textContent = maskEmail(signupState.email);
+    }
+  }
+}
+
+async function submitSignupCreds() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_signup')) return;
+  const emailEl = document.getElementById('authStepEmail');
+  const passEl = document.getElementById('authStepPassword');
+  const errEl = document.getElementById('authStepErrorMsg');
+  const btn = document.getElementById('authStepSubmitCredsBtn');
+
+  const email = String(emailEl?.value || '').trim();
+  const password = String(passEl?.value || '');
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid email address.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  const strength = evaluatePasswordStrength(password);
+  if (!strength.isValid) {
+    if (errEl) {
+      errEl.textContent = 'Password must be at least 8 characters and contain at least one letter and one number.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Creating account...';
+  }
+
+  try {
+    const payload = {
+      email: email.toLowerCase(),
+      password,
+      account_type: signupState.accountType,
+      garage_type: signupState.accountType === 'garage' ? signupState.garageType : undefined
+    };
+
+    const res = await authApiRequest('/api/auth/signup', { method: 'POST', body: payload });
+
+    if (!res || !res.ok) {
+      const msg = String(res?.error || res?.message || 'Failed to create account. Please try again.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Clear password input and memory
+    if (passEl) passEl.value = '';
+    signupState.email = email.toLowerCase();
+    signupState.errorMessage = '';
+    signupState.currentStep = 3;
+    renderSignupFlow();
+    sendEmailOtp();
+  } catch (err) {
+    console.error('Signup credentials error:', err);
+    if (errEl) {
+      errEl.textContent = 'Network or server error: ' + (err?.message || 'Please try again.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Create Account';
+    }
+  }
+}
+
+function startEmailOtpCooldown(seconds = 30) {
+  if (signupState.emailOtpTimer) clearInterval(signupState.emailOtpTimer);
+  signupState.emailOtpCooldown = Math.max(0, Number(seconds) || 30);
+  const updateUI = () => {
+    const textEl = document.getElementById('authStepEmailCooldownText');
+    const btnEl = document.getElementById('authStepEmailResendBtn');
+    if (textEl) {
+      textEl.textContent = signupState.emailOtpCooldown > 0 ? `Resend in ${signupState.emailOtpCooldown}s` : 'Didn’t get a code?';
+    }
+    if (btnEl) {
+      btnEl.disabled = signupState.emailOtpCooldown > 0;
+    }
+  };
+  updateUI();
+  signupState.emailOtpTimer = setInterval(() => {
+    signupState.emailOtpCooldown -= 1;
+    updateUI();
+    if (signupState.emailOtpCooldown <= 0) {
+      clearInterval(signupState.emailOtpTimer);
+      signupState.emailOtpTimer = null;
+    }
+  }, 1000);
+  if (signupState.emailOtpTimer && typeof signupState.emailOtpTimer.unref === 'function') {
+    signupState.emailOtpTimer.unref();
+  }
+}
+
+async function sendEmailOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_email_otp')) return;
+  startEmailOtpCooldown(30);
+  try {
+    await authApiRequest('/api/auth/email-otp/send', { method: 'POST', body: { email: signupState.email } });
+    signupState.emailOtpSent = true;
+  } catch (err) {
+    console.error('Email OTP send error:', err);
+  }
+}
+
+async function resendEmailOtp() {
+  if (signupState.emailOtpCooldown > 0) return;
+  await sendEmailOtp();
+  toast('New email verification code sent.');
+}
+
+async function submitEmailOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_email_otp')) return;
+  if (signupState.emailOtpLocked) return;
+
+  const otpEl = document.getElementById('authStepEmailOtp');
+  const errEl = document.getElementById('authStepEmailOtpError');
+  const btn = document.getElementById('authStepVerifyEmailBtn');
+  const code = String(otpEl?.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 6-digit verification code.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/auth/email-otp/verify', { method: 'POST', body: { email: signupState.email, otp: code } });
+    if (!res || !res.ok) {
+      signupState.emailOtpFailedAttempts += 1;
+      if (signupState.emailOtpFailedAttempts >= 5 || res?.status === 429) {
+        signupState.emailOtpLocked = true;
+        renderSignupFlow();
+        return;
+      }
+      const msg = String(res?.error || 'Invalid verification code. Please try again.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Clear input and memory
+    if (otpEl) otpEl.value = '';
+    signupState.emailOtpVerified = true;
+    signupState.currentStep = 4;
+    renderSignupFlow();
+  } catch (err) {
+    console.error('Email OTP verify error:', err);
+    if (errEl) {
+      errEl.textContent = 'Verification error: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Verify Code';
+    }
+  }
+}
+
+function startMobileOtpCooldown(seconds = 30) {
+  if (signupState.mobileOtpTimer) clearInterval(signupState.mobileOtpTimer);
+  signupState.mobileOtpCooldown = Math.max(0, Number(seconds) || 30);
+  const updateUI = () => {
+    const textEl = document.getElementById('authStepMobileCooldownText');
+    const btnEl = document.getElementById('authStepMobileResendBtn');
+    if (textEl) {
+      textEl.textContent = signupState.mobileOtpCooldown > 0 ? `Resend in ${signupState.mobileOtpCooldown}s` : 'Didn’t get the SMS?';
+    }
+    if (btnEl) {
+      btnEl.disabled = signupState.mobileOtpCooldown > 0;
+    }
+  };
+  updateUI();
+  signupState.mobileOtpTimer = setInterval(() => {
+    signupState.mobileOtpCooldown -= 1;
+    updateUI();
+    if (signupState.mobileOtpCooldown <= 0) {
+      clearInterval(signupState.mobileOtpTimer);
+      signupState.mobileOtpTimer = null;
+    }
+  }, 1000);
+  if (signupState.mobileOtpTimer && typeof signupState.mobileOtpTimer.unref === 'function') {
+    signupState.mobileOtpTimer.unref();
+  }
+}
+
+async function sendMobileOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_mobile_otp')) return;
+  const mobileInput = document.getElementById('authStepMobile');
+  const errEl = document.getElementById('authStepMobileError');
+  const btn = document.getElementById('authStepSendMobileBtn');
+
+  const raw = String(mobileInput?.value || '').trim();
+  const normalized = normalizeMobile(raw);
+
+  if (!normalized) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9).';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  const fullMobile = '+91' + normalized;
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending SMS...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/auth/mobile-otp/send', { method: 'POST', body: { mobile: fullMobile } });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Failed to send OTP to this mobile number.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    signupState.mobile = fullMobile;
+    signupState.mobileOtpSent = true;
+    renderSignupFlow();
+    startMobileOtpCooldown(30);
+  } catch (err) {
+    console.error('Mobile OTP send error:', err);
+    if (errEl) {
+      errEl.textContent = 'Error sending SMS OTP: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Send Verification OTP';
+    }
+  }
+}
+
+async function resendMobileOtp() {
+  if (signupState.mobileOtpCooldown > 0) return;
+  await sendMobileOtp();
+  toast('New SMS verification code sent.');
+}
+
+async function submitMobileOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_mobile_otp')) return;
+  const otpEl = document.getElementById('authStepMobileOtp');
+  const errEl = document.getElementById('authStepMobileError');
+  const btn = document.getElementById('authStepVerifyMobileBtn');
+  const code = String(otpEl?.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 6-digit mobile OTP.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/auth/mobile-otp/verify', { method: 'POST', body: { mobile: signupState.mobile, otp: code } });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Invalid mobile OTP code.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Clear input and memory
+    if (otpEl) otpEl.value = '';
+    signupState.mobileOtpVerified = true;
+    signupState.currentStep = 5;
+    renderSignupFlow();
+  } catch (err) {
+    console.error('Mobile OTP verify error:', err);
+    if (errEl) {
+      errEl.textContent = 'Verification error: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Verify Mobile Number';
+    }
+  }
+}
+
+async function submitSignupProfile() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('profile')) return;
+  const errEl = document.getElementById('authProfileErrorMsg');
+  const successEl = document.getElementById('authProfileSuccessMsg');
+  const btn = document.getElementById('authProfileSaveBtn');
+
+  let payload = {};
+  if (signupState.accountType === 'garage') {
+    const garageName = String(document.getElementById('authProfileGarageName')?.value || '').trim();
+    const ownerName = String(document.getElementById('authProfileOwnerName')?.value || '').trim();
+    const garageAddress = String(document.getElementById('authProfileGarageAddress')?.value || '').trim();
+    const city = String(document.getElementById('authProfileCity')?.value || '').trim();
+    const state = String(document.getElementById('authProfileState')?.value || '').trim();
+    const pincode = String(document.getElementById('authProfilePincode')?.value || '').trim();
+    const gstin = String(document.getElementById('authProfileGstin')?.value || '').trim();
+
+    if (!garageName || !ownerName || !garageAddress || !city || !state || !pincode) {
+      if (errEl) {
+        errEl.textContent = 'Please fill in all mandatory garage profile fields.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    if (!/^\d{6}$/.test(pincode)) {
+      if (errEl) {
+        errEl.textContent = 'Pincode must be exactly 6 digits.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    if (gstin && gstin.length !== 15) {
+      if (errEl) {
+        errEl.textContent = 'GSTIN must be exactly 15 characters if provided.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    payload = {
+      account_type: 'garage',
+      garage_name: garageName,
+      owner_name: ownerName,
+      garage_type: signupState.garageType,
+      garage_address: garageAddress,
+      city,
+      state,
+      pincode,
+      gstin: gstin || undefined,
+      mobile: signupState.mobile
+    };
+  } else {
+    const fullName = String(document.getElementById('authProfileFullName')?.value || '').trim();
+    const address = String(document.getElementById('authProfileAddress')?.value || '').trim();
+    const city = String(document.getElementById('authProfileCity')?.value || '').trim();
+    const state = String(document.getElementById('authProfileState')?.value || '').trim();
+    const pincode = String(document.getElementById('authProfilePincode')?.value || '').trim();
+
+    if (!fullName || !address || !city || !state || !pincode) {
+      if (errEl) {
+        errEl.textContent = 'Please fill in all mandatory vehicle owner profile fields.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    if (!/^\d{6}$/.test(pincode)) {
+      if (errEl) {
+        errEl.textContent = 'Pincode must be exactly 6 digits.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    payload = {
+      account_type: 'vehicle_owner',
+      full_name: fullName,
+      address_line: address,
+      city,
+      state,
+      pincode,
+      mobile: signupState.mobile
+    };
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving Profile...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/profile', { method: 'PUT', body: payload });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Failed to save profile. Please try again.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Show "Profile saved" ONLY after server returns ok
+    if (successEl) {
+      successEl.textContent = 'Profile saved';
+      successEl.style.display = 'block';
+    }
+    signupState.profileSaved = true;
+    toast('Profile saved');
+    setTimeout(() => {
+      signupState.currentStep = 6;
+      renderSignupFlow();
+    }, 600);
+  } catch (err) {
+    console.error('Profile save error:', err);
+    if (errEl) {
+      errEl.textContent = 'Profile save failed: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save Profile';
+    }
+  }
+}
+
+function finishSignup() {
+  resetSignupState();
+  signup = false;
+  const auth = document.getElementById('auth');
+  if (auth) auth.classList.add('hidden');
+  document.body.classList.remove('td-auth-open');
+  nav('dashboard');
+}
+
+/* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
+async function checkProfileGate(u) {
+  const primaryAdminEmail = 'rnyburia@gmail.com';
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || String(u.email || '').trim().toLowerCase() === primaryAdminEmail));
+  if (isCandidateAdmin) return true;
+
+  if (typeof backendAvailable === 'function' && !backendAvailable('profile_status')) {
+    renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile gate capability is BLOCKED because the backend route is not deployed.');
+    return false; // Fail closed
+  }
+
+  try {
+    const res = await authApiRequest('/api/profile/status', { method: 'GET' });
+    if (!res || !res.ok || !res.data) {
+      renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile status returned an error or missing data.');
+      return false; // Fail closed
+    }
+    const data = res.data;
+    const isEmailOk = Boolean(data.email_verified);
+    const isMobileOk = Boolean(data.mobile_verified);
+    const isProfileOk = Boolean(data.profile_complete);
+
+    if (isEmailOk && isMobileOk && isProfileOk) {
+      removeProfileGateOverlay();
+      return true;
+    }
+
+    renderProfileGateMissing(data);
+    return false;
+  } catch (err) {
+    console.error('Profile gate status fetch failed:', err);
+    renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile status route is missing or unreachable (404). Dashboard access blocked.');
+    return false; // Fail closed
+  }
+}
+
+function removeProfileGateOverlay() {
+  const overlay = document.getElementById('profileGateOverlay');
+  if (overlay) overlay.remove();
+}
+
+function renderProfileGateBlocked(routePath, method, note) {
+  removeProfileGateOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'profileGateOverlay';
+  overlay.className = 'profile-gate-overlay';
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'profileGateTitle');
+
+  const blockedCardHtml = typeof renderBackendBlockedCard === 'function'
+    ? renderBackendBlockedCard(routePath, method, note)
+    : `<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><div class="backend-blocked-route"><code>${method} ${routePath}</code></div><p class="backend-blocked-desc">${esc(note)}</p></div>`;
+
+  overlay.innerHTML = `
+    <div class="profile-gate-box">
+      <div class="profile-gate-head">
+        <div class="profile-gate-icon" aria-hidden="true">🔒</div>
+        <h2 class="profile-gate-title" id="profileGateTitle">Access Verification Blocked</h2>
+        <p class="profile-gate-desc">Your account access could not be validated because a required verification endpoint is unavailable.</p>
+      </div>
+      <div class="profile-gate-content">
+        ${blockedCardHtml}
+      </div>
+      <div class="profile-gate-actions">
+        <button type="button" class="ghost profile-gate-signout-btn" onclick="profileGateSignOut()">Sign Out</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function renderProfileGateMissing(data) {
+  removeProfileGateOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'profileGateOverlay';
+  overlay.className = 'profile-gate-overlay';
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'profileGateTitle');
+
+  const missing = [];
+  if (!data?.email_verified) missing.push('Email OTP verification');
+  if (!data?.mobile_verified) missing.push('Mandatory Indian mobile number (+91)');
+  if (!data?.profile_complete) missing.push('Mandatory profile details (Name, Address, Pincode)');
+
+  const missingListHtml = missing.map(m => `
+    <div class="profile-gate-missing-item">
+      <span class="profile-gate-missing-dot" aria-hidden="true"></span>
+      <span>${esc(m)}</span>
+    </div>
+  `).join('');
+
+  overlay.innerHTML = `
+    <div class="profile-gate-box">
+      <div class="profile-gate-head">
+        <div class="profile-gate-icon" aria-hidden="true">⚠️</div>
+        <h2 class="profile-gate-title" id="profileGateTitle">Profile Completion Required</h2>
+        <p class="profile-gate-desc">Your profile is incomplete. Complete all mandatory verification steps below to access your Torq Desk garage.</p>
+      </div>
+      <div class="profile-gate-missing-list">
+        ${missingListHtml}
+      </div>
+      <div class="profile-gate-actions">
+        <button type="button" class="primary" onclick="profileGateResumeVerification()">Complete Verification</button>
+        <button type="button" class="ghost profile-gate-signout-btn" onclick="profileGateSignOut()">Sign Out</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function profileGateSignOut() {
+  removeProfileGateOverlay();
+  if (db?.auth?.signOut) {
+    db.auth.signOut();
+  }
+  showLogin();
+}
+
+function profileGateResumeVerification() {
+  removeProfileGateOverlay();
+  showTorqDeskAuth('signup');
+}
+
+function renderMobileChangeBlocked() {
+  let blockedEl = document.getElementById('profileMobileChangeBlocked');
+  if (!blockedEl) {
+    blockedEl = document.createElement('div');
+    blockedEl.id = 'profileMobileChangeBlocked';
+    blockedEl.style.marginTop = '14px';
+    const formSection = document.getElementById('ownerProfileEditSection') || document.getElementById('ownerProfileContent');
+    formSection?.appendChild(blockedEl);
+  }
+  const blockedHtml = typeof renderBackendBlockedCard === 'function'
+    ? renderBackendBlockedCard('/api/profile/mobile-change/send', 'POST', 'Changing your verified mobile number requires fresh OTP verification. This route is currently BLOCKED.')
+    : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><div class="backend-blocked-route"><code>POST /api/profile/mobile-change/send</code></div><p class="backend-blocked-desc">Mobile number change is blocked.</p></div>';
+  blockedEl.innerHTML = blockedHtml;
+  toast('Mobile change blocked: route not deployed.', 'error');
+}
+
+function openMobileChangeOtpModal(newMobile) {
+  let modal = document.getElementById('profileMobileOtpModal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'profileMobileOtpModal';
+  modal.className = 'admin-modal-overlay';
+  modal.innerHTML = `
+    <div class="admin-modal-box" style="max-width:440px;">
+      <div class="admin-modal-head">
+        <h3>Verify New Mobile Number</h3>
+        <button type="button" class="ghost" onclick="document.getElementById('profileMobileOtpModal').remove()">×</button>
+      </div>
+      <p class="muted" style="margin:0;font-size:13px;">A 6-digit verification code will be sent to <strong>${esc(newMobile)}</strong>.</p>
+      <div class="profile-mobile-otp-wrap">
+        <input id="profileMobileOtpInput" class="otp-digit-box" type="text" maxlength="6" inputmode="numeric" placeholder="••••••" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        <div id="profileMobileOtpError" class="auth-message error" style="display:none;"></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button type="button" class="ghost" onclick="document.getElementById('profileMobileOtpModal').remove()">Cancel</button>
+        <button type="button" class="primary" id="profileMobileOtpVerifyBtn" onclick="submitMobileChangeOtp('${esc(newMobile)}')">Verify &amp; Update Mobile</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  authApiRequest('/api/profile/mobile-change/send', { method: 'POST', body: { new_mobile: newMobile } }).catch(e => console.error('Mobile change send error:', e));
+}
+
+async function submitMobileChangeOtp(newMobile) {
+  const input = document.getElementById('profileMobileOtpInput');
+  const errEl = document.getElementById('profileMobileOtpError');
+  const btn = document.getElementById('profileMobileOtpVerifyBtn');
+  const code = String(input?.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 6-digit verification code.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/profile/mobile-change/verify', { method: 'POST', body: { new_mobile: newMobile, otp: code } });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Invalid OTP code.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    if (ownerProfile) ownerProfile.phone = newMobile;
+    const modal = document.getElementById('profileMobileOtpModal');
+    if (modal) modal.remove();
+    toast('Mobile number updated successfully.');
+    ownerProfileView();
+  } catch (err) {
+    console.error('Mobile change verify error:', err);
+    if (errEl) {
+      errEl.textContent = 'Error: ' + (err?.message || 'Verification failed.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Verify & Update Mobile';
+    }
+  }
+}
+
+// Global exports
+window.authApiRequest = authApiRequest;
+window.signupState = signupState;
+window.renderSignupFlow = renderSignupFlow;
+window.resetSignupState = resetSignupState;
+window.cancelSignupFlow = cancelSignupFlow;
+window.selectSignupAccountType = selectSignupAccountType;
+window.selectSignupGarageType = selectSignupGarageType;
+window.nextSignupStep = nextSignupStep;
+window.prevSignupStep = prevSignupStep;
+window.toggleSignupPasswordVisibility = toggleSignupPasswordVisibility;
+window.evaluatePasswordStrength = evaluatePasswordStrength;
+window.updateSignupPasswordMeter = updateSignupPasswordMeter;
+window.submitSignupCreds = submitSignupCreds;
+window.startEmailOtpCooldown = startEmailOtpCooldown;
+window.sendEmailOtp = sendEmailOtp;
+window.resendEmailOtp = resendEmailOtp;
+window.submitEmailOtp = submitEmailOtp;
+window.startMobileOtpCooldown = startMobileOtpCooldown;
+window.sendMobileOtp = sendMobileOtp;
+window.resendMobileOtp = resendMobileOtp;
+window.submitMobileOtp = submitMobileOtp;
+window.submitSignupProfile = submitSignupProfile;
+window.finishSignup = finishSignup;
+window.checkProfileGate = checkProfileGate;
+window.removeProfileGateOverlay = removeProfileGateOverlay;
+window.renderProfileGateBlocked = renderProfileGateBlocked;
+window.renderProfileGateMissing = renderProfileGateMissing;
+window.profileGateSignOut = profileGateSignOut;
+window.profileGateResumeVerification = profileGateResumeVerification;
+window.renderMobileChangeBlocked = renderMobileChangeBlocked;
+window.openMobileChangeOtpModal = openMobileChangeOtpModal;
+window.submitMobileChangeOtp = submitMobileChangeOtp;
+
 function updateAuthModeUI(){
  const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),authBtn=$('authBtn'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
  if(title)title.textContent=signup?'Create your account':'Vehicle Records';
@@ -729,6 +1891,20 @@ function updateAuthModeUI(){
  const loginTab=$('mobileLoginTab'),signupTab=$('mobileSignupTab');
  loginTab?.classList.toggle('is-active',!signup);
  signupTab?.classList.toggle('is-active',signup);
+
+ const authFormEl=$('authForm');
+ const authSignupFlowEl=$('authSignupFlow');
+ if(authFormEl&&authSignupFlowEl){
+   if(signup){
+     authFormEl.classList.add('hidden');
+     authSignupFlowEl.classList.remove('hidden');
+     renderSignupFlow();
+   }else{
+     authSignupFlowEl.classList.add('hidden');
+     authFormEl.classList.remove('hidden');
+     resetSignupState();
+   }
+ }
 }
 
 function bindMobileAuthTabs(){
@@ -1234,6 +2410,7 @@ document.addEventListener('click',event=>{
 });
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'){
+   if(document.getElementById('profileGateOverlay'))return;
    const authEl=$('auth');
    if(authEl&&!authEl.classList.contains('hidden')&&document.body.classList.contains('td-auth-open')){
      showPublicLanding();
@@ -1338,6 +2515,15 @@ async function start(u,force=false){
        await nav('dashboard');
      }
      document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
+     /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
+     const isCandidateAdmin = isPrimaryAdmin || isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role==='admin'||u.role==='super_admin'));
+     if(!isCandidateAdmin){
+       const gateOk = await checkProfileGate(u);
+       if(!gateOk){
+         hideAppLoading();
+         return;
+       }
+     }
      $('app').classList.remove('hidden');
      window.scrollTo({top:0,left:0,behavior:'auto'});
      let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
@@ -2975,6 +4161,21 @@ function ownerProfileView(){
         toast('Full Name is required.', 'error');
         return;
       }
+      const curP = ownerProfile || {}, curMeta = user?.user_metadata || {};
+      const currentPhone = normalizeMobile(curP.phone || curMeta.phone || '');
+      const newPhoneRaw = $('opPhone')?.value || '';
+      const newPhoneNorm = normalizeMobile(newPhoneRaw);
+
+      if (currentPhone && newPhoneNorm && newPhoneNorm !== currentPhone) {
+        // Mobile change requires fresh OTP
+        if (typeof backendAvailable === 'function' && !backendAvailable('profile_mobile_change')) {
+          renderMobileChangeBlocked();
+          return;
+        }
+        openMobileChangeOtpModal('+91' + newPhoneNorm);
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = 'SAVING...';
       try {

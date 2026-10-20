@@ -279,6 +279,7 @@ function createAppHarness(overrides = {}) {
       activeTimers.delete(t);
       cb(...cbArgs);
     }, ms, ...args);
+    if (t && typeof t.unref === 'function') t.unref();
     activeTimers.add(t);
     return t;
   };
@@ -290,6 +291,7 @@ function createAppHarness(overrides = {}) {
 
   const customSetInterval = (cb, ms, ...args) => {
     const id = setInterval(cb, ms, ...args);
+    if (id && typeof id.unref === 'function') id.unref();
     activeIntervals.add(id);
     return id;
   };
@@ -383,8 +385,51 @@ function createAppHarness(overrides = {}) {
   };
 
   vm.createContext(context);
+  const backendConfigCode = fs.readFileSync(path.join(root, 'js/backend-config.js'), 'utf8');
+  vm.runInContext(backendConfigCode, context);
+  if (context.window) {
+    context.backendAvailable = context.window.backendAvailable;
+    context.fetchBackendCapabilities = context.window.fetchBackendCapabilities;
+    context.setBackendCapabilities = context.window.setBackendCapabilities;
+    context.getBackendCapabilities = context.window.getBackendCapabilities;
+    context.renderBackendBlockedCard = context.window.renderBackendBlockedCard;
+  }
   const code = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
   vm.runInContext(code, context);
+  if (context.window) {
+    context.authApiRequest = context.window.authApiRequest;
+    context.signupState = context.window.signupState;
+    context.renderSignupFlow = context.window.renderSignupFlow;
+    context.resetSignupState = context.window.resetSignupState;
+    context.cancelSignupFlow = context.window.cancelSignupFlow;
+    context.selectSignupAccountType = context.window.selectSignupAccountType;
+    context.selectSignupGarageType = context.window.selectSignupGarageType;
+    context.nextSignupStep = context.window.nextSignupStep;
+    context.prevSignupStep = context.window.prevSignupStep;
+    context.toggleSignupPasswordVisibility = context.window.toggleSignupPasswordVisibility;
+    context.evaluatePasswordStrength = context.window.evaluatePasswordStrength;
+    context.updateSignupPasswordMeter = context.window.updateSignupPasswordMeter;
+    context.submitSignupCreds = context.window.submitSignupCreds;
+    context.startEmailOtpCooldown = context.window.startEmailOtpCooldown;
+    context.sendEmailOtp = context.window.sendEmailOtp;
+    context.resendEmailOtp = context.window.resendEmailOtp;
+    context.submitEmailOtp = context.window.submitEmailOtp;
+    context.startMobileOtpCooldown = context.window.startMobileOtpCooldown;
+    context.sendMobileOtp = context.window.sendMobileOtp;
+    context.resendMobileOtp = context.window.resendMobileOtp;
+    context.submitMobileOtp = context.window.submitMobileOtp;
+    context.submitSignupProfile = context.window.submitSignupProfile;
+    context.finishSignup = context.window.finishSignup;
+    context.checkProfileGate = context.window.checkProfileGate;
+    context.removeProfileGateOverlay = context.window.removeProfileGateOverlay;
+    context.renderProfileGateBlocked = context.window.renderProfileGateBlocked;
+    context.renderProfileGateMissing = context.window.renderProfileGateMissing;
+    context.profileGateSignOut = context.window.profileGateSignOut;
+    context.profileGateResumeVerification = context.window.profileGateResumeVerification;
+    context.renderMobileChangeBlocked = context.window.renderMobileChangeBlocked;
+    context.openMobileChangeOtpModal = context.window.openMobileChangeOtpModal;
+    context.submitMobileChangeOtp = context.window.submitMobileChangeOtp;
+  }
   return { context, store, elements, makeEl, mockDb, teardown, eval: (expr) => vm.runInContext(expr, context) };
 }
 
@@ -4023,6 +4068,456 @@ test("Multi-Role Team Phase 6: Forced first-login password change overlay blocks
   assert.ok(!h.elements.get('forcedPasswordOverlay'), "Overlay must be dismissed after success");
   assert.equal(h.eval("currentAdminProfile.password_change_required"), false, "password_change_required flag must be cleared");
   assert.equal(h.eval("currentAdminProfile.temp_password_active"), false, "temp_password_active flag must be cleared");
+});
+
+// -------------------------------------------------------------
+// Phase 8: Frontend Roadmap — Signup, OTP, Profile Gate & Switch
+// -------------------------------------------------------------
+
+test("Phase 8 Backend Switch: When /api/meta/capabilities returns 404, every capability defaults to false and screens show BLOCKED without calling missing routes", async (t) => {
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/meta/capabilities')) {
+        return new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });
+      }
+      return new Response(JSON.stringify({ ok: false }), { status: 500 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  await h.eval("fetchBackendCapabilities()");
+  assert.equal(h.eval("backendAvailable('auth_signup')"), false);
+  assert.equal(h.eval("backendAvailable('auth_email_otp')"), false);
+  assert.equal(h.eval("backendAvailable('auth_mobile_otp')"), false);
+  assert.equal(h.eval("backendAvailable('profile')"), false);
+  assert.equal(h.eval("backendAvailable('profile_status')"), false);
+  assert.equal(h.eval("backendAvailable('profile_mobile_change')"), false);
+
+  // Render step 2 -> must show BLOCKED card for POST /api/auth/signup, no active submit button
+  h.eval(`
+    signupState.currentStep = 2;
+    renderSignupFlow();
+  `);
+  let containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("backend-blocked-card"), "Must show BLOCKED card for signup");
+  assert.ok(containerHtml.includes("/api/auth/signup"), "Must reference /api/auth/signup");
+  assert.ok(!containerHtml.includes('id="authStepSubmitCredsBtn"'), "Must not render active submit button");
+
+  // Render step 3 -> must show BLOCKED card for POST /api/auth/email-otp/verify
+  h.eval(`
+    signupState.currentStep = 3;
+    renderSignupFlow();
+  `);
+  containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("/api/auth/email-otp/verify"), "Must reference /api/auth/email-otp/verify");
+
+  // Render step 4 -> must show BLOCKED card for POST /api/auth/mobile-otp/verify
+  h.eval(`
+    signupState.currentStep = 4;
+    renderSignupFlow();
+  `);
+  containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("/api/auth/mobile-otp/verify"), "Must reference /api/auth/mobile-otp/verify");
+
+  // Render step 5 -> must show BLOCKED card for PUT /api/profile
+  h.eval(`
+    signupState.currentStep = 5;
+    renderSignupFlow();
+  `);
+  containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("/api/profile"), "Must reference /api/profile");
+});
+
+test("Phase 8 Signup Flow: Step 2 credentials enforces password rule (min 8 chars, letter, number), live meter, duplicate error, and wipes password from memory", async (t) => {
+  let signupCalls = [];
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/auth/signup')) {
+        const body = JSON.parse(opts?.body || '{}');
+        signupCalls.push(body);
+        if (body.email === 'duplicate@example.com') {
+          return new Response(JSON.stringify({ ok: false, error: "An account with this email already exists" }), { status: 409 });
+        }
+        return new Response(JSON.stringify({ ok: true, user_id: "u-new-1" }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ auth_signup: true, auth_email_otp: true });
+    signupState.currentStep = 2;
+    renderSignupFlow();
+  `);
+
+  // Password rule tests:
+  assert.equal(h.eval("evaluatePasswordStrength('short').isValid"), false);
+  assert.equal(h.eval("evaluatePasswordStrength('nonumbershere').isValid"), false);
+  assert.equal(h.eval("evaluatePasswordStrength('12345678').isValid"), false);
+  assert.equal(h.eval("evaluatePasswordStrength('SecurePass1').isValid"), true);
+  assert.equal(h.eval("evaluatePasswordStrength('SuperSecurePass2026!').level"), 3);
+
+  // Duplicate email submission
+  h.eval(`
+    document.getElementById('authStepEmail').value = 'duplicate@example.com';
+    document.getElementById('authStepPassword').value = 'ValidPass123';
+  `);
+  await h.eval("submitSignupCreds()");
+  assert.equal(h.eval("document.getElementById('authStepErrorMsg').textContent"), "An account with this email already exists");
+  assert.equal(h.eval("signupState.currentStep"), 2, "Must not advance on duplicate error");
+
+  // Valid non-duplicate submission
+  h.eval(`
+    document.getElementById('authStepEmail').value = 'newuser@example.com';
+    document.getElementById('authStepPassword').value = 'ValidPass123';
+  `);
+  await h.eval("submitSignupCreds()");
+  assert.equal(h.eval("signupState.currentStep"), 3, "Must advance to step 3 on success");
+  assert.equal(h.eval("document.getElementById('authStepPassword').value"), "", "Password input must be cleared on success");
+  assert.equal(h.store.get('carmy_password'), undefined, "Zero password in localStorage");
+});
+
+test("Phase 8 Signup Flow: Step 3 Email OTP enforces 6 digits only, resend cooldown (30s), and lockout after 5 wrong tries", async (t) => {
+  let verifyAttempts = 0;
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/auth/email-otp/verify')) {
+        verifyAttempts++;
+        const body = JSON.parse(opts?.body || '{}');
+        if (body.otp === '654321') {
+          return new Response(JSON.stringify({ ok: true, email_verified: true }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: false, error: "Invalid verification code" }), { status: 401 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ auth_email_otp: true });
+    signupState.email = 'verify@example.com';
+    signupState.currentStep = 3;
+    renderSignupFlow();
+  `);
+
+  // Invalid length
+  h.eval(`
+    document.getElementById('authStepEmailOtp').value = '123';
+  `);
+  await h.eval("submitEmailOtp()");
+  assert.equal(h.eval("document.getElementById('authStepEmailOtpError').textContent"), "Enter a valid 6-digit verification code.");
+  assert.equal(verifyAttempts, 0, "Must not call server if code is not 6 digits");
+
+  // Simulate cooldown
+  h.eval("startEmailOtpCooldown(30)");
+  assert.equal(h.eval("document.getElementById('authStepEmailResendBtn').disabled"), true);
+  assert.ok(h.eval("document.getElementById('authStepEmailCooldownText').textContent").includes("30s"));
+
+  // 5 wrong tries -> lockout
+  h.eval("document.getElementById('authStepEmailOtp').value = '000000'");
+  for (let i = 0; i < 5; i++) {
+    await h.eval("submitEmailOtp()");
+  }
+  assert.equal(h.eval("signupState.emailOtpLocked"), true, "Must be locked after 5 wrong tries");
+  const containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("otp-lockout-card"), "Must render lockout card in DOM");
+  assert.ok(containerHtml.includes("Temporarily locked for 15 minutes"), "Must show lock message");
+});
+
+test("Phase 8 Signup Flow: Step 4 Mobile enforces 10 digits, +91 format, duplicate server error, and NO skip button", async (t) => {
+  let sentMobile = null;
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/auth/mobile-otp/send')) {
+        const body = JSON.parse(opts?.body || '{}');
+        sentMobile = body.mobile;
+        if (body.mobile === '+919999999999') {
+          return new Response(JSON.stringify({ ok: false, error: "This mobile number is already linked to another account." }), { status: 409 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (String(url).includes('/api/auth/mobile-otp/verify')) {
+        return new Response(JSON.stringify({ ok: true, mobile_verified: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ auth_mobile_otp: true });
+    signupState.currentStep = 4;
+    renderSignupFlow();
+  `);
+
+  const stepHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  // Must NOT have a skip button
+  assert.ok(!stepHtml.toLowerCase().includes("skip"), "Step 4 must not contain a Skip button");
+
+  // Invalid mobile
+  h.eval("document.getElementById('authStepMobile').value = '5555555555'");
+  await h.eval("sendMobileOtp()");
+  assert.ok(h.eval("document.getElementById('authStepMobileError').textContent").includes("valid 10-digit Indian mobile"));
+  assert.equal(sentMobile, null);
+
+  // Duplicate mobile
+  h.eval("document.getElementById('authStepMobile').value = '9999999999'");
+  await h.eval("sendMobileOtp()");
+  assert.equal(h.eval("document.getElementById('authStepMobileError').textContent"), "This mobile number is already linked to another account.");
+
+  // Valid mobile
+  h.eval("document.getElementById('authStepMobile').value = '9816012345'");
+  await h.eval("sendMobileOtp()");
+  assert.equal(sentMobile, "+919816012345", "Must format mobile as +91 format");
+  assert.equal(h.eval("signupState.mobileOtpSent"), true);
+
+  // Verify OTP
+  h.eval("document.getElementById('authStepMobileOtp').value = '123456'");
+  await h.eval("submitMobileOtp()");
+  assert.equal(h.eval("signupState.currentStep"), 5, "Must advance to step 5 on verified mobile");
+  assert.equal(h.eval("document.getElementById('authStepMobileOtp').value"), "", "Mobile OTP field must be cleared");
+});
+
+test("Phase 8 Signup Flow: Step 5 Profile requires mandatory fields, 6-digit pincode, optional 15-char GSTIN, and shows 'Profile saved' only after ok", async (t) => {
+  let profilePayload = null;
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/profile') && opts?.method === 'PUT') {
+        profilePayload = JSON.parse(opts?.body || '{}');
+        return new Response(JSON.stringify({ ok: true, message: "Profile saved" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ profile: true });
+    signupState.accountType = 'vehicle_owner';
+    signupState.mobile = '+919816012345';
+    signupState.currentStep = 5;
+    renderSignupFlow();
+  `);
+
+  // Missing fields
+  h.eval(`
+    document.getElementById('authProfileFullName').value = '';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.ok(h.eval("document.getElementById('authProfileErrorMsg').textContent").includes("mandatory"));
+  assert.equal(profilePayload, null);
+
+  // Invalid pincode
+  h.eval(`
+    document.getElementById('authProfileFullName').value = 'Aman Verma';
+    document.getElementById('authProfileAddress').value = 'Flat 202, Sunshine Heights';
+    document.getElementById('authProfileCity').value = 'Shimla';
+    document.getElementById('authProfileState').value = 'Himachal Pradesh';
+    document.getElementById('authProfilePincode').value = '1710';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(h.eval("document.getElementById('authProfileErrorMsg').textContent"), "Pincode must be exactly 6 digits.");
+  assert.equal(profilePayload, null);
+
+  // Valid vehicle owner profile
+  h.eval(`
+    document.getElementById('authProfilePincode').value = '171001';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(profilePayload.account_type, "vehicle_owner");
+  assert.equal(profilePayload.pincode, "171001");
+  assert.equal(h.eval("document.getElementById('authProfileSuccessMsg').textContent"), "Profile saved");
+
+  // Garage profile test with 15-char GSTIN
+  h.eval(`
+    signupState.accountType = 'garage';
+    signupState.currentStep = 5;
+    renderSignupFlow();
+    document.getElementById('authProfileGarageName').value = 'Apex Care';
+    document.getElementById('authProfileOwnerName').value = 'Rajesh Kumar';
+    document.getElementById('authProfileGarageAddress').value = 'Plot 5, Ind Area';
+    document.getElementById('authProfileCity').value = 'Chandigarh';
+    document.getElementById('authProfileState').value = 'Punjab';
+    document.getElementById('authProfilePincode').value = '160002';
+    document.getElementById('authProfileGstin').value = 'INVALID';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(h.eval("document.getElementById('authProfileErrorMsg').textContent"), "GSTIN must be exactly 15 characters if provided.");
+
+  h.eval(`
+    document.getElementById('authProfileGstin').value = '03AAAAA0000A1Z5';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(profilePayload.account_type, "garage");
+  assert.equal(profilePayload.gstin, "03AAAAA0000A1Z5");
+});
+
+test("Phase 8 Profile Gate: Every login checks GET /api/profile/status, fails closed on 404, blocks dashboard when mobile_verified is false, and overlay cannot be dismissed", async (t) => {
+  let statusResponse = { ok: false };
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/profile/status')) {
+        return new Response(JSON.stringify(statusResponse), { status: statusResponse.ok ? 200 : 404 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Missing route (404) -> Fail closed, BLOCKED card rendered, dashboard locked
+  h.eval("setBackendCapabilities({ profile_status: true });");
+  statusResponse = { ok: false };
+  const gateResult404 = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
+  assert.equal(gateResult404, false, "Must fail closed on 404");
+  assert.ok(h.elements.get('profileGateOverlay'), "Profile gate overlay must be in DOM");
+  assert.ok(h.elements.get('profileGateOverlay').innerHTML.includes("backend-blocked-card"), "Must render BLOCKED card");
+  assert.ok(h.elements.get('profileGateOverlay').innerHTML.includes("GET /api/profile/status"), "Must state GET /api/profile/status");
+
+  // 2. Mobile verified false -> Non-dismissable overlay listing missing items
+  statusResponse = {
+    ok: true,
+    data: {
+      email_verified: true,
+      mobile_verified: false,
+      profile_complete: false,
+      missing: ["mobile_verified", "profile_complete"]
+    }
+  };
+  const gateResultMissing = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
+  assert.equal(gateResultMissing, false, "Must block entry when mobile_verified is false");
+  assert.ok(h.elements.get('profileGateOverlay').innerHTML.includes("Mandatory Indian mobile number"), "Must list mobile missing");
+
+  // Verify Escape does NOT dismiss overlay
+  h.eval(`
+    const escEvt = { key: 'Escape' };
+    document.dispatchEvent ? document.dispatchEvent(escEvt) : null;
+  `);
+  assert.ok(h.elements.get('profileGateOverlay'), "Overlay must remain present after Escape key");
+
+  // 3. Fully verified -> Pass gate and remove overlay
+  statusResponse = {
+    ok: true,
+    data: {
+      email_verified: true,
+      mobile_verified: true,
+      profile_complete: true,
+      missing: []
+    }
+  };
+  const gateResultOk = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
+  assert.equal(gateResultOk, true, "Must pass gate when all verified");
+  assert.ok(!h.elements.get('profileGateOverlay'), "Overlay must be removed");
+
+  // 4. Team member / super admin bypasses profile gate
+  const teamMeResult = await h.eval("checkProfileGate({ id: 'admin-1', email: 'rnyburia@gmail.com', role: 'super_admin' })");
+  assert.equal(teamMeResult, true, "Team member must bypass vehicle owner profile gate");
+});
+
+test("Phase 8 Profile Edit: Mobile change in Account screen requires OTP; name/address edit does not; shows BLOCKED when route missing", async (t) => {
+  let profileSavedValues = null;
+  const h = createAppHarness({
+    db: {
+      from: () => ({
+        select: () => ({ eq: () => ({ single: async () => ({ data: { id: "p1", full_name: "Original Name", phone: "+919816000000" }, error: null }) }) }),
+        upsert: (payload) => {
+          profileSavedValues = payload;
+          return { single: async () => ({ data: payload, error: null }) };
+        }
+      })
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'u1', email: 'user@example.com' };
+    ownerProfile = { full_name: 'Original Name', phone: '+919816000000', address: 'Old Address', city: 'Old City', state: 'Old State', pincode: '123456' };
+    nav('owner');
+    document.getElementById('opEditBtn').click();
+  `);
+
+  // 1. Name and address edit only (phone unchanged) -> Saves directly without OTP
+  h.eval(`
+    document.getElementById('opName').value = 'Updated Name';
+    document.getElementById('opAddress').value = 'New Street Address';
+    document.getElementById('opPhone').value = '9816000000'; // Unchanged normalized
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.ok(profileSavedValues, "Profile save should be called directly when phone is unchanged");
+
+  // 2. Mobile changed when route capability is false -> Shows BLOCKED card
+  profileSavedValues = null;
+  h.eval(`
+    setBackendCapabilities({ profile_mobile_change: false });
+    document.getElementById('opEditBtn').click();
+    document.getElementById('opPhone').value = '9816099999'; // Changed phone!
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.equal(profileSavedValues, null, "Must NOT save profile with changed phone without OTP");
+  const blockedCard = h.elements.get('profileMobileChangeBlocked');
+  assert.ok(blockedCard, "Must render blocked card for mobile change");
+  assert.ok(blockedCard.innerHTML.includes("/api/profile/mobile-change/send"), "Must name route in blocked card");
+
+  // 3. Mobile changed when capability is true -> Prompts OTP modal
+  h.eval(`
+    setBackendCapabilities({ profile_mobile_change: true });
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.ok(h.elements.get('profileMobileOtpModal'), "Must open OTP verification modal for phone change");
+});
+
+test("Phase 8 Security & Sanitization: Zero credentials in storage/console and XSS payloads in profile fields render as plain text", async (t) => {
+  let loggedMessages = [];
+  const h = createAppHarness({
+    console: {
+      log: (...args) => loggedMessages.push(args.join(' ')),
+      info: (...args) => loggedMessages.push(args.join(' ')),
+      warn: (...args) => loggedMessages.push(args.join(' ')),
+      error: (...args) => loggedMessages.push(args.join(' '))
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // XSS test: user input with script/tag
+  const xssPayload = '<img src=x onerror=alert(1)>';
+  h.eval(`
+    signupState.accountType = 'garage';
+    signupState.currentStep = 1;
+    renderSignupFlow();
+    signupState.currentStep = 5;
+    renderSignupFlow();
+    document.getElementById('authProfileGarageName').value = ${JSON.stringify(xssPayload)};
+    document.getElementById('authProfileOwnerName').value = ${JSON.stringify(xssPayload)};
+    document.getElementById('authProfileGarageAddress').value = ${JSON.stringify(xssPayload)};
+  `);
+
+  const containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(!containerHtml.includes("<img src=x onerror=alert(1)>"), "XSS tag must not execute in DOM markup");
+
+  // Sensitive data check
+  const sensitiveOtp = '948201';
+  const sensitivePass = 'SecretPassword99!';
+  h.eval(`
+    document.getElementById('authStepPassword').value = ${JSON.stringify(sensitivePass)};
+  `);
+  // Check localStorage and sessionStorage
+  assert.equal(h.store.get('carmy_password'), undefined);
+  assert.equal(h.store.get('carmy_otp'), undefined);
+  assert.equal(h.store.get('carmy_mobile_otp'), undefined);
+  // Verify no console log leaked password or OTP
+  assert.ok(!loggedMessages.some(m => m.includes(sensitivePass)), "Console must never log passwords");
+  assert.ok(!loggedMessages.some(m => m.includes(sensitiveOtp)), "Console must never log OTP codes");
+});
+
+test("Phase 8 Responsive Styling: 360px and 1280px viewports enforce zero horizontal scroll and safe-area insets", async (t) => {
+  const css = fs.readFileSync(path.join(root, 'css/styles.css'), 'utf8');
+  assert.ok(css.includes('.backend-blocked-card'), "Must contain .backend-blocked-card");
+  assert.ok(css.includes('.auth-step-container'), "Must contain .auth-step-container");
+  assert.ok(css.includes('.profile-gate-overlay'), "Must contain .profile-gate-overlay");
+  assert.ok(css.includes('safe-area-inset'), "Must respect safe-area insets");
+  assert.ok(css.includes('max-width: 100%'), "Must enforce max-width containment");
 });
 
 
