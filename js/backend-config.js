@@ -39,7 +39,6 @@
   const backendCapabilities = Object.assign({}, DEFAULT_CAPABILITIES);
   let capabilitiesLoaded = false;
   let capabilitiesLoading = false;
-  let manualOverride = false;
 
   /**
    * Check if a specific backend capability is available.
@@ -57,7 +56,7 @@
    * If route is missing (404) or fails, every capability is treated as false.
    */
   async function fetchBackendCapabilities(force = false) {
-    if (manualOverride && !force) return backendCapabilities;
+    if (capabilitiesLoaded && !force) return backendCapabilities;
     if (capabilitiesLoading) return backendCapabilities;
     capabilitiesLoading = true;
     try {
@@ -73,7 +72,6 @@
       });
 
       if (!res.ok) {
-        if (manualOverride && !force) return backendCapabilities;
         // 404 or any non-2xx status: fail safe, all capabilities false
         Object.keys(backendCapabilities).forEach(function (k) {
           backendCapabilities[k] = false;
@@ -83,7 +81,6 @@
       }
 
       const json = await res.json();
-      if (manualOverride && !force) return backendCapabilities;
       const data = (json && (json.data || json.capabilities)) || json;
       if (data && typeof data === 'object') {
         Object.keys(DEFAULT_CAPABILITIES).forEach(function (key) {
@@ -96,7 +93,6 @@
       }
       capabilitiesLoaded = true;
     } catch (err) {
-      if (manualOverride && !force) return backendCapabilities;
       // Network error, route missing, etc: treat every capability as false
       Object.keys(backendCapabilities).forEach(function (k) {
         backendCapabilities[k] = false;
@@ -108,20 +104,6 @@
     return backendCapabilities;
   }
 
-  /**
-   * Set capabilities programmatically (useful for testing and deterministic state assertions)
-   * @param {Object} caps
-   */
-  function setBackendCapabilities(caps) {
-    manualOverride = true;
-    if (!caps || typeof caps !== 'object') return;
-    Object.keys(DEFAULT_CAPABILITIES).forEach(function (key) {
-      if (key in caps) {
-        backendCapabilities[key] = Boolean(caps[key]);
-      }
-    });
-    capabilitiesLoaded = true;
-  }
 
   /**
    * Get a clone of the current capabilities map
@@ -153,7 +135,6 @@
     t.backendAvailable = backendAvailable;
     t.fetchBackendCapabilities = fetchBackendCapabilities;
     t.initBackendCapabilities = fetchBackendCapabilities;
-    t.setBackendCapabilities = setBackendCapabilities;
     t.getBackendCapabilities = getBackendCapabilities;
     t.renderBackendBlockedCard = renderBackendBlockedCard;
   });
@@ -177,7 +158,6 @@
       DEFAULT_CAPABILITIES,
       backendAvailable,
       fetchBackendCapabilities,
-      setBackendCapabilities,
       getBackendCapabilities,
       renderBackendBlockedCard
     };

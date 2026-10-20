@@ -105,11 +105,11 @@ async function checkSuperAdminStatus(force=false){
   if(adminCheckPromise&&!force)return adminCheckPromise;
   adminCheckPromise=(async()=>{
     try{
-      const res=await workerGet('/api/admin/support-tickets?limit=1');
-      if(res&&res.ok&&Array.isArray(res.data)){
+      if(user?.role==='super_admin'||user?.role==='admin'){
         isSuperAdmin=true;
       }else{
-        isSuperAdmin=false;
+        const prof=await loadTeamMe(force);
+        isSuperAdmin=Boolean(currentAdminRole==='super_admin'||prof?.role==='super_admin');
       }
     }catch(err){
       isSuperAdmin=false;
@@ -1619,8 +1619,7 @@ function finishSignup() {
 
 /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
 async function checkProfileGate(u) {
-  const primaryAdminEmail = 'rnyburia@gmail.com';
-  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || String(u.email || '').trim().toLowerCase() === primaryAdminEmail));
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'support_lead' || u.role === 'billing_admin' || u.role === 'auditor'));
   if (isCandidateAdmin) return true;
 
   if (typeof backendAvailable === 'function' && !backendAvailable('profile_status')) {
@@ -2114,8 +2113,7 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
- const primaryAdminEmail='rnyburia@gmail.com';
- const isPrimaryAdmin=String(user?.email||'').trim().toLowerCase()===primaryAdminEmail;
+ const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'support_lead' || user.role === 'billing_admin' || user.role === 'auditor')));
  document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(v==='admin'&&!isPrimaryAdmin){
@@ -2489,9 +2487,9 @@ async function start(u,force=false){
      await loadData();
      setAppLoadingProgress(70);
      updateIdentityUI();
-     const primaryAdminEmail='rnyburia@gmail.com';
-     const isPrimaryAdmin=String(u.email||'').trim().toLowerCase()===primaryAdminEmail;
      try{await checkSuperAdminStatus();}catch(_){}
+     try{await loadTeamMe();}catch(_){}
+     const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'support_lead' || u.role === 'billing_admin' || u.role === 'auditor')));
      setAppLoadingStatus('Preparing your garage...','Rendering your dashboard');
      setAppLoadingProgress(90);
      // The designated admin lands directly in the console. The Worker still
@@ -8044,7 +8042,7 @@ async function loadAdminTickets(force=false){
     if(err?.status===403||err?.code==='FORBIDDEN'){
       isSuperAdmin=false;
       updateAdminNavVisibility();
-      adminTicketsError='The admin console opened, but the API rejected this account (403). Confirm the deployed Worker is using the active Super Admin registry entry for rnyburia@gmail.com.';
+      adminTicketsError='The admin console opened, but the API rejected this account (403). Confirm the deployed Worker is using the active Super Admin registry entry for this account.';
     }else{
       adminTicketsError=err?.message||'Failed to retrieve tickets.';
     }
@@ -9284,8 +9282,7 @@ function saveFestivalBanner(){
 }
 
 async function adminView(){
-  const primaryAdminEmail='rnyburia@gmail.com';
-  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (user && (user.role==='admin'||user.role==='super_admin'||String(user.email||'').trim().toLowerCase()===primaryAdminEmail));
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (user && (user.role==='admin'||user.role==='super_admin'||user.role==='support_lead'||user.role==='billing_admin'||user.role==='auditor'));
   if(!isCandidateAdmin){
     nav('dashboard');
     return;

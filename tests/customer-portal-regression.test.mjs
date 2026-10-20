@@ -377,15 +377,60 @@ function createAppHarness(overrides = {}) {
     performance: { now: () => Date.now() },
     atob: globalThis.atob || ((s) => Buffer.from(s, 'base64').toString('binary')),
     btoa: globalThis.btoa || ((s) => Buffer.from(s, 'binary').toString('base64')),
-    Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console,
+    Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console, Response: globalThis.Response,
     confirm: overrides.confirm || (() => true),
     prompt: overrides.prompt || ((msg, def) => def !== undefined ? def : ''),
-    fetch: overrides.fetch || (async () => new Response(JSON.stringify({ ok: true, data: [] }))),
+    fetch: overrides.fetch || (async (url) => {
+      const u = String(url || '');
+      if (u.includes('/api/meta/capabilities')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: {
+            auth_signup: true,
+            auth_email_otp: true,
+            auth_mobile_otp: true,
+            profile: true,
+            profile_status: true,
+            profile_mobile_change: true,
+            garage_types: true
+          }
+        }), { status: 200 });
+      }
+      if (u.includes('/api/profile/status')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: {
+            email_verified: true,
+            mobile_verified: true,
+            profile_complete: true,
+            missing: []
+          }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }),
     ...overrides
   };
 
   vm.createContext(context);
-  const backendConfigCode = fs.readFileSync(path.join(root, 'js/backend-config.js'), 'utf8');
+  const rawBackendCode = fs.readFileSync(path.join(root, 'js/backend-config.js'), 'utf8');
+  const defaultCaps = overrides.defaultCapabilities !== false;
+  // Test harness provides test-only capability setter without exposing it in production js/
+  const backendConfigCode = rawBackendCode.replace('t.getBackendCapabilities = getBackendCapabilities;', `t.getBackendCapabilities = getBackendCapabilities;
+    t.setBackendCapabilities = function(caps) {
+      if (!caps || typeof caps !== 'object') return;
+      Object.keys(DEFAULT_CAPABILITIES).forEach(function(key) {
+        if (key in caps) {
+          backendCapabilities[key] = Boolean(caps[key]);
+        }
+      });
+      capabilitiesLoaded = true;
+    };
+    if (${defaultCaps}) {
+      Object.keys(DEFAULT_CAPABILITIES).forEach(function(key) {
+        backendCapabilities[key] = true;
+      });
+    }`);
   vm.runInContext(backendConfigCode, context);
   if (context.window) {
     context.backendAvailable = context.window.backendAvailable;
@@ -908,6 +953,9 @@ test("Client Production: worker heartbeat failure falls back gracefully and perm
   let touchRpcCalled = false;
   const h = createAppHarness({
     fetch: async (url) => {
+      if (String(url).includes("/api/profile/status")) {
+        return new Response(JSON.stringify({ ok: true, data: { email_verified: true, mobile_verified: true, profile_complete: true } }));
+      }
       if (String(url).includes("/api/session/heartbeat")) {
         return new Response(JSON.stringify({ ok: false, error: { code: "INTERNAL_ERROR", message: "Internal server error." } }), { status: 500 });
       }
@@ -979,10 +1027,15 @@ test("Client Production: successful vehicle loading populates memory, selections
 
 test("Client Production: loading-state completion keeps shell hidden until target view is rendered", async (t) => {
   const h = createAppHarness({
-    fetch: async () => new Response(JSON.stringify({
-      ok: true,
-      data: [{ id: "car-order-test", registration_no: "CH01BT6268" }]
-    }))
+    fetch: async (url) => {
+      if (String(url).includes("/api/profile/status")) {
+        return new Response(JSON.stringify({ ok: true, data: { email_verified: true, mobile_verified: true, profile_complete: true } }));
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        data: [{ id: "car-order-test", registration_no: "CH01BT6268" }]
+      }));
+    }
   });
   if (t?.after) t.after(() => h.teardown());
 
@@ -2444,7 +2497,7 @@ test("Super Admin Integration: designated account opens the admin console withou
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async (path) => {
       if (path.startsWith('/api/admin/support-tickets')) {
         return { ok: true, data: [{ id: 'TD-TEST-1', subject: 'Test Ticket', status: 'open' }] };
@@ -2497,7 +2550,7 @@ test("Super Admin Integration: API authorization stays server-enforced when admi
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async (path) => {
       if (path.includes('/api/admin/support-tickets')) {
         const err = new Error('Super Admin access required.');
@@ -2519,7 +2572,7 @@ test("Super Admin Workspace: Dedicated shell isolates admin from customer naviga
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2544,7 +2597,7 @@ test("Super Admin Workspace: Multi-screen navigation switches across all 12 admi
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2578,7 +2631,7 @@ test("Super Admin Workspace: Mobile navigation renders exactly 5 tabs and slide-
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2605,7 +2658,7 @@ test("Super Admin Workspace: Support ticket 500/503 failure renders actionable d
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async (path) => {
       if (path.includes('/api/admin/support-tickets')) {
         const err = new Error('503 D1 table support_tickets does not exist');
@@ -2633,7 +2686,7 @@ test("Super Admin Workspace: Token generator creates one-time reveal modal and c
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2652,7 +2705,7 @@ test("Phase 1 Admin Shell: Account & Security screen displays read-only profile,
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com', user_metadata: { name: 'Lead Admin' } };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin', user_metadata: { name: 'Lead Admin' } };
     currentAdminRole = 'super_admin';
     workerGet = async () => ({ ok: true, data: [] });
   `);
@@ -2665,7 +2718,7 @@ test("Phase 1 Admin Shell: Account & Security screen displays read-only profile,
   const role = h.eval("document.getElementById('adminProfileRoleBadge').textContent");
 
   assert.equal(name, "Lead Admin");
-  assert.equal(email, "rnyburia@gmail.com");
+  assert.equal(email, "admin@carmy.internal");
   assert.equal(role, "Super Admin");
 
   const html = h.elements.get("adminContent").innerHTML;
@@ -2678,7 +2731,7 @@ test("Phase 1 Admin Shell: Password change reports error on failure and success 
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     toasts = [];
     toast = (msg, type) => { toasts.push({ msg, type }); };
     workerGet = async () => ({ ok: true, data: [] });
@@ -2728,7 +2781,7 @@ test("Phase 1 Admin Shell: adminSignOut wipes admin storage and removes admin mo
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     localStorage.setItem('carmy_admin_test', '123');
     sessionStorage.setItem('td-admin-state', 'abc');
     document.body.classList.add('td-admin-mode');
@@ -2956,7 +3009,7 @@ test("Support Ticket Workflow: Admin SLA breach badge displays for pending ticke
   const recentDate = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTickets = [
       { id: 'TD-BREACH-1', email: 'user1@test.com', subject: 'Overdue ticket', status: 'pending', priority: 'high', created_at: '${oldDate}' },
       { id: 'TD-NORMAL-2', email: 'user2@test.com', subject: 'Fresh ticket', status: 'pending', priority: 'normal', created_at: '${recentDate}' }
@@ -2982,7 +3035,7 @@ test("Support Ticket Workflow: Admin filters by status, assignee, priority, and 
   const recentDate = new Date().toISOString();
 
   h.eval(`
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTickets = [
       { id: 'T-1', email: 'u1@test.com', subject: 'One', status: 'pending', priority: 'urgent', assignee_id: null, created_at: '${oldDate}' },
       { id: 'T-2', email: 'u2@test.com', subject: 'Two', status: 'working', priority: 'high', assignee_id: 'admin-1', created_at: '${recentDate}' },
@@ -3022,7 +3075,7 @@ test("Support Ticket Workflow: Admin detail modal enforces permitted transitions
 
   h.eval(`
     writeIdleActivity(true);
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTickets = [{
       id: 'TD-TRANS-1',
       email: 'customer@test.com',
@@ -3063,7 +3116,7 @@ test("Support Ticket Workflow: View-as-user requires min 10 char reason, renders
 
   h.eval(`
     writeIdleActivity(true);
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTickets = [{
       id: 'TD-VAU-1',
       email: 'customer@test.com',
@@ -3126,7 +3179,7 @@ test("Support Ticket Workflow: View-as-user marks BLOCKED and disables button wh
 
   h.eval(`
     writeIdleActivity(true);
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTickets = [{
       id: 'TD-VAU-404',
       email: 'customer@test.com',
@@ -3162,7 +3215,7 @@ test("Support Ticket Workflow: Unified Enable Chat action includes optional mess
 
   h.eval(`
     writeIdleActivity(true);
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTickets = [{
       id: 'TD-CHAT-1',
       email: 'customer@test.com',
@@ -3211,7 +3264,7 @@ test("Super Admin Phase 2: User management drawer displays user data with textCo
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     currentAdminRole = 'super_admin';
     adminUsersList = [{
       id: 'usr-456',
@@ -3262,7 +3315,7 @@ test("Super Admin Phase 2: Promotional coupons can be created via POST /api/admi
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     currentAdminRole = 'super_admin';
     globalThis.__lastPostCall = null;
     globalThis.__lastDeleteCall = null;
@@ -3303,7 +3356,7 @@ test("Super Admin Phase 2: CSV exports call workerDownloadCsv on real endpoints"
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     currentAdminRole = 'super_admin';
     globalThis.__downloadCalls = [];
     workerDownloadCsv = async (path, filename) => {
@@ -3327,7 +3380,7 @@ test("Super Admin Phase 2: Missing or 404 admin endpoints render .admin-blocked-
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     currentAdminRole = 'super_admin';
     adminOverviewError = { message: 'Route /api/admin/overview returned 404' };
     adminUsersError = { message: 'Route /api/admin/users returned 404' };
@@ -3517,7 +3570,7 @@ test("Administrative TPIN Phase 4: Account card displays status and handles 404 
 
   // 1. Error state renders blocked card
   h.eval(`
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTpinError = { message: 'Route /api/tpin/status returned 404', status: 404 };
     adminTpinStatus = null;
   `);
@@ -3551,7 +3604,7 @@ test("Administrative TPIN Phase 4: Setup modal enforces 4 digits, disallows triv
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     globalThis.__lastPostCall = null;
     workerPost = async (path, body) => {
       globalThis.__lastPostCall = { path, body };
@@ -3600,7 +3653,7 @@ test("Administrative TPIN Phase 4: Change modal calls POST /api/tpin/change and 
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTpinStatus = { is_set: true };
     globalThis.__lastPostCall = null;
     workerPost = async (path, body) => {
@@ -3678,7 +3731,7 @@ test("Administrative TPIN Phase 4: Protected actions prompt TPIN verification mo
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-1', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
     adminTpinStatus = { is_set: true };
     globalThis.__actionExecuted = false;
     globalThis.__lastPostCall = null;
@@ -4408,10 +4461,10 @@ test("Phase 8 Profile Gate: Every login checks GET /api/profile/status, fails cl
   };
   const gateResultOk = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
   assert.equal(gateResultOk, true, "Must pass gate when all verified");
-  assert.ok(!h.elements.get('profileGateOverlay'), "Overlay must be removed");
+  assert.equal(h.eval("document.getElementById('profileGateOverlay')"), null, "Overlay must be removed");
 
   // 4. Team member / super admin bypasses profile gate
-  const teamMeResult = await h.eval("checkProfileGate({ id: 'admin-1', email: 'rnyburia@gmail.com', role: 'super_admin' })");
+  const teamMeResult = await h.eval("checkProfileGate({ id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' })");
   assert.equal(teamMeResult, true, "Team member must bypass vehicle owner profile gate");
 });
 
