@@ -1,4 +1,4 @@
-import { requireUser, handleAuthError } from "./auth.js";
+import { requireUser, handleAuthError, getCallerRole } from "./auth.js";
 import { requireSuperAdmin, recordSuperAdminAudit, canManageTickets } from "./super-admin.js";
 import { adminTeamApi, viewTicketAsUser } from "./admin-team.js";
 import { createWorkshopOnboarding } from "./workshop-onboarding.js";
@@ -111,6 +111,26 @@ export default {
 
       const ok = Object.values(checks).every((v) => v === "ok");
       return json({ ok, service: "carmy-api" }, ok ? 200 : 503, origin);
+    }
+
+    
+    if (url.pathname === "/api/meta/capabilities" || url.pathname === "/api/meta/capabilities/") {
+      if (request.method !== "GET") {
+        return error("Method not allowed.", 405, origin, "METHOD_NOT_ALLOWED");
+      }
+      return json({
+        ok: true,
+        data: {
+          auth_signup: true,
+          auth_email_otp: true,
+          auth_mobile_otp: false,
+          profile: true,
+          profile_status: true,
+          profile_mobile_change: false,
+          garage_types: false,
+          team_routes: true,
+        },
+      }, 200, origin);
     }
 
     if (url.pathname === "/api/workshop-onboarding" && request.method === "POST") {

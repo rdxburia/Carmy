@@ -147,3 +147,120 @@ export function handleAuthError(err, origin) {
   }
   return null;
 }
+
+/**
+ * Approved system roles (5 levels).
+ * Server-authoritative: UI-ONLY roles do not exist here.
+ */
+export const APPROVED_ROLES = Object.freeze([
+  "super_admin",
+  "team_lead",
+  "support_agent",
+  "support_executive",
+  "vehicle_owner",
+]);
+
+/**
+ * Resolves the server-authoritative caller role for a given user ID.
+ * Queries super_admins (via Supabase REST, D1, or env.SUPER_ADMIN_EMAILS)
+ * and active team_members (via D1).
+ *
+ * Returns strictly one of the 5 approved roles:
+ * - 'super_admin'
+ * - 'team_lead'
+ * - 'support_agent'
+ * - 'support_executive'
+ * - 'vehicle_owner' (default for unrostered or unapproved roles)
+ *
+ * Unapproved role strings in team_members safely fall back to 'vehicle_owner'.
+ * Note: 'support' from migration 0008 maps to 'support_agent'.
+ */
+export async function getCallerRole(userId, env = {}) {
+  if (!userId || typeof userId !== "string") {
+    return "vehicle_owner";
+  }
+  const cleanId = userId.trim();
+  if (!cleanId) {
+    return "vehicle_owner";
+  }
+
+  // 1. Check environment super admin emails/IDs if configured
+  if (env?.SUPER_ADMIN_EMAILS) {
+    const list = String(env.SUPER_ADMIN_EMAILS)
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (list.includes(cleanId.toLowerCase())) {
+      return "super_admin";
+    }
+  }
+
+  // 2. Check Supabase super_admins table
+  if (env?.SUPABASE_URL && env?.SUPABASE_SECRET_KEY) {
+    try {
+      const url = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
+      url.searchParams.set("user_id", `eq.${cleanId}`);
+      url.searchParams.set("active", "eq.true");
+      url.searchParams.set("select", "user_id");
+      url.searchParams.set("limit", "1");
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          apikey: env.SUPABASE_SECRET_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
+        },
+      });
+
+      if (response.ok) {
+        const rows = await response.json();
+        if (Array.isArray(rows) && rows.some((row) => row?.user_id === cleanId)) {
+          return "super_admin";
+        }
+      }
+    } catch (err) {
+      console.error("getCallerRole: super_admins lookup failed", err?.message || err);
+    }
+  }
+
+  // 3. Check D1 super_admins table if present
+  if (env?.DB?.prepare) {
+    try {
+      const saRow = await env.DB.prepare(
+        "SELECT user_id FROM super_admins WHERE user_id = ? AND active = 1 LIMIT 1"
+      ).bind(cleanId).first();
+      if (saRow?.user_id === cleanId) {
+        return "super_admin";
+      }
+    } catch {
+      // D1 may not have super_admins table; safe to continue
+    }
+  }
+
+  // 4. Check D1 team_members table
+  if (env?.DB?.prepare) {
+    try {
+      const member = await env.DB.prepare(
+        "SELECT role, active FROM team_members WHERE user_id = ? LIMIT 1"
+      ).bind(cleanId).first();
+
+      if (member && (member.active === 1 || member.active === true || member.active === "1")) {
+        const rawRole = String(member.role || "").trim().toLowerCase();
+        if (rawRole === "super_admin") return "super_admin";
+        if (rawRole === "team_lead") return "team_lead";
+        if (rawRole === "support_agent") return "support_agent";
+        if (rawRole === "support_executive") return "support_executive";
+        // Backward compatibility: migration 0008 schema used 'support'
+        if (rawRole === "support") return "support_agent";
+
+        // Any unapproved role string (e.g. 'sales', 'finance', 'viewer', 'billing_admin', 'auditor')
+        // safely falls back to 'vehicle_owner'
+        return "vehicle_owner";
+      }
+    } catch (err) {
+      console.error("getCallerRole: team_members lookup failed", err?.message || err);
+    }
+  }
+
+  // Default: unrostered caller is a vehicle owner
+  return "vehicle_owner";
+}

@@ -427,3 +427,19 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 
 
 
+
+
+## 2026-10-20 11:05 IST — Backend Stage 1: capabilities endpoint and caller role resolution (planned & in progress)
+- **Branch:** feat/backend-core-v1 branched from origin/feat/support-ticket-backend-v2 @ 13655ce2e0f74bf19a2e89e6ed440fe7e44a77e2.
+- **Scope & Constraints:**
+  - Backend Stage 1 implementation. Staging only.
+  - Zero modifications to production (Worker carmy-api, Supabase hlrmuvzmaegnbgzvvfsn, D1 57c85007-...).
+  - No deployment (wrangler deploy not run; no migrations applied).
+  - No merge to main. No push to origin without explicit user command.
+  - No second JWT verifier; reuse requireUser from worker/src/auth.js.
+- **Planned Objectives:**
+  1. Add public GET /api/meta/capabilities endpoint returning exact JSON shape with real Worker feature flags (auth_signup: true, auth_email_otp: true, auth_mobile_otp: false, profile: true, profile_status: true, profile_mobile_change: false, garage_types: false, team_routes: true).
+  2. Implement getCallerRole(userId, env) in worker/src/auth.js reading team_members (D1) and super_admins (Supabase/D1/SUPER_ADMIN_EMAILS), returning strictly one of the 5 approved roles: super_admin, team_lead, support_agent, support_executive, vehicle_owner. Unapproved roles safely fall back to vehicle_owner.
+  3. Author comprehensive automated tests in tests/backend-stage1.test.mjs verifying public capabilities, 401 on missing/tampered tokens using signature index 0 mutation, and caller role resolution.
+  4. Verify all tests pass with npm test.
+

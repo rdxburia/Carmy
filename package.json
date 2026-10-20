@@ -9,7 +9,7 @@
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "preview": "wrangler preview",
-    "test": "node --test tests/admin-team-workflow.test.mjs tests/ticket-workflow-route.test.mjs tests/customer-portal-regression.test.mjs tests/idle-session-auth.test.mjs tests/session-guard.test.mjs tests/r2-file-validation.test.mjs tests/workshop-m0-contract.test.mjs tests/support-tickets-worker.test.mjs tests/super-admin-auth.test.mjs tests/admin-invite-session.test.mjs",
+    "test": "node --test tests/admin-team-workflow.test.mjs tests/ticket-workflow-route.test.mjs tests/customer-portal-regression.test.mjs tests/idle-session-auth.test.mjs tests/session-guard.test.mjs tests/r2-file-validation.test.mjs tests/workshop-m0-contract.test.mjs tests/support-tickets-worker.test.mjs tests/super-admin-auth.test.mjs tests/admin-invite-session.test.mjs tests/backend-stage1.test.mjs",
     "test:customer-portal": "node --test tests/customer-portal-regression.test.mjs",
     "test:document-classifier": "node --test tests/document-classifier-real-files.test.cjs",
     "debug:document-classifier": "node scripts/debug-document-classifier.cjs",
