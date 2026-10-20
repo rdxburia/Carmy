@@ -1133,3 +1133,26 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   - **Check 4 (E-Bill Tax Lines):** Validated that `openPrintableInvoice` dynamically renders `tax_lines[].label` and `tax_lines[].amount`. If missing on GST invoice, displays BLOCKED card with `GET /api/garage/invoices/:id/taxes`. Added/confirmed test assertions in `customer-portal-regression.test.mjs`.
   - **Check 5 (Bill Send Fake Success Prevention):** Verified that when `POST /api/garage/bills/send` returns 404 or capability is false, the UI displays error/BLOCKED toast and NEVER displays "Sent". Tested in `customer-portal-regression.test.mjs`.
   - **Check 6 (Playwright):** NOT RUN with reason: awaiting owner approval for dev dependency.
+
+
+## 2026-10-20 — Git Remote State Inspection: origin/main, origin/feat/support-ticket-backend-v2 & 0008 Migration Check
+
+- **Executed Commands & Evidence:**
+  1. `git fetch origin`: Exit 0 (clean remote fetch).
+  2. `git log --oneline -3 origin/main`:
+     ```text
+     e89a84f test(staging): add real-JWT staging ticket E2E harness and auth smoke checks (#171)
+     8565a84 docs: record staging QA retry checkpoint
+     3710bc1 docs: record autonomous v5 staging and production gate evidence (#174)
+     ```
+  3. `git log --oneline -3 origin/feat/support-ticket-backend-v2`:
+     ```text
+     13655ce fix(security): resolve Base64URL padding-bit alias collision in JWT signature tampering
+     4e19533 docs: append merge feasibility determination and gate enforcement record
+     f26a12e docs: append authenticated staging ticket E2E verification results
+     ```
+  4. `git cat-file -e origin/feat/support-ticket-backend-v2:worker/migrations/0008_team_members.sql && echo EXISTS || echo MISSING`:
+     ```text
+     EXISTS
+     ```
+- **Status:** Read-only inspection completed. No files modified in application code.

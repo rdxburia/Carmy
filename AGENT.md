@@ -318,3 +318,11 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
   5. Verified bill send never displays "Sent" when server route returns 404 or fails.
   6. Playwright: NOT RUN (awaiting owner approval for dev dependency).
 - Worker, migrations, SQL, workflows, and main branch untouched. DO NOT MERGE recommendation maintained.
+
+
+## 2026-10-20 — Remote State Inspection: origin/main, backend-v2 branch & 0008_team_members.sql
+- Executed read-only checks:
+  * `git fetch origin` (exit 0).
+  * `origin/main` HEAD: `e89a84f`.
+  * `origin/feat/support-ticket-backend-v2` HEAD: `13655ce`.
+  * Checked existence of `worker/migrations/0008_team_members.sql` on `origin/feat/support-ticket-backend-v2`: verified **EXISTS**.
