@@ -19,7 +19,7 @@ function tamperJwt(token) {
   return `${parts[0]}.${parts[1]}.${tamperedSig}`;
 }
 
-test("Test 1: GET /api/meta/capabilities returns 200, Content-Type json, shape matches exactly, auth_mobile_otp is false, team_routes is true", async () => {
+test("Test 1: GET /api/meta/capabilities returns 200, Content-Type json, all capability flags false", async () => {
   const env = { ALLOWED_ORIGIN: "https://example.test" };
   const req = new Request("https://worker.test/api/meta/capabilities", {
     method: "GET",
@@ -38,19 +38,17 @@ test("Test 1: GET /api/meta/capabilities returns 200, Content-Type json, shape m
   assert.ok(body.data, "response.data must exist");
 
   const expectedData = {
-    auth_signup: true,
-    auth_email_otp: true,
+    auth_signup: false,
+    auth_email_otp: false,
     auth_mobile_otp: false,
-    profile: true,
-    profile_status: true,
+    profile: false,
+    profile_status: false,
     profile_mobile_change: false,
     garage_types: false,
-    team_routes: true,
+    team_routes: false,
   };
 
-  assert.deepEqual(body.data, expectedData, "capabilities data shape and flags must match exactly");
-  assert.equal(body.data.auth_mobile_otp, false, "auth_mobile_otp must be false (pending provider decision)");
-  assert.equal(body.data.team_routes, true, "team_routes must be true");
+  assert.deepEqual(body.data, expectedData, "capabilities data shape must match and all unimplemented routes must be false");
 
   // Trailing slash compatibility
   const reqTrailing = new Request("https://worker.test/api/meta/capabilities/", { method: "GET" });
@@ -61,6 +59,39 @@ test("Test 1: GET /api/meta/capabilities returns 200, Content-Type json, shape m
   const reqPost = new Request("https://worker.test/api/meta/capabilities", { method: "POST" });
   const resPost = await worker.fetch(reqPost, env);
   assert.equal(resPost.status, 405, "POST /api/meta/capabilities must return 405 Method Not Allowed");
+});
+
+test("Test 1b: Capability route truthfulness contract - enabled flags have routes, false flags require no route", async () => {
+  const env = { ALLOWED_ORIGIN: "https://example.test" };
+  const req = new Request("https://worker.test/api/meta/capabilities", { method: "GET" });
+  const res = await worker.fetch(req, env);
+  const body = await res.json();
+
+  const ROUTE_MAPPING = {
+    auth_signup: "/api/auth/signup",
+    auth_email_otp: "/api/auth/email-otp",
+    auth_mobile_otp: "/api/auth/mobile-otp",
+    profile: "/api/profile",
+    profile_status: "/api/profile/status",
+    profile_mobile_change: "/api/profile/mobile",
+    garage_types: "/api/garage-types",
+    team_routes: "/api/admin/team",
+  };
+
+  for (const [flag, isEnabled] of Object.entries(body.data)) {
+    if (isEnabled) {
+      const route = ROUTE_MAPPING[flag];
+      assert.ok(route, `Capability flag '${flag}' must have an associated route mapping`);
+      const routeRes = await worker.fetch(new Request(`https://worker.test${route}`, { method: "GET" }), env);
+      assert.notEqual(
+        routeRes.status,
+        404,
+        `Route '${route}' for enabled capability '${flag}' must be registered and not return 404`
+      );
+    } else {
+      assert.equal(isEnabled, false, `Flag '${flag}' is not registered and must be false`);
+    }
+  }
 });
 
 test("Test 2: Protected routes reject missing token with 401", async () => {
@@ -99,7 +130,7 @@ test("Test 2: Protected routes reject missing token with 401", async () => {
   );
 });
 
-test("Test 3: Protected routes reject tampered token with 401", async () => {
+test("Test 3 [MOCKED]: Protected routes reject tampered token with 401 when auth provider rejects signature", async () => {
   const env = {
     ALLOWED_ORIGIN: "https://example.test",
     SUPABASE_URL: "https://example.supabase.co",
@@ -172,32 +203,7 @@ test("Test 4: getCallerRole returns 'vehicle_owner' for unknown user", async () 
   assert.equal(await getCallerRole(12345, env), "vehicle_owner");
 });
 
-test("Test 5: getCallerRole returns 'super_admin' when user is in super_admins (or match)", async () => {
-  // 1. Via env.SUPER_ADMIN_EMAILS
-  const envEmails = { SUPER_ADMIN_EMAILS: "superadmin@example.com, owner@torqdesk.com" };
-  assert.equal(await getCallerRole("superadmin@example.com", envEmails), "super_admin");
-  assert.equal(await getCallerRole("owner@torqdesk.com", envEmails), "super_admin");
-
-  // 2. Via Supabase /rest/v1/super_admins
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    if (String(url).includes("/rest/v1/super_admins")) {
-      return new Response(JSON.stringify([{ user_id: "sa-supabase-uuid" }]), { status: 200 });
-    }
-    return new Response("[]", { status: 200 });
-  };
-
-  try {
-    const envSupabase = {
-      SUPABASE_URL: "https://test.supabase.co",
-      SUPABASE_SECRET_KEY: "secret",
-    };
-    assert.equal(await getCallerRole("sa-supabase-uuid", envSupabase), "super_admin");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-
-  // 3. Via D1 super_admins table
+test("Test 5a: getCallerRole returns 'super_admin' when user is in D1 super_admins row", async () => {
   const envD1 = {
     DB: {
       prepare(sql) {
@@ -217,6 +223,43 @@ test("Test 5: getCallerRole returns 'super_admin' when user is in super_admins (
     },
   };
   assert.equal(await getCallerRole("sa-d1-uuid", envD1), "super_admin");
+});
+
+test("Test 5b [MOCKED]: getCallerRole returns 'super_admin' when user is in Supabase super_admins row", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/rest/v1/super_admins")) {
+      return new Response(JSON.stringify([{ user_id: "sa-supabase-uuid" }]), { status: 200 });
+    }
+    return new Response("[]", { status: 200 });
+  };
+
+  try {
+    const envSupabase = {
+      SUPABASE_URL: "https://test.supabase.co",
+      SUPABASE_SECRET_KEY: "secret",
+    };
+    assert.equal(await getCallerRole("sa-supabase-uuid", envSupabase), "super_admin");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Test 5c: getCallerRole returns 'vehicle_owner' when user has no row in super_admins or team_members", async () => {
+  const envNoRow = {
+    DB: {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async first() { return null; },
+            };
+          },
+        };
+      },
+    },
+  };
+  assert.equal(await getCallerRole("user-without-privileges", envNoRow), "vehicle_owner");
 });
 
 test("Test 6: getCallerRole returns correct team role when user is in team_members", async () => {

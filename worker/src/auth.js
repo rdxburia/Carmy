@@ -162,9 +162,8 @@ export const APPROVED_ROLES = Object.freeze([
 
 /**
  * Resolves the server-authoritative caller role for a given user ID.
- * Queries super_admins (via Supabase REST, D1, or env.SUPER_ADMIN_EMAILS)
- * and active team_members (via D1).
- *
+ * Queries super_admins (via Supabase REST or D1) and active team_members (via D1).
+  *
  * Returns strictly one of the 5 approved roles:
  * - 'super_admin'
  * - 'team_lead'
@@ -184,18 +183,7 @@ export async function getCallerRole(userId, env = {}) {
     return "vehicle_owner";
   }
 
-  // 1. Check environment super admin emails/IDs if configured
-  if (env?.SUPER_ADMIN_EMAILS) {
-    const list = String(env.SUPER_ADMIN_EMAILS)
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (list.includes(cleanId.toLowerCase())) {
-      return "super_admin";
-    }
-  }
-
-  // 2. Check Supabase super_admins table
+  // 1. Check Supabase super_admins table
   if (env?.SUPABASE_URL && env?.SUPABASE_SECRET_KEY) {
     try {
       const url = new URL("/rest/v1/super_admins", env.SUPABASE_URL);
@@ -222,7 +210,7 @@ export async function getCallerRole(userId, env = {}) {
     }
   }
 
-  // 3. Check D1 super_admins table if present
+  // 2. Check D1 super_admins table if present
   if (env?.DB?.prepare) {
     try {
       const saRow = await env.DB.prepare(
@@ -236,7 +224,7 @@ export async function getCallerRole(userId, env = {}) {
     }
   }
 
-  // 4. Check D1 team_members table
+  // 3. Check D1 team_members table
   if (env?.DB?.prepare) {
     try {
       const member = await env.DB.prepare(

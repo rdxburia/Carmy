@@ -871,3 +871,15 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
   3. Author comprehensive automated tests in tests/backend-stage1.test.mjs verifying public capabilities, 401 on missing/tampered tokens using signature index 0 mutation, and caller role resolution.
   4. Verify all tests pass with npm test.
 
+
+
+## 2026-10-20 12:15 IST — Backend Stage 1: capabilities truthfulness & role resolution hardening
+- **Branch:** feat/backend-core-v1.
+- **Changes Applied:**
+  1. Capability flag truthfulness: set auth_signup, auth_email_otp, profile, profile_status, and team_routes to false in GET /api/meta/capabilities because their endpoints are not registered or verified. All 8 capability flags are now false.
+  2. Added capability truthfulness contract test (Test 1b) enforcing that no capability flag can be set to true unless its corresponding endpoint is registered in worker/src/index.js and returns non-404.
+  3. Removed SUPER_ADMIN_EMAILS check entirely from getCallerRole in worker/src/auth.js. Privileged role resolution is strictly server-authoritative via D1 / Supabase super_admins and D1 team_members.
+  4. Test honesty & transparency: explicitly labelled tests using mocked fetch as [MOCKED] (Test 3 [MOCKED] and Test 5b [MOCKED]). Split Test 5 into three discrete tests (Test 5a for D1 row, Test 5b [MOCKED] for Supabase row, Test 5c for unprivileged user).
+  5. Test suite verification: all 149 tests passed on first run (npm test: 149 passed, 0 failed, duration 3.8s).
+  6. Staging status: zero deployments performed; staging curl marked NOT RUN.
+

@@ -121,14 +121,14 @@ export default {
       return json({
         ok: true,
         data: {
-          auth_signup: true,
-          auth_email_otp: true,
+          auth_signup: false,
+          auth_email_otp: false,
           auth_mobile_otp: false,
-          profile: true,
-          profile_status: true,
+          profile: false,
+          profile_status: false,
           profile_mobile_change: false,
           garage_types: false,
-          team_routes: true,
+          team_routes: false,
         },
       }, 200, origin);
     }
