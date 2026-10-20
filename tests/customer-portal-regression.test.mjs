@@ -4872,10 +4872,33 @@ test("Phase 9 Owner Decisions: WhatsApp bill send shows template preview; 'Sent'
   assert.equal(Boolean(h.eval("document.getElementById('invSendJoinInvite').checked")), false, "Send join invite must be false by default");
 
   // 4. Send bill calls POST /api/garage/bills/send with send_join_invite flag
+  h.eval(`
+    if (!document.getElementById('gdToast')) {
+      const gt = document.createElement('div');
+      gt.id = 'gdToast';
+      document.body.appendChild(gt);
+    }
+  `);
   await h.eval("sendBillNotification({ id: 'INV-55', customer: 'Ramesh', phone: '9816000000' }, 'whatsapp', false)");
   assert.equal(sentPayload.invoice_id, 'INV-55');
   assert.equal(sentPayload.channel, 'whatsapp');
   assert.equal(sentPayload.send_join_invite, false);
+  assert.equal(h.eval("document.getElementById('gdToast').textContent"), "Sent (WHATSAPP)", "Must show 'Sent (WHATSAPP)' on success");
+
+  // 5. When POST /api/garage/bills/send returns 404, UI shows error and NEVER shows 'Sent'
+  sendResponse = { ok: false, error: 'Route not found' };
+  h.eval("document.getElementById('gdToast').textContent = '';");
+  await h.eval("sendBillNotification({ id: 'INV-56', customer: 'Suresh', phone: '9816000000' }, 'whatsapp', false)");
+  const failedToast = h.eval("document.getElementById('gdToast').textContent");
+  assert.ok(!failedToast.includes("Sent (WHATSAPP)"), "UI must NEVER show 'Sent' when route returns error/404");
+  assert.ok(failedToast.includes("Error:") || failedToast.includes("Route not found"), "UI must show error toast");
+
+  // 6. When bill_send capability is false, UI shows BLOCKED and NEVER shows 'Sent'
+  h.eval("setBackendCapabilities({ bill_send: false }); document.getElementById('gdToast').textContent = '';");
+  await h.eval("sendBillNotification({ id: 'INV-57', customer: 'Mahesh', phone: '9816000000' }, 'whatsapp', false)");
+  const blockedToast = h.eval("document.getElementById('gdToast').textContent");
+  assert.ok(!blockedToast.includes("Sent (WHATSAPP)"), "UI must NEVER show 'Sent' when capability is BLOCKED");
+  assert.ok(blockedToast.includes("BLOCKED") && blockedToast.includes("POST /api/garage/bills/send"), "UI must show BLOCKED notice with route name");
 });
 
 test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', server tax labels or BLOCKED on missing labels, and 'Preview only' badge", async (t) => {
@@ -4906,10 +4929,11 @@ test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', serv
   assert.ok(detailsHtml.includes("Powered by Torq Desk"), "Must include 'Powered by Torq Desk' footer");
   assert.ok(detailsHtml.includes("Preview only"), "Must show 'Preview only' badge for unsaved invoice");
   assert.ok(detailsHtml.includes("BLOCKED"), "Must show BLOCKED when tax_lines is missing on GST invoice");
+  assert.ok(detailsHtml.includes("GET /api/garage/invoices/:id/taxes"), "Must show route GET /api/garage/invoices/:id/taxes in BLOCKED card");
   assert.ok(!detailsHtml.includes("9%"), "Must NOT hard-code 9% tax label");
   assert.ok(detailsHtml.includes("Pending owner decision"), "Must show GSTIN Pending owner decision");
 
-  // 2. Server-returned tax_lines renders exact server labels
+  // 2. Server-returned tax_lines renders exact server labels and amounts
   h.eval(`
     openPrintableInvoice({
       id: 'INV-202',
@@ -4934,6 +4958,7 @@ test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', serv
   detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
   assert.ok(detailsHtml.includes("Central GST (CGST)"), "Must render server tax label Central GST");
   assert.ok(detailsHtml.includes("State GST (SGST)"), "Must render server tax label State GST");
+  assert.ok(detailsHtml.includes("₹450"), "Must render server tax amount ₹450");
 });
 
 test("Phase 9 Owner Decisions: Non-approved roles are completely absent; only 3 approved team roles and super_admin exist", async (t) => {

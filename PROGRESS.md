@@ -1114,3 +1114,22 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
      - **NOT RUN** (reason: awaiting owner approval for dev dependency).
   7. **Governance Confirmation:**
      - Worker, migrations, SQL, and main branch untouched. DO NOT MERGE recommendation maintained.
+
+
+## 2026-10-20 — Correction: Phase 9 Test Count Reconciliation & Garage Script Tag Loading Fix
+
+- **Branch:** `feat/frontend-roadmap`
+- **Correction to Previous Entries:**
+  - In earlier Phase 9 documentation, the added test count was stated as 8 tests based on the prompt's 8 specific test items.
+  - Reconciliation of `tests/customer-portal-regression.test.mjs` via `--test-reporter=spec` verifies:
+    * Baseline before Phase 8 (Phase 7 `cc47eb3`): **112 tests** (npm test: **166** total).
+    * Phase 8 added: **9 tests** $	o$ **121 tests** (npm test: **175** total).
+    * Phase 9 added: **9 tests** (not 8) $	o$ **130 tests** (npm test: **184** total).
+    * Across the entire suite: **184 tests** passing (130 in `customer-portal-regression.test.mjs` + 54 in other 8 test suites).
+  - Verified that all old entries remain unmodified and preserved as append-only history.
+- **Verification Fixes:**
+  - **Check 1 (Garage Portal Script Loading):** `garage-portal.html` and `garage-onboarding.html` were loading `js/garage-workspace.js` and `js/garage-onboarding.js` without first loading `js/backend-config.js`. Added `<script src="js/backend-config.js?v=2026.10.19-phase8-auth"></script>` immediately before workspace scripts. Committed as `9489890`.
+  - **Check 2 (Line Endings & Diff Size):** Verified all 4 core files (`js/app.js`, `js/garage-workspace.js`, `js/backend-config.js`, `tests/customer-portal-regression.test.mjs`) are strictly LF in git. `git diff --stat dd1661d e33937e` shows 279 insertions, 52 deletions across 5 files, with zero whole-file churn.
+  - **Check 4 (E-Bill Tax Lines):** Validated that `openPrintableInvoice` dynamically renders `tax_lines[].label` and `tax_lines[].amount`. If missing on GST invoice, displays BLOCKED card with `GET /api/garage/invoices/:id/taxes`. Added/confirmed test assertions in `customer-portal-regression.test.mjs`.
+  - **Check 5 (Bill Send Fake Success Prevention):** Verified that when `POST /api/garage/bills/send` returns 404 or capability is false, the UI displays error/BLOCKED toast and NEVER displays "Sent". Tested in `customer-portal-regression.test.mjs`.
+  - **Check 6 (Playwright):** NOT RUN with reason: awaiting owner approval for dev dependency.

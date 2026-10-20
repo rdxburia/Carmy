@@ -307,3 +307,14 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
   6. Documented UI-ONLY data isolation checks across garage workspace, owner vehicles, unconfirmed history, and support executive assignment.
   7. Playwright: NOT RUN (awaiting owner approval for dev dependency).
 - Worker, migrations, SQL, workflows, and main branch untouched. Maintained DO NOT MERGE recommendation.
+
+
+## 2026-10-20 — Check & Stabilization Reconciliation: Script Loading, Line Endings, Test Count
+- Verification findings on `feat/frontend-roadmap`:
+  1. Loaded `js/backend-config.js` before `js/garage-workspace.js` in `garage-portal.html` and `garage-onboarding.html` (Commit `9489890`).
+  2. Verified git object line endings are strictly LF across all core files. `git diff --stat` confirms 0 whole-file churn.
+  3. Test count reconciliation: 184/184 tests pass. Phase 8 added 9 tests (166 $	o$ 175); Phase 9 added 9 tests (175 $	o$ 184). `customer-portal-regression.test.mjs` contains exactly 130 tests.
+  4. Verified E-bill dynamic tax lines render server labels/amounts and fail closed with BLOCKED card (`GET /api/garage/invoices/:id/taxes`).
+  5. Verified bill send never displays "Sent" when server route returns 404 or fails.
+  6. Playwright: NOT RUN (awaiting owner approval for dev dependency).
+- Worker, migrations, SQL, workflows, and main branch untouched. DO NOT MERGE recommendation maintained.
