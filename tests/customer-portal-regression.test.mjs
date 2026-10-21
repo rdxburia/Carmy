@@ -1429,7 +1429,7 @@ test("Client Production: Support ticket failure preserves user entered inputs an
 
 test("Client Production: Service Worker v12 retirement purges older torq-desk-shell caches", () => {
   const swCode = fs.readFileSync(path.join(root, "sw.js"), "utf8");
-  assert.match(swCode, /CACHE_NAME\s*=\s*[\'"]torq-desk-shell-v(14|13)[\'"]/, "Must use current torq-desk-shell cache");
+  assert.match(swCode, /CACHE_NAME\s*=\s*[\'"]torq-desk-shell-v(15|14|13)[\'"]/, "Must use current torq-desk-shell cache");
   assert.match(swCode, /k\.startsWith\(['"]torq-desk-shell-['"]\)\s*&&\s*k!==CACHE_NAME/, "Must delete all older torq-desk-shell caches");
 });
 
@@ -5233,4 +5233,63 @@ test("Multi-Role Team Phase 6 / Dev: when both /api/team/me and /api/admin/me re
   contentHtml = h.eval("document.getElementById('adminContent').innerHTML");
   assert.ok(!contentHtml.includes("admin-workspace-shell"), "Must NOT render admin shell when both 404");
   assert.ok(contentHtml.includes("Administrative Access Required"), "Must show access required when both 404");
+});
+
+test("Client Production: landing page markup contains visible Sign in control outside signup modal", () => {
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const landingSection = html.match(/<section id="torqLanding"[\s\S]*?<\/section>/)?.[0] || '';
+
+  assert.ok(landingSection.includes('Sign in'), "Landing page section must contain 'Sign in' text");
+  assert.match(landingSection, /data-torq-auth="login"/, "Landing page section must have a control with data-torq-auth='login'");
+
+  const ownersPanel = html.match(/<article class="td-audience-panel" data-audience-panel="owners"[\s\S]*?<\/article>/)?.[0] || '';
+  const workshopsPanel = html.match(/<article class="td-audience-panel" data-audience-panel="workshops"[\s\S]*?<\/article>/)?.[0] || '';
+
+  assert.match(ownersPanel, /<button[^>]*data-torq-auth="login"[^>]*>Sign in<\/button>/, "Vehicle owners panel must have a visible Sign in button");
+  assert.match(workshopsPanel, /data-torq-auth="login"/, "Workshops panel must have a visible Sign in control");
+  assert.ok(!ownersPanel.includes('id="auth"'), "Sign in control must not be inside #auth");
+});
+
+test("Client Production: when vehicle owner type is selected, modal title does not contain GARAGE", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("showTorqDeskAuth('signup')");
+  h.eval("selectSignupAccountType('vehicle_owner')");
+
+  const title = h.eval("document.getElementById('authTitle')?.textContent || ''");
+  const kicker = h.eval("document.getElementById('authModeKicker')?.textContent || ''");
+
+  assert.equal(title, "Create your vehicle owner account", "Modal title must reflect vehicle owner account");
+  assert.ok(!title.toUpperCase().includes("GARAGE"), "Modal title must not contain 'GARAGE' when vehicle owner is selected");
+  assert.ok(!kicker.toUpperCase().includes("GARAGE"), "Modal kicker must not contain 'GARAGE' when vehicle owner is selected");
+
+  h.eval("selectSignupAccountType('garage')");
+  const garageTitle = h.eval("document.getElementById('authTitle')?.textContent || ''");
+  const garageKicker = h.eval("document.getElementById('authModeKicker')?.textContent || ''");
+  assert.equal(garageTitle, "Create your garage account");
+  assert.equal(garageKicker, "NEW GARAGE");
+});
+
+test("Client Production: signup step labels have the auth-step class", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("showTorqDeskAuth('signup')");
+  h.eval("signupState.currentStep = 1; renderSignupFlow();");
+
+  const flowHtml = h.eval("document.getElementById('authSignupFlow')?.innerHTML || ''");
+
+  assert.ok(flowHtml.includes("auth-step-bubbles-wrap"), "Bubbles wrapper must use auth-step-bubbles-wrap class");
+  assert.ok(flowHtml.includes("auth-step-bubble"), "Step indicators must use auth-step-bubble class");
+  assert.ok(flowHtml.includes("auth-step-line"), "Step dividers must use auth-step-line class");
+  assert.ok(flowHtml.includes("auth-step-label"), "Step labels must use auth-step-label class");
+  assert.ok(flowHtml.includes("auth-step-kicker"), "Step kicker must use auth-step-kicker class");
+
+  const stepLabels = ['Account', 'Credentials', 'Email OTP', 'Mobile', 'Profile', 'Ready'];
+  stepLabels.forEach(label => {
+    assert.ok(flowHtml.includes(label), `Step label '${label}' must be rendered`);
+  });
+
+  assert.ok(flowHtml.includes("is-active") || flowHtml.includes("auth-step-active"), "Active step must have active indicator class");
 });

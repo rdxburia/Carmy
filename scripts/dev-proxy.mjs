@@ -123,6 +123,25 @@ const server = http.createServer((req, res) => {
   }
 
   const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.html') {
+    let content = fs.readFileSync(filePath, 'utf8');
+    const headerPath = path.join(rootDir, 'partials', 'public-header.html');
+    const footerPath = path.join(rootDir, 'partials', 'public-footer.html');
+    if (fs.existsSync(headerPath)) {
+      content = content.replace('<!-- TD_SHARED_HEADER -->', fs.readFileSync(headerPath, 'utf8'));
+    }
+    if (fs.existsSync(footerPath)) {
+      content = content.replace('<!-- TD_SHARED_FOOTER -->', fs.readFileSync(footerPath, 'utf8'));
+    }
+    res.writeHead(200, {
+      'Content-Type': mimeTypes[ext] || 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    });
+    res.end(content);
+    return;
+  }
+
   res.writeHead(200, {
     'Content-Type': mimeTypes[ext] || 'application/octet-stream',
     'Cache-Control': 'no-cache, no-store, must-revalidate'

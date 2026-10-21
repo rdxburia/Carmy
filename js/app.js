@@ -833,6 +833,7 @@ function cancelSignupFlow() {
 
 function selectSignupAccountType(type) {
   signupState.accountType = type === 'garage' ? 'garage' : 'vehicle_owner';
+  updateAuthModeUI();
   renderSignupFlow();
 }
 
@@ -911,13 +912,19 @@ function renderSignupFlow() {
   ];
 
   const bubblesHtml = `
-    <div class="auth-step-bubbles" aria-label="Signup steps">
-      ${steps.map(s => `
-        <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'active' : ''} ${s.num < signupState.currentStep ? 'done' : ''}">
-          <div class="auth-step-bubble-num">${s.num < signupState.currentStep ? '✓' : s.num}</div>
-          <div class="auth-step-bubble-label">${s.label}</div>
+    <div class="auth-step-bubbles-wrap auth-step-bubbles" aria-label="Signup steps">
+      ${steps.map((s, idx) => `
+        <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'is-active active' : ''} ${s.num < signupState.currentStep ? 'is-done done' : ''}" title="Step ${s.num}: ${s.label}">
+          ${s.num < signupState.currentStep ? '✓' : s.num}
         </div>
+        ${idx < steps.length - 1 ? `<div class="auth-step-line ${s.num < signupState.currentStep ? 'is-done' : ''}"></div>` : ''}
       `).join('')}
+    </div>
+    <div class="auth-step-head">
+      <span class="auth-step-kicker auth-step-label">STEP ${signupState.currentStep} OF ${steps.length} · ${steps[signupState.currentStep - 1]?.label || ''}</span>
+    </div>
+    <div class="auth-step-labels" aria-hidden="true" style="display:flex;justify-content:space-between;gap:4px;font-size:11px;color:#64748b;margin-bottom:8px;">
+      ${steps.map(s => `<span class="auth-step-label ${s.num === signupState.currentStep ? 'auth-step-active is-active font-bold text-blue-600' : ''}" style="${s.num === signupState.currentStep ? 'color:#2563eb;font-weight:700;' : ''}">${s.num}. ${s.label}</span>`).join('')}
     </div>
   `;
 
@@ -1938,9 +1945,10 @@ window.submitMobileChangeOtp = submitMobileChangeOtp;
 
 function updateAuthModeUI(){
  const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),authBtn=$('authBtn'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
- if(title)title.textContent=signup?'Create your account':'Vehicle Records';
- if(kicker)kicker.textContent=signup?'NEW GARAGE':'YOUR VEHICLE RECORDS';
- if(copy)copy.textContent=signup?'Create a private garage for your vehicle history and documents.':'Sign in to keep your vehicle history, documents and reports together.';
+ const isGarage = Boolean(signup && signupState && signupState.accountType === 'garage');
+ if(title)title.textContent=signup?(isGarage?'Create your garage account':'Create your vehicle owner account'):'Vehicle Records';
+ if(kicker)kicker.textContent=signup?(isGarage?'NEW GARAGE':'CREATE ACCOUNT'):'YOUR VEHICLE RECORDS';
+ if(copy)copy.textContent=signup?(isGarage?'Create a commercial workspace for repair jobs, fleets and customer invoicing.':'Create a private garage for your vehicle history and documents.'):'Sign in to keep your vehicle history, documents and reports together.';
  if(toggle)toggle.textContent=signup?'Back to login':'Create account';
  if(authBtn&&!authBtn.disabled)authBtn.textContent=signup?'Create account':'Login';
  auth?.classList.toggle('auth-signup-active',signup);
@@ -2429,6 +2437,10 @@ function showTorqDeskAuth(mode='login'){
  if(landing)landing.classList.remove('hidden');
  if(auth)auth.classList.remove('hidden','auth-session-pending','auth-success','auth-mobile-open');
  signup=mode==='signup';
+ if(signup){
+   signupState.currentStep = 1;
+   signupState.accountType = 'vehicle_owner';
+ }
  hideVerificationView(false);
  updateAuthModeUI();bindMobileAuthTabs();prepareLoginExperience();
  window.scrollTo({top:0,behavior:'smooth'});
