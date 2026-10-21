@@ -441,6 +441,11 @@ function createAppHarness(overrides = {}) {
     context.getBackendCapabilities = context.window.getBackendCapabilities;
     context.renderBackendBlockedCard = context.window.renderBackendBlockedCard;
   }
+  const planCatalogCode = fs.readFileSync(path.join(root, 'js/plan-catalog.js'), 'utf8');
+  vm.runInContext(planCatalogCode, context);
+  if (context.window) {
+    context.PLAN_CATALOG = context.window.PLAN_CATALOG;
+  }
   const code = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
   vm.runInContext(code, context);
   if (context.window) {
@@ -5327,4 +5332,106 @@ test("Client Production: stepper has 6 bubbles, 5 connectors, and zero stray too
   const cardText = h.eval("document.querySelector('.auth-step-card')?.textContent || ''");
   const hasBareNumberOutside = cardText.split(/\s+/).some(token => /^([1-6])$/.test(token));
   assert.equal(hasBareNumberOutside, false, "No text node matching exactly '1' to '6' outside the stepper");
+});
+
+test("Plans Phase 7: Owner plan cards contain Free, Plus, Family 3, Family 9 and no 'Ultra' text", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  const html = h.eval("document.getElementById('planComparisonModalBox')?.innerHTML || renderPlanComparisonModalContent()");
+  assert.ok(html.includes("Free"), "Owner plan cards must contain Free plan");
+  assert.ok(html.includes("Plus"), "Owner plan cards must contain Plus plan");
+  assert.ok(html.includes("Family 3"), "Owner plan cards must contain Family 3 plan");
+  assert.ok(html.includes("Family 9"), "Owner plan cards must contain Family 9 plan");
+  assert.ok(!html.includes("Ultra"), "Owner plan cards must not contain Ultra text");
+});
+
+test("Plans Phase 7: Owner Plus yearly total shows ₹708", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal(); setComparisonCycle('yearly');");
+  const html = h.eval("document.getElementById('planComparisonModalBox')?.innerHTML || renderPlanComparisonModalContent()");
+  assert.ok(html.includes("708") || html.includes("₹708"), "Owner Plus yearly total must show ₹708");
+});
+
+test("Plans Phase 7: Garage cards show 2999, 5399, 3299, 5939, 9999, 17999", async (t) => {
+  const portalHtml = fs.readFileSync(path.join(root, "garage-portal.html"), "utf8");
+  assert.ok(portalHtml.includes("2999") || portalHtml.includes("2,999"), "Garage cards must show 2999");
+  assert.ok(portalHtml.includes("5399") || portalHtml.includes("5,399"), "Garage cards must show 5399");
+  assert.ok(portalHtml.includes("3299") || portalHtml.includes("3,299"), "Garage cards must show 3299");
+  assert.ok(portalHtml.includes("5939") || portalHtml.includes("5,939"), "Garage cards must show 5939");
+  assert.ok(portalHtml.includes("9999") || portalHtml.includes("9,999"), "Garage cards must show 9999");
+  assert.ok(portalHtml.includes("17999") || portalHtml.includes("17,999"), "Garage cards must show 17999");
+});
+
+test("Plans Phase 7: Ultra staff badge shows 'Pending confirmation'", async (t) => {
+  const portalHtml = fs.readFileSync(path.join(root, "garage-portal.html"), "utf8");
+  assert.ok(portalHtml.includes("Pending confirmation"), "Ultra card must contain 'Pending confirmation' badge");
+  const catalog = (await import("../js/plan-catalog.js")).default || (await import("../js/plan-catalog.js"));
+  assert.equal(catalog.garage.plans.ultra.staff_status, "PENDING_OWNER_CONFIRM", "Ultra staff status must be PENDING_OWNER_CONFIRM");
+});
+
+test("Plans Phase 7: Redeem code input rejects codes shorter than 8 characters before calling route", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    let routeCalled = false;
+    workerPost = async () => { routeCalled = true; return { ok: true }; };
+    document.body.innerHTML += '<input id="activationCodeInput" value="SHORT"><div id="redeemCodeMsg"></div>';
+  `);
+
+  await h.eval("redeemActivationCode()");
+  assert.equal(h.eval("routeCalled"), false, "Route must not be called when code is shorter than 8 characters");
+});
+
+test("Plans Phase 7: Admin code generator does not contain Math.random", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const fnStr = h.eval("generateAdminToken.toString()");
+  assert.ok(!fnStr.includes("Math.random"), "Admin code generator must not contain Math.random");
+});
+
+test("Plans Phase 7: Admin code duration select offers exactly 1 to 12", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+  `);
+  h.eval("openTokenGenModal()");
+
+  const modalHtml = h.eval("document.getElementById('adminTokenGenModal')?.innerHTML || ''");
+  assert.ok(modalHtml.includes('id="tokenGenDurationMonths"'), "Must render tokenGenDurationMonths select");
+
+  const selectMatch = modalHtml.match(/<select[^>]*id="tokenGenDurationMonths"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(selectMatch, "Must contain tokenGenDurationMonths select block");
+
+  const optionValues = [...selectMatch[1].matchAll(/value="(\d+)"/g)].map(m => parseInt(m[1], 10));
+  assert.deepEqual(optionValues, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "Duration select must offer exactly 1 to 12 months");
+});
+
+test("Plans Phase 7: No plan price is written to localStorage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+    adminPlansList = [
+      { id: 'plus', name: 'Plus', account_type: 'vehicle_owner', price_monthly: 69, price_yearly: 708 }
+    ];
+    workerPatch = async () => ({ ok: true, data: { id: 'plus' } });
+    document.body.innerHTML += '<input id="plan_price_monthly_plus" value="79"><input id="plan_price_yearly_plus" value="750"><div id="adminPlanPriceStatus"></div>';
+  `);
+
+  await h.eval("saveAdminPlanPrice('plus')");
+
+  const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
+  assert.ok(!storageDump.includes("79"), "Updated monthly price 79 must not be written to localStorage");
+  assert.ok(!storageDump.includes("750"), "Updated yearly price 750 must not be written to localStorage");
 });

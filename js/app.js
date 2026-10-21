@@ -4434,6 +4434,11 @@ function updatePlanStatusCardDom(){
 }
 
 function renderPlanStatusCard(){
+  if(typeof window.backendAvailable==='function'&&!window.backendAvailable('plan_status')&&!userPlanStatus){
+    return '<div class="card plan-status-card" id="userPlanStatusCard">'+
+      (typeof renderAdminBlockedCard==='function'?renderAdminBlockedCard('/api/plan/status','GET','Capability plan_status is disabled (404).'):'<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>GET /api/plan/status</code></div>')+
+    '</div>';
+  }
   if(userPlanLoading){
     return '<div class="card plan-status-card" id="userPlanStatusCard"><div style="text-align:center;padding:24px"><span class="spinner-sm"></span> Loading subscription status from <code>GET /api/plan/status</code>...</div></div>';
   }
@@ -4568,10 +4573,10 @@ function toggleActivationRedeemSection(){
 }
 
 async function redeemActivationCode(inputElId, msgElId, btnElId){
-  const input = document.getElementById(inputElId || 'activationCodeInput') || document.getElementById('garageActivationCodeInput');
+  const input = document.getElementById(inputElId || 'activationCodeInput') || document.getElementById('garageActivationCodeInput') || document.getElementById('activationCode');
   const rawVal = input?.value || '';
   const code = String(rawVal).trim().toUpperCase();
-  const msgEl = document.getElementById(msgElId || 'activationRedeemMsg') || document.getElementById('garageActivationRedeemMsg');
+  const msgEl = document.getElementById(msgElId || 'activationRedeemMsg') || document.getElementById('garageActivationRedeemMsg') || document.getElementById('redeemCodeMsg');
   const btn = document.getElementById(btnElId || 'btnRedeemActivationCode') || document.getElementById('btnGarageRedeemCode');
 
   if (msgEl) {
@@ -4610,6 +4615,16 @@ async function redeemActivationCode(inputElId, msgElId, btnElId){
       msgEl.style.background = 'rgba(220,38,38,.08)';
       msgEl.style.color = '#b91c1c';
       msgEl.textContent = errText;
+    }
+    return;
+  }
+
+  if (typeof window.backendAvailable === 'function' && !window.backendAvailable('activation_redeem')) {
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.innerHTML = typeof renderAdminBlockedCard === 'function'
+        ? renderAdminBlockedCard('/api/activation/redeem', 'POST', 'Capability activation_redeem is disabled (404).')
+        : '<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>POST /api/activation/redeem</code></div>';
     }
     return;
   }
@@ -4732,14 +4747,13 @@ function closePlanComparisonModal(){
 
 function renderPlanComparisonModalContent(){
   const box=document.getElementById('planComparisonModalBox');
-  if(!box)return;
 
   const isYearly=(currentComparisonCycle==='yearly');
   const serverPlanKey=(userPlanStatus?.plan || '').toLowerCase();
   const isRouteBlocked=Boolean(userPlanError);
   const curPlan=serverPlanKey || 'free';
 
-  box.innerHTML='<div class="admin-modal-head">'+
+  const modalHtml='<div class="admin-modal-head">'+
     '<div>'+
       '<h3 style="margin:0;font-size:18px">Choose the Right Plan for Your Vehicles</h3>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Transparent pricing with zero hidden fees. Upgrade or cancel anytime.</p>'+
@@ -4867,6 +4881,8 @@ function renderPlanComparisonModalContent(){
       '</div>'+
     '</div>'+
   '</div>';
+  if(box)box.innerHTML=modalHtml;
+  return modalHtml;
 }
 
 function openUpgradeRequestModal(targetPlan){
@@ -5961,6 +5977,11 @@ async function loadAdminTokens(force=false){
 async function loadAdminPlans(force=false){
   if(adminPlansLoading)return;
   if(!force&&adminPlansList)return;
+  if(typeof window.backendAvailable==='function'&&!window.backendAvailable('admin_plan_prices')){
+    adminPlansError=new Error('Capability admin_plan_prices is disabled (404).');
+    if(currentAdminScreen==='plans')renderAdminViewContent();
+    return;
+  }
   adminPlansLoading=true;
   adminPlansError=null;
   try{
@@ -6431,6 +6452,14 @@ async function saveAdminPlanPrice(planId){
 
   if(Object.keys(payload).length===0){
     toast('No price changes detected.','info');
+    return;
+  }
+
+  if(typeof window.backendAvailable==='function'&&!window.backendAvailable('admin_plan_prices')){
+    const statusEl=document.getElementById('adminPlanPriceStatus');
+    if(statusEl){
+      statusEl.innerHTML=renderAdminBlockedCard('/api/admin/plans/'+encodeURIComponent(planId),'PATCH','Capability admin_plan_prices is disabled (404).');
+    }
     return;
   }
 
@@ -9512,6 +9541,16 @@ function generateAdminToken(){
     };
     if(redeem_by)payload.redeem_by=redeem_by;
     if(bound_mobile)payload.bound_mobile=bound_mobile;
+
+    if(typeof window.backendAvailable==='function'&&!window.backendAvailable('admin_activation_codes')){
+      const statusArea=document.getElementById('tokenGenStatusArea');
+      if(statusArea){
+        statusArea.innerHTML=typeof renderAdminBlockedCard==='function'
+          ? renderAdminBlockedCard('/api/admin/activation-codes','POST','Capability admin_activation_codes is disabled (404).')
+          : '<div class="admin-badge" style="background:#fee2e2;color:#991b1b;padding:8px">BLOCKED: POST /api/admin/activation-codes</div>';
+      }
+      return;
+    }
 
     workerPost('/api/admin/activation-codes',payload).then(res=>{
       const serverCode=res?.code||res?.data?.code||res?.token||res?.data?.token;

@@ -45,7 +45,12 @@
     garage_types: false,
     vehicle_claims: false,
     garage_vehicle_match: false,
-    bill_send: false
+    bill_send: false,
+    plan_status: false,
+    activation_redeem: false,
+    admin_plan_prices: false,
+    admin_activation_codes: false,
+    plan_catalog_public: false
   });
 
   const backendCapabilities = Object.assign({}, DEFAULT_CAPABILITIES);
