@@ -886,12 +886,67 @@
     });
   }
 
+  let garageBillingPeriod = '6m';
+  let garageTrialEligible = false;
+
+  window.setGarageBillingPeriod = function(period) {
+    garageBillingPeriod = period;
+    const btn6m = $('garageCycle6m');
+    const btn12m = $('garageCycle12m');
+    if (btn6m) btn6m.classList.toggle('active', period === '6m');
+    if (btn12m) btn12m.classList.toggle('active', period === '12m');
+    renderPlansScreen();
+  };
+
+  async function checkGarageTrialEligibility() {
+    try {
+      const res = await fetch(`${API_BASE}/api/plan/status`);
+      if (res.ok) {
+        const json = await res.json();
+        const data = json?.data || json;
+        garageTrialEligible = Boolean(data?.trial_eligibility || data?.trial_eligible);
+      }
+    } catch (_) {
+      garageTrialEligible = false;
+    }
+    renderPlansScreen();
+  }
+
   function renderPlansScreen() {
-    ['lite', 'premium', 'ultra'].forEach(p => {
-      const card = $(`cardPlan${p.charAt(0).toUpperCase() + p.slice(1)}`);
-      const tag = $(`tagCurrent${p.charAt(0).toUpperCase() + p.slice(1)}`);
-      const btn = $(`btnSelect${p.charAt(0).toUpperCase() + p.slice(1)}`);
-      const isCurrent = (currentPlan === p);
+    const pLite = $('priceLite');
+    const pPro = $('pricePro') || $('pricePremium');
+    const pUltra = $('priceUltra');
+    const perLite = $('periodLite');
+    const perPro = $('periodPro') || $('periodPremium');
+    const perUltra = $('periodUltra');
+
+    if (garageBillingPeriod === '12m') {
+      if (pLite) pLite.textContent = '₹5,399';
+      if (perLite) perLite.textContent = 'for 12 months (₹5399) · 6-month: ₹2999';
+      if (pPro) pPro.textContent = '₹5,939';
+      if (perPro) perPro.textContent = 'for 12 months (₹5939) · 6-month: ₹3299';
+      if (pUltra) pUltra.textContent = '₹17,999';
+      if (perUltra) perUltra.textContent = 'for 12 months (₹17999) · 6-month: ₹9999';
+    } else {
+      if (pLite) pLite.textContent = '₹2,999';
+      if (perLite) perLite.textContent = 'for 6 months (₹2999) · 12-month: ₹5399';
+      if (pPro) pPro.textContent = '₹3,299';
+      if (perPro) perPro.textContent = 'for 6 months (₹3299) · 12-month: ₹5939';
+      if (pUltra) pUltra.textContent = '₹9,999';
+      if (perUltra) perUltra.textContent = 'for 6 months (₹9999) · 12-month: ₹17999';
+    }
+
+    ['Lite', 'Pro', 'Ultra'].forEach(k => {
+      const b = $(`trialBadge${k}`);
+      if (b) b.style.display = garageTrialEligible ? 'inline-block' : 'none';
+    });
+
+    ['lite', 'pro', 'ultra'].forEach(p => {
+      const capitalized = p === 'pro' ? 'Pro' : (p.charAt(0).toUpperCase() + p.slice(1));
+      const card = $(`cardPlan${capitalized}`) || (p === 'pro' ? $('cardPlanPremium') : null);
+      const tag = $(`tagCurrent${capitalized}`) || (p === 'pro' ? $('tagCurrentPremium') : null);
+      const btn = $(`btnSelect${capitalized}`) || (p === 'pro' ? $('btnSelectPremium') : null);
+      const isCurrent = (currentPlan === p || (p === 'pro' && currentPlan === 'premium'));
 
       if (card) card.classList.toggle('garage-plan-current', isCurrent);
       if (tag) tag.style.display = isCurrent ? 'inline-flex' : 'none';
@@ -902,14 +957,14 @@
           btn.className = 'td-btn secondary';
         } else {
           btn.disabled = false;
-          btn.textContent = `Select ${p.charAt(0).toUpperCase() + p.slice(1)} Plan`;
+          btn.textContent = `Select ${capitalized} Plan`;
           btn.className = 'td-btn';
         }
       }
     });
   }
 
-  // Plan Selection Handler
+    // Plan Selection Handler
   window.handlePlanSelection = async (selectedPlan) => {
     const statusBanner = $('planActionStatus');
     if (statusBanner) statusBanner.hidden = true;

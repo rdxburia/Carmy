@@ -378,12 +378,20 @@
         <div class="gd-section-heading">
           <div>
             <h2>Workshop plans &amp; pricing</h2>
-            <p>Select or upgrade your workshop plan. All prices exclude GST.</p>
+            <p>Confirmed transparent pricing for independent workshops. All prices exclude GST.</p>
           </div>
         </div>
 
         <!-- Plan selection real error banner -->
         <div id="planActionStatus" class="garage-error-banner" role="alert" hidden></div>
+
+        <!-- 6-month / 12-month billing period toggle -->
+        <div class="garage-plan-toggle">
+          <div role="group" aria-label="Billing duration">
+            <button type="button" class="garage-cycle-btn active" id="garageCycle6m" onclick="setGarageBillingPeriod('6m')">6 Months</button>
+            <button type="button" class="garage-cycle-btn" id="garageCycle12m" onclick="setGarageBillingPeriod('12m')">12 Months</button>
+          </div>
+        </div>
 
         <div class="garage-plans-grid" id="portalPlansGrid">
           <!-- Lite Plan -->
@@ -391,16 +399,14 @@
             <div>
               <div id="tagCurrentLite" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
               <h3 class="garage-plan-title">Lite</h3>
-              <div class="garage-trial-pill">First month free trial</div>
-              <div class="garage-plan-price">Rs 2,999</div>
-              <div class="garage-plan-period">per 6 months (excluding GST)</div>
-              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <div id="trialBadgeLite" class="garage-trial-pill" style="display:none">First month free trial</div>
+              <div class="garage-plan-price" id="priceLite">₹2,999</div>
+              <div class="garage-plan-period" id="periodLite">for 6 months (₹2999) · 12-month: ₹5399</div>
               <ul class="garage-plan-features">
                 <li><span>👥</span> 3 staff including owner</li>
                 <li><span>📄</span> Digital job cards &amp; estimates</li>
                 <li><span>🧾</span> Invoices &amp; billing</li>
-                <li class="garage-feature-dim"><span>✕</span> No inventory</li>
-                <li class="garage-feature-dim"><span>✕</span> No WhatsApp automation</li>
+                <li class="garage-feature-dim"><span>✕</span> No inventory tracking</li>
               </ul>
             </div>
             <div style="margin-top:16px">
@@ -408,26 +414,24 @@
             </div>
           </div>
 
-          <!-- Premium Plan -->
-          <div class="garage-plan-card" id="cardPlanPremium">
+          <!-- Pro Plan -->
+          <div class="garage-plan-card" id="cardPlanPro">
             <div>
-              <div id="tagCurrentPremium" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
-              <h3 class="garage-plan-title">Premium</h3>
-              <div class="garage-trial-pill">First month free trial</div>
-              <div class="garage-plan-price">Rs 3,299</div>
-              <div class="garage-plan-period">per 6 months (excluding GST)</div>
-              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <div id="tagCurrentPro" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
+              <h3 class="garage-plan-title">Pro / Premium</h3>
+              <div id="trialBadgePro" class="garage-trial-pill" style="display:none">First month free trial</div>
+              <div class="garage-plan-price" id="pricePro">₹3,299</div>
+              <div class="garage-plan-period" id="periodPro">for 6 months (₹3299) · 12-month: ₹5939</div>
               <ul class="garage-plan-features">
                 <li><span>👥</span> 6 staff</li>
+                <li><span>📄</span> Digital job cards &amp; estimates</li>
                 <li><span>💬</span> WhatsApp bill &amp; reminder automation</li>
                 <li><span>🏷️</span> Invoice logo branding</li>
-                <li><span>📊</span> Reports &amp; customer feedback link</li>
-                <li><span>📸</span> Job-card photos &amp; estimate approvals</li>
-                <li class="garage-feature-dim"><span>✕</span> No inventory</li>
+                <li class="garage-feature-dim"><span>✕</span> No inventory tracking</li>
               </ul>
             </div>
             <div style="margin-top:16px">
-              <button type="button" class="td-btn" id="btnSelectPremium" onclick="handlePlanSelection('premium')">Select Premium Plan</button>
+              <button type="button" class="td-btn" id="btnSelectPro" onclick="handlePlanSelection('pro')">Select Pro Plan</button>
             </div>
           </div>
 
@@ -435,18 +439,16 @@
           <div class="garage-plan-card" id="cardPlanUltra">
             <div>
               <div id="tagCurrentUltra" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
-              <h3 class="garage-plan-title">Ultra</h3>
-              <div class="garage-trial-pill">First month free trial</div>
-              <div class="garage-plan-price">Rs 9,999</div>
-              <div class="garage-plan-period">per 6 months (excluding GST)</div>
-              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">12-month: Price on request <span class="garage-pending-tag">PENDING</span></div>
+              <h3 class="garage-plan-title">Ultra / Max</h3>
+              <div id="trialBadgeUltra" class="garage-trial-pill" style="display:none">First month free trial</div>
+              <div class="garage-plan-price" id="priceUltra">₹9,999</div>
+              <div class="garage-plan-period" id="periodUltra">for 6 months (₹9999) · 12-month: ₹17999</div>
               <ul class="garage-plan-features">
-                <li><span>👥</span> Staff count <span class="garage-pending-tag">PENDING (proposed 15)</span></li>
+                <li><span>👥</span> 15 staff <span class="garage-pending-tag">Pending confirmation</span></li>
                 <li><span>⚙️</span> Parts &amp; inventory tracking</li>
                 <li><span>📧</span> Garage email alias (name@torqdesk.in)</li>
                 <li><span>🌐</span> Public garage web page</li>
                 <li><span>🏢</span> Multi-branch &amp; full invoice branding</li>
-                <li><span>📥</span> Advanced reports &amp; CSV data export</li>
               </ul>
             </div>
             <div style="margin-top:16px">
@@ -456,7 +458,7 @@
         </div>
 
         <div class="garage-plan-footer-note">
-          Prices exclude GST. GST is added at checkout. <span class="garage-pending-tag">PENDING</span>
+          Prices exclude GST. GST is added at checkout. <span class="garage-pending-tag">Offer details pending owner confirmation</span>
         </div>
       </section>
     </section>
