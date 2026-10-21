@@ -4440,24 +4440,71 @@ function renderPlanStatusCard(){
   if(userPlanError){
     return '<div class="card plan-status-card" id="userPlanStatusCard">'+renderAdminBlockedCard('/api/plan/status','GET',userPlanError.message||'Plan status endpoint unavailable (404).')+'</div>';
   }
-  const st=userPlanStatus||{
-    plan:user?.user_metadata?.plan||'lite',
-    status:'active',
-    expires_at:null,
-    max_vehicles:1,
-    storage_mb_limit:10,
-    storage_mb_used:0.8
-  };
-  const planKey=(st.plan||'lite').toLowerCase();
-  const planName=planKey==='ultra'?'Ultra (Workshop SaaS)':(planKey==='premium'?'Premium (Owner Plus)':'Lite (Free Tier)');
-  const maxVehicles=st.max_vehicles||(planKey==='ultra'?999:(planKey==='premium'?5:1));
-  const maxVehiclesDisplay=planKey==='ultra'?'Unlimited':String(maxVehicles);
-  const vehicleCount=Array.isArray(cars)?cars.length:0;
-  const vehiclePercent=maxVehicles===999?10:Math.min(100,Math.round((vehicleCount/maxVehicles)*100));
-  const storageLimit=st.storage_mb_limit||(planKey==='ultra'?5000:(planKey==='premium'?500:10));
-  const storageUsed=Number(st.storage_mb_used||0).toFixed(1);
-  const storagePercent=Math.min(100,Math.round((storageUsed/storageLimit)*100));
-  const isExpired=(st.status==='expired'||Boolean(st.is_expired));
+
+  const st = userPlanStatus || null;
+  const planKey = (st?.plan || '').toLowerCase();
+  let planName = st?.plan_name || null;
+  if(!planName && st?.plan){
+    if(planKey === 'plus' || planKey === 'premium') planName = 'Premium (Owner Plus)';
+    else if(planKey === 'family3') planName = 'Family 3';
+    else if(planKey === 'family9') planName = 'Family 9';
+    else if(planKey === 'ultra') planName = 'Ultra (Workshop SaaS)';
+    else if(planKey === 'lite' || planKey === 'free') planName = 'Free Tier';
+    else planName = st.plan;
+  }
+  const displayPlanName = planName || 'Not provided by server';
+
+  const accountType = st?.account_type || (st?.account ? String(st.account) : null);
+  const displayAccountType = accountType ? (accountType === 'garage' ? 'Garage / Workshop' : (accountType === 'vehicle_owner' ? 'Vehicle Owner' : String(accountType))) : 'Not provided by server';
+
+  const rawStatus = st?.status ? String(st.status).toUpperCase() : (st ? 'ACTIVE' : null);
+  const status = rawStatus || 'Not provided by server';
+  const isGrace = status === 'GRACE';
+  const isExpired = status === 'EXPIRED';
+  const isTrial = status === 'TRIAL';
+  const isActive = status === 'ACTIVE';
+
+  let statusTagClass = 'ok';
+  if(isExpired) statusTagClass = 'danger';
+  else if(isGrace) statusTagClass = 'warn';
+  else if(isTrial) statusTagClass = 'info';
+
+  let statusNote = 'Your subscription is active and verified.';
+  if(isGrace) statusNote = 'Read-only, 7-day grace. Data is never deleted.';
+  else if(isExpired) statusNote = 'Read-only. Renew to restore edits.';
+  else if(isTrial) statusNote = 'First-month free trial active.';
+
+  // Format valid until (expires_at, DD-MM-YYYY) and days_left
+  let displayExpiry = 'Not provided by server';
+  let daysLeftDisplay = 'Not provided by server';
+
+  if(st?.expires_at){
+    try{
+      const d = new Date(st.expires_at);
+      if(!isNaN(d.getTime())){
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const year = d.getUTCFullYear();
+        displayExpiry = `${day}-${month}-${year}`;
+        const diffDays = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        daysLeftDisplay = diffDays >= 0 ? `${diffDays} days left` : '0 days left (expired)';
+      }
+    }catch(_){}
+  }
+  if(st?.days_left != null){
+    daysLeftDisplay = `${st.days_left} days left`;
+  }
+
+  // Server quota metrics
+  const maxVehicles = st?.max_vehicles != null ? st.max_vehicles : (planKey === 'ultra' ? 999 : (planKey === 'premium' ? 5 : (st ? null : 1)));
+  const displayMaxVehicles = maxVehicles != null ? (maxVehicles >= 999 ? 'Unlimited' : String(maxVehicles)) : 'Not provided by server';
+  const vehicleCount = Array.isArray(cars) ? cars.length : 0;
+  const vehiclePercent = (maxVehicles && maxVehicles < 999) ? Math.min(100, Math.round((vehicleCount / maxVehicles) * 100)) : 10;
+
+  const storageLimit = st?.storage_mb_limit != null ? st.storage_mb_limit : (st ? null : 10);
+  const displayStorageLimit = storageLimit != null ? `${storageLimit} MB` : 'Not provided by server';
+  const storageUsed = st?.storage_mb_used != null ? Number(st.storage_mb_used).toFixed(1) : '0.0';
+  const storagePercent = (storageLimit && storageLimit > 0) ? Math.min(100, Math.round((Number(storageUsed) / storageLimit) * 100)) : 10;
 
   return '<div class="card plan-status-card" id="userPlanStatusCard">'+
     '<div class="plan-card-head">'+
@@ -4465,39 +4512,41 @@ function renderPlanStatusCard(){
         '<div style="font-size:24px">🏷️</div>'+
         '<div>'+
           '<h3 style="margin:0;font-size:16px">Subscription &amp; Entitlements</h3>'+
-          '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Active plan benefits, vehicle quotas, and cloud vault storage.</p>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Account: <b>'+esc(displayAccountType)+'</b> · Server plan status &amp; quotas.</p>'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:8px">'+
-        '<span class="plan-badge plan-'+esc(planKey)+'">'+esc(planName)+'</span>'+
-        (isExpired?'<span class="sec-tag danger">EXPIRED</span>':'<span class="sec-tag ok">ACTIVE</span>')+
+        '<span class="plan-badge plan-'+esc(planKey||'free')+'">'+esc(displayPlanName)+'</span>'+
+        '<span class="sec-tag '+esc(statusTagClass)+'">'+esc(status)+'</span>'+
       '</div>'+
     '</div>'+
     '<div class="plan-metrics-grid">'+
       '<div class="plan-metric-box">'+
         '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Vehicle Limit</span>'+
-        '<b>'+esc(vehicleCount)+' / '+esc(maxVehiclesDisplay)+' Vehicles</b>'+
-        '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+vehiclePercent+'%;background:'+(vehiclePercent>=100?'#dc2626':'#2563eb')+'"></div></div>'+
-        '<small class="muted" style="margin-top:6px;display:block">'+(vehicleCount>=maxVehicles?'Limit reached for this tier':'Slot available for vehicle registration')+'</small>'+
+        '<b>'+(maxVehicles != null ? (esc(vehicleCount)+' / '+esc(displayMaxVehicles)+' Vehicles') : 'Not provided by server')+'</b>'+
+        (maxVehicles != null ? '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+vehiclePercent+'%;background:'+(vehiclePercent>=100?'#dc2626':'#2563eb')+'"></div></div>' : '')+
+        '<small class="muted" style="margin-top:6px;display:block">'+(maxVehicles != null ? (vehicleCount>=maxVehicles?'Limit reached for this tier':'Slot available for vehicle registration') : 'Quotas enforced by backend')+'</small>'+
       '</div>'+
       '<div class="plan-metric-box">'+
         '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Encrypted Document Vault</span>'+
-        '<b>'+esc(storageUsed)+' / '+esc(storageLimit)+' MB</b>'+
-        '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+storagePercent+'%;background:'+(storagePercent>=100?'#dc2626':'#2563eb')+'"></div></div>'+
-        '<small class="muted" style="margin-top:6px;display:block">'+(storagePercent>=100?'Vault full — upgrade for more storage':'Private cloud space for RC, PUC & Insurance')+'</small>'+
+        '<b>'+(storageLimit != null ? (esc(storageUsed)+' / '+esc(storageLimit)+' MB') : 'Not provided by server')+'</b>'+
+        (storageLimit != null ? '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+storagePercent+'%;background:'+(storagePercent>=100?'#dc2626':'#2563eb')+'"></div></div>' : '')+
+        '<small class="muted" style="margin-top:6px;display:block">'+(storageLimit != null ? (storagePercent>=100?'Vault full — upgrade for more storage':'Private cloud space for RC, PUC & Insurance') : 'Vault storage tracked on server')+'</small>'+
       '</div>'+
       '<div class="plan-metric-box">'+
         '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Entitlement Validity</span>'+
-        '<b>'+(st.expires_at?formatAdminDate(st.expires_at):'Indefinite / Lifetime')+'</b>'+
-        '<small class="muted" style="margin-top:14px;display:block">'+(isExpired?'Plan has expired. Renew to restore access.':'Your subscription is active and verified.')+'</small>'+
+        '<b>'+(st?.expires_at ? (esc(displayExpiry)+' ('+esc(daysLeftDisplay)+')') : (st ? 'Not provided by server' : 'Indefinite / Lifetime'))+'</b>'+
+        '<small class="muted" style="margin-top:14px;display:block">'+esc(statusNote)+'</small>'+
       '</div>'+
     '</div>'+
+    (isGrace ? '<div style="margin-top:12px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12.5px;color:#92400e;font-weight:600">⚠️ Read-only, 7-day grace. Data is never deleted.</div>' : '')+
+    (isExpired ? '<div style="margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12.5px;color:#991b1b;font-weight:600">⚠️ Read-only. Renew to restore edits.</div>' : '')+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9">'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button type="button" class="primary btn-sm" id="btnOpenPlanComparison" onclick="openPlanComparisonModal()">Compare &amp; Upgrade Plans</button>'+
         '<button type="button" class="ghost btn-sm" id="btnToggleActivationCode" onclick="toggleActivationRedeemSection()">Redeem Code</button>'+
       '</div>'+
-      '<small class="muted">Need custom workshop seats? <a href="javascript:void(0)" onclick="openUpgradeRequestModal(\'ultra\')" style="color:#2563eb;font-weight:600">Contact Sales</a></small>'+
+      '<small class="muted">Need fleet assistance? <a href="javascript:void(0)" onclick="openUpgradeRequestModal(\'enterprise\')" style="color:#2563eb;font-weight:600">Contact Team</a></small>'+
     '</div>'+
     '<div id="activationRedeemSection" class="'+(isActivationRedeemOpen?'':'hidden')+'" style="margin-top:14px;padding:14px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px">'+
       '<label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">Redeem Activation Code or Voucher</label>'+
