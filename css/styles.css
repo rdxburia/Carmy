@@ -3815,6 +3815,7 @@ body.td-admin-mode #admin.view.active {
     gap: 8px;
     padding: 10px;
   }
+}
 
 /* ===== Phase 1: Admin Shell & Account Security ===== */
 .admin-account-shell {
