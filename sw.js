@@ -24,6 +24,7 @@ const SHELL=[
   BASE+'css/public-site.css?v='+BUILD,
   BASE+'css/tokens.css?v='+BUILD,
   BASE+'js/public-site.js?v='+BUILD,
+  BASE+'js/plan-catalog.js?v='+BUILD,
   BASE+'js/app.js?v='+BUILD,
   BASE+'js/session-guard.js?v='+BUILD,
   BASE+'js/build-info.js?v='+BUILD,
