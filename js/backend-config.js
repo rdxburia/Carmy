@@ -11,7 +11,16 @@
   'use strict';
 
   // 1. Resolve API_BASE from a single place: <meta name="carmy-api-base"> or APP_CONFIG.WORKER_API_URL
+  // On localhost/127.0.0.1, use window.location.origin to route /api through local dev proxy
   function resolveApiBase() {
+    try {
+      const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+        ? String(window.location.hostname).toLowerCase().trim()
+        : '';
+      if (host === 'localhost' || host === '127.0.0.1') {
+        return (typeof window !== 'undefined' && window.location && window.location.origin) || '';
+      }
+    } catch (_) {}
     if (typeof document !== 'undefined' && document.querySelector) {
       const meta = document.querySelector('meta[name="carmy-api-base"]');
       const val = meta ? meta.getAttribute('content') : null;

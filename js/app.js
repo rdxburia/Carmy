@@ -238,7 +238,18 @@ let db=null;
 let accessToken='';
 let authRefreshPromise=null;
 let pdfEnginePromise=null;
-const WORKER_API=typeof APP_CONFIG.WORKER_API_URL==='string'?APP_CONFIG.WORKER_API_URL:"https://carmy-api.mr-rny-buria.workers.dev";
+function resolveWorkerApi() {
+  try {
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+      ? String(window.location.hostname).toLowerCase().trim()
+      : '';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return (typeof window !== 'undefined' && window.location && window.location.origin) || '';
+    }
+  } catch (_) {}
+  return typeof APP_CONFIG.WORKER_API_URL === 'string' ? APP_CONFIG.WORKER_API_URL : "https://carmy-api.mr-rny-buria.workers.dev";
+}
+const WORKER_API = resolveWorkerApi();
 const PDF_ENGINE_URL='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
 const PDF_ENGINE_INTEGRITY='sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==';
 function loadPdfEngine(){
@@ -6984,8 +6995,40 @@ async function loadTeamMe(force=false){
       return currentAdminProfile;
     }
   }catch(err){
-    teamMeError=err;
-    console.warn('loadTeamMe notice:',err);
+    /* UI-ONLY: role display. Server enforces access. */
+    const isNotFound = err?.status === 404 || err?.code === 'NOT_FOUND' || String(err?.message || '').includes('404') || String(err?.message || '').includes('Route not found');
+    if(isNotFound){
+      try{
+        const adminRes = await workerGet('/api/admin/me');
+        const adminData = adminRes?.data || adminRes?.profile || adminRes;
+        const resolvedRole = adminData?.role || adminRes?.role;
+        if(adminRes?.ok !== false && resolvedRole === 'super_admin'){
+          currentAdminRole = 'super_admin';
+          currentAdminProfile = adminData;
+          isSuperAdmin = true;
+          updateAdminNavVisibility();
+          teamMeError = null;
+          return currentAdminProfile;
+        }else{
+          currentAdminRole = null;
+          currentAdminProfile = null;
+          isSuperAdmin = false;
+          teamMeError = new Error(adminRes?.error?.message || 'Not authorized as Super Admin.');
+        }
+      }catch(adminErr){
+        console.warn('loadTeamMe fallback to /api/admin/me failed:', adminErr);
+        currentAdminRole = null;
+        currentAdminProfile = null;
+        isSuperAdmin = false;
+        teamMeError = adminErr?.message ? adminErr : err;
+      }
+    }else{
+      currentAdminRole = null;
+      currentAdminProfile = null;
+      isSuperAdmin = false;
+      teamMeError = err;
+      console.warn('loadTeamMe notice:', err);
+    }
   }finally{
     teamMeLoading=false;
     const cardEl=$('adminProfileCardContainer');
@@ -7924,6 +7967,12 @@ function renderAdminCurrentScreen(){
 function renderAdminViewContent(){
   const container=$('adminContent');
   if(!container)return;
+
+  if(teamMeError || (!currentAdminRole && !isSuperAdmin && !(user && (user.role === 'super_admin' || user.role === 'admin')))){
+    const errorMsg = teamMeError?.message || 'Administrative access required. No verified administrative role found for this account.';
+    container.innerHTML='<div class="admin-state-card" style="margin:24px auto;max-width:480px;text-align:center"><div class="admin-state-icon">🔒</div><h3>Administrative Access Required</h3><p class="muted">'+esc(errorMsg)+'</p></div>';
+    return;
+  }
 
   const perms=getAdminRolePermissions(currentAdminRole);
 
@@ -9420,6 +9469,10 @@ async function adminView(){
     return;
   }
   await loadTeamMe();
+  if(teamMeError || (!currentAdminRole && !isSuperAdmin && !(user && (user.role === 'super_admin' || user.role === 'admin')))){
+    renderAdminViewContent();
+    return;
+  }
   checkForcedPasswordChange();
   checkForcedProfileCompletion();
   checkForcedTpinSetup();

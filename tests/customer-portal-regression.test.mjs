@@ -5118,3 +5118,119 @@ test("Phase 9 Security & XSS: All dynamic claim, garage and customer text render
   assert.ok(!claimsHtml.includes("<script>alert(1)</script>"), "Registration script must be escaped");
   assert.ok(!claimsHtml.includes("<img src=x onerror=alert(2)>"), "Garage img tag must be escaped");
 });
+
+
+test("Multi-Role Team Phase 6 / Dev: when /api/team/me returns 404 and /api/admin/me returns super_admin, role is super_admin and admin screens are allowed", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    currentAdminProfile = null;
+    currentAdminRole = null;
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        const err = new Error('Route not found');
+        err.status = 404;
+        throw err;
+      }
+      if (path === '/api/admin/me') {
+        return {
+          ok: true,
+          data: {
+            id: 'admin-uuid-1',
+            email: 'rnyburia@gmail.com',
+            role: 'super_admin'
+          }
+        };
+      }
+      throw new Error('Not found: ' + path);
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), "super_admin");
+  assert.equal(h.eval("getCurrentAdminProfile().email"), "rnyburia@gmail.com");
+
+  const perms = h.eval("getAdminRolePermissions('super_admin')");
+  assert.ok(perms.allowedScreens.includes('home'), "home must be allowed for super_admin");
+  assert.ok(perms.allowedScreens.includes('tickets'), "tickets must be allowed for super_admin");
+  assert.ok(perms.allowedScreens.includes('users'), "users must be allowed for super_admin");
+  assert.ok(perms.allowedScreens.includes('garages'), "garages must be allowed for super_admin");
+  assert.equal(perms.canManageUsers, true, "canManageUsers must be true for super_admin");
+  assert.equal(perms.canManageGarages, true, "canManageGarages must be true for super_admin");
+
+  // Verify renderAdminViewContent renders admin console shell
+  h.eval(`
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+  const adminHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(adminHtml.includes("admin-workspace-shell"), "Must render admin workspace shell when role is super_admin");
+  assert.ok(!adminHtml.includes("Administrative Access Required"), "Must NOT show access required card");
+});
+
+test("Multi-Role Team Phase 6 / Dev: when both /api/team/me and /api/admin/me return 404 or 403, role stays null and no admin screen is rendered", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // Subcase A: team/me 404 and admin/me 403
+  h.eval(`
+    currentAdminProfile = null;
+    currentAdminRole = null;
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        const err = new Error('Route not found');
+        err.status = 404;
+        throw err;
+      }
+      if (path === '/api/admin/me') {
+        const err = new Error('Super Admin access required.');
+        err.status = 403;
+        err.code = 'FORBIDDEN';
+        throw err;
+      }
+      throw new Error('Not found: ' + path);
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), null, "Role must stay null when admin/me returns 403");
+  assert.equal(h.eval("getCurrentAdminProfile()"), null, "Profile must stay null when admin/me returns 403");
+
+  
+  h.eval(`
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+  let contentHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(!contentHtml.includes("admin-workspace-shell"), "Must NOT render admin shell when role is null");
+  assert.ok(contentHtml.includes("Administrative Access Required"), "Must show access required when role is null");
+
+  // Subcase B: team/me 404 and admin/me 404
+  h.eval(`
+    currentAdminProfile = null;
+    currentAdminRole = null;
+    workerGet = async (path) => {
+      const err = new Error('Route not found');
+      err.status = 404;
+      throw err;
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), null, "Role must stay null when both return 404");
+  assert.equal(h.eval("getCurrentAdminProfile()"), null, "Profile must stay null when both return 404");
+
+  h.eval("renderAdminViewContent();");
+  contentHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(!contentHtml.includes("admin-workspace-shell"), "Must NOT render admin shell when both 404");
+  assert.ok(contentHtml.includes("Administrative Access Required"), "Must show access required when both 404");
+});
