@@ -4492,6 +4492,36 @@ body.td-admin-mode #admin.view.active {
   margin: 0;
   line-height: 1.4;
 }
+.auth-step-stepper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: 12px;
+}
+.auth-step-labels {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0 2px;
+}
+.auth-step-label {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.25;
+}
+.auth-step-label.is-active,
+.auth-step-label.auth-step-active {
+  color: #2563eb;
+  font-weight: 700;
+}
+.auth-step-label.is-done {
+  color: #16a34a;
+}
 
 /* Step 1: Account Type Selector */
 .auth-type-grid {

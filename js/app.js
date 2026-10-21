@@ -912,19 +912,21 @@ function renderSignupFlow() {
   ];
 
   const bubblesHtml = `
-    <div class="auth-step-bubbles-wrap auth-step-bubbles" aria-label="Signup steps">
-      ${steps.map((s, idx) => `
-        <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'is-active active' : ''} ${s.num < signupState.currentStep ? 'is-done done' : ''}" title="Step ${s.num}: ${s.label}">
-          ${s.num < signupState.currentStep ? '✓' : s.num}
-        </div>
-        ${idx < steps.length - 1 ? `<div class="auth-step-line ${s.num < signupState.currentStep ? 'is-done' : ''}"></div>` : ''}
-      `).join('')}
+    <div class="auth-step-stepper" aria-label="Signup steps">
+      <div class="auth-step-bubbles-wrap auth-step-bubbles">
+        ${steps.map((s, idx) => `
+          <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'is-active active' : ''} ${s.num < signupState.currentStep ? 'is-done done' : ''}" title="Step ${s.num}: ${s.label}">
+            ${s.num < signupState.currentStep ? '✓' : s.num}
+          </div>
+          ${idx < steps.length - 1 ? `<div class="auth-step-line ${s.num < signupState.currentStep ? 'is-done' : ''}"></div>` : ''}
+        `).join('')}
+      </div>
+      <div class="auth-step-labels" aria-hidden="true">
+        ${steps.map(s => `<span class="auth-step-label ${s.num === signupState.currentStep ? 'auth-step-active is-active' : ''}">${s.label}</span>`).join('')}
+      </div>
     </div>
     <div class="auth-step-head">
-      <span class="auth-step-kicker auth-step-label">STEP ${signupState.currentStep} OF ${steps.length} · ${steps[signupState.currentStep - 1]?.label || ''}</span>
-    </div>
-    <div class="auth-step-labels" aria-hidden="true" style="display:flex;justify-content:space-between;gap:4px;font-size:11px;color:#64748b;margin-bottom:8px;">
-      ${steps.map(s => `<span class="auth-step-label ${s.num === signupState.currentStep ? 'auth-step-active is-active font-bold text-blue-600' : ''}" style="${s.num === signupState.currentStep ? 'color:#2563eb;font-weight:700;' : ''}">${s.num}. ${s.label}</span>`).join('')}
+      <span class="auth-step-kicker auth-step-label">${steps[signupState.currentStep - 1]?.label?.toUpperCase() || ''}</span>
     </div>
   `;
 
