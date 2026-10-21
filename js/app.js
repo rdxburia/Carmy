@@ -6366,6 +6366,97 @@ function renderScreenTokens(){
   '</div>';
 }
 
+async function saveAdminPlanPrice(planId){
+  const perms=(typeof getAdminRolePermissions==='function')?getAdminRolePermissions(currentAdminRole):{isSuperAdmin:currentAdminRole==='super_admin'};
+  if(currentAdminRole!=='super_admin'&&!perms?.canManagePlans&&!perms?.isSuperAdmin){
+    toast('Permission denied: Only Super Admin can modify plan prices.','error');
+    return;
+  }
+  const plan=(adminPlansList||[]).find(p=>(p.id||p.key)===planId);
+  if(!plan){
+    toast('Plan not found: '+planId,'error');
+    return;
+  }
+  const isGarage=(plan.account_type==='garage')||(plan.price_6m!=null)||['lite','pro','ultra'].includes(planId);
+
+  const payload={};
+  const monthlyEl=document.getElementById('plan_price_monthly_'+planId);
+  const yearlyEl=document.getElementById('plan_price_yearly_'+planId);
+  const p6mEl=document.getElementById('plan_price_6m_'+planId);
+  const p12mEl=document.getElementById('plan_price_12m_'+planId);
+
+  if(!isGarage){
+    if(monthlyEl&&monthlyEl.value!==''){
+      const m=Number(monthlyEl.value);
+      if(isNaN(m)||m<0||m>99999){
+        toast('Monthly price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(m!==Number(plan.price_monthly??plan.price)){
+        payload.price_monthly=m;
+      }
+    }
+    if(yearlyEl&&yearlyEl.value!==''){
+      const y=Number(yearlyEl.value);
+      if(isNaN(y)||y<0||y>99999){
+        toast('Yearly price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(y!==Number(plan.price_yearly)){
+        payload.price_yearly=y;
+      }
+    }
+  }else{
+    if(p6mEl&&p6mEl.value!==''){
+      const p6=Number(p6mEl.value);
+      if(isNaN(p6)||p6<0||p6>99999){
+        toast('6-month price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(p6!==Number(plan.price_6m)){
+        payload.price_6m=p6;
+      }
+    }
+    if(p12mEl&&p12mEl.value!==''){
+      const p12=Number(p12mEl.value);
+      if(isNaN(p12)||p12<0||p12>99999){
+        toast('12-month price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(p12!==Number(plan.price_12m)){
+        payload.price_12m=p12;
+      }
+    }
+  }
+
+  if(Object.keys(payload).length===0){
+    toast('No price changes detected.','info');
+    return;
+  }
+
+  executeProtectedAdminAction('Update Plan Price',async ()=>{
+    const statusEl=document.getElementById('adminPlanPriceStatus');
+    if(statusEl)statusEl.innerHTML='<span class="spinner-sm"></span> Saving price updates to server...';
+    try{
+      const res=await workerPatch('/api/admin/plans/'+encodeURIComponent(planId),payload);
+      if(res&&(res.ok||res.success||res.data)){
+        Object.assign(plan,payload);
+        if(statusEl){
+          statusEl.innerHTML='<div class="admin-badge" style="background:#dcfce7;color:#15803d;padding:8px 12px;font-size:13px">✓ Plan prices updated successfully. Logged to audit trail on server.</div>';
+        }
+        toast('Plan price updated and logged to audit trail.','success');
+      }else{
+        throw new Error(res?.error?.message||'Server rejected price update.');
+      }
+    }catch(err){
+      if(statusEl){
+        statusEl.innerHTML=renderAdminBlockedCard('/api/admin/plans/'+encodeURIComponent(planId),'PATCH',err?.message||'Route returned 404 / failed.');
+      }
+      toast('Failed to update plan price: '+(err?.message||err),'error');
+    }
+  });
+}
+
 function renderScreenPlans(){
   let plansContent='';
   if(adminPlansLoading){
@@ -6373,15 +6464,50 @@ function renderScreenPlans(){
   }else if(adminPlansError){
     plansContent=renderAdminBlockedCard('/api/admin/plans','GET',adminPlansError?.message||'Plans endpoint unavailable (404).');
   }else if(adminPlansList){
-    plansContent='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">'+
-      adminPlansList.map(p=>'<div class="admin-card">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-'+esc((p.id||'free').toLowerCase())+'">'+esc(p.name||'Plan')+'</span><h3 style="margin:8px 0 4px">'+esc(p.name||'Plan')+'</h3><div style="font-size:22px;font-weight:800;color:#0f172a">'+esc(p.price_display||('₹'+(p.price||0)))+'</div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>Vehicle Limit: <b>'+esc(p.max_vehicles||1)+'</b></li>'+
-          '<li>Storage: <b>'+esc(p.storage_mb||10)+' MB</b></li>'+
-          '<li>Feature Flags: <code>'+esc(Object.keys(p.features||{}).join(', ')||'Standard')+'</code></li>'+
-        '</ul>'+
-      '</div>').join('')+
+    plansContent='<div class="admin-card">'+
+      '<div class="admin-card-head">'+
+        '<h3>Plan Price Editor</h3>'+
+        '<p class="muted">Live plan pricing managed via <code>GET /api/admin/plans</code> and <code>PATCH /api/admin/plans/:id</code>.</p>'+
+      '</div>'+
+      '<div class="admin-table-container">'+
+        '<table class="admin-data-table" id="adminPlansTable">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Plan Name</th>'+
+              '<th>Account Type</th>'+
+              '<th>Monthly (₹)</th>'+
+              '<th>Yearly (₹)</th>'+
+              '<th>6-Month (₹)</th>'+
+              '<th>12-Month (₹)</th>'+
+              '<th style="text-align:right">Action</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            adminPlansList.map(p=>{
+              const pid=esc(p.id||p.key||'');
+              const isGarage=(p.account_type==='garage')||(p.price_6m!=null)||['lite','pro','ultra'].includes(p.id||p.key);
+              const acctLabel=isGarage?'Garage':'Vehicle Owner';
+              const monthlyVal=(p.price_monthly??p.price??'');
+              const yearlyVal=(p.price_yearly??'');
+              const p6mVal=(p.price_6m??'');
+              const p12mVal=(p.price_12m??'');
+              return '<tr>'+
+                '<td><b>'+esc(p.name||pid)+'</b><br><code style="font-size:11px;color:#64748b">'+pid+'</code></td>'+
+                '<td><span class="admin-badge '+(isGarage?'badge-garage':'badge-owner')+'">'+esc(acctLabel)+'</span></td>'+
+                '<td>'+(isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_monthly_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(monthlyVal)+'" aria-label="Monthly price for '+pid+'">')+'</td>'+
+                '<td>'+(isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_yearly_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(yearlyVal)+'" aria-label="Yearly price for '+pid+'">')+'</td>'+
+                '<td>'+(!isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_6m_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(p6mVal)+'" aria-label="6-month price for '+pid+'">')+'</td>'+
+                '<td>'+(!isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_12m_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(p12mVal)+'" aria-label="12-month price for '+pid+'">')+'</td>'+
+                '<td style="text-align:right"><button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="saveAdminPlanPrice(\''+pid+'\')">Save</button></td>'+
+              '</tr>';
+            }).join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>'+
+      '<div style="margin-top:14px;padding:10px 14px;background:#f8fafc;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">'+
+        '<span style="font-size:12px;color:#64748b">🔒 Price updates require Super Admin TPIN. Logged to audit trail on server.</span>'+
+        '<div id="adminPlanPriceStatus"></div>'+
+      '</div>'+
     '</div>';
   }else{
     plansContent='<div class="admin-card" style="text-align:center;padding:28px">'+
@@ -9243,6 +9369,13 @@ async function suspendUserAccount(userId,currentStatus){
   });
 }
 
+function onTokenGenPlanChange(planKey){
+  const acctEl=document.getElementById('tokenGenAccountType');
+  if(!acctEl)return;
+  const isGarage=['lite','pro','ultra'].includes(planKey);
+  acctEl.value=isGarage?'garage':'vehicle_owner';
+}
+
 function openTokenGenModal(){
   const perms=getAdminRolePermissions(currentAdminRole);
   if(!perms.canManageTokens){
@@ -9261,28 +9394,50 @@ function openTokenGenModal(){
   modal.innerHTML='<div class="admin-modal-box">'+
     '<div class="admin-modal-head">'+
       '<div>'+
-        '<h3 style="margin:0;font-size:17px">Generate Plan Activation Token</h3>'+
-        '<span class="muted" style="font-size:12px">Create cryptographic single or multi-use entitlement tokens.</span>'+
+        '<h3 style="margin:0;font-size:17px">Generate Plan Activation Code</h3>'+
+        '<span class="muted" style="font-size:12px">Server-generated activation codes for owner or garage plans (valid 1 to 12 months).</span>'+
       '</div>'+
       '<button type="button" class="ghost" onclick="closeTokenGenModal()">✕</button>'+
     '</div>'+
     '<div style="display:flex;flex-direction:column;gap:12px">'+
       '<div class="field">'+
         '<label>Target Plan</label>'+
-        '<select id="tokenGenPlan"><option value="plus">Vehicle Owner Plus (₹69/mo or ₹708/yr)</option><option value="ultra">Garage Ultra (Workshop SaaS)</option></select>'+
+        '<select id="tokenGenPlan" onchange="onTokenGenPlanChange(this.value)">'+
+          '<optgroup label="Vehicle Owner Plans">'+
+            '<option value="plus" selected>Plus (1 Vehicle, Full Vault)</option>'+
+            '<option value="family3">Family 3 (3 Vehicles)</option>'+
+            '<option value="family9">Family 9 (9 Vehicles)</option>'+
+          '</optgroup>'+
+          '<optgroup label="Garage SaaS Plans">'+
+            '<option value="lite">Lite (3 Staff, Invoicing)</option>'+
+            '<option value="pro">Pro (6 Staff, WhatsApp)</option>'+
+            '<option value="ultra">Ultra (15 Staff, Inventory)</option>'+
+          '</optgroup>'+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
-        '<label>Validity Duration</label>'+
-        '<select id="tokenGenDuration"><option value="365">365 Days (1 Year)</option><option value="90">90 Days (Quarter)</option><option value="30">30 Days (Monthly)</option></select>'+
+        '<label>Target Account Type</label>'+
+        '<input type="text" id="tokenGenAccountType" value="vehicle_owner" readonly style="background:#f8fafc;color:#475569;cursor:not-allowed">'+
       '</div>'+
       '<div class="field">'+
-        '<label>Usage Restriction</label>'+
-        '<select id="tokenGenUsage"><option value="single">Single Use (1 Account)</option><option value="multi">Multi-Use Promotional (Max 50)</option></select>'+
+        '<label>Duration (Months)</label>'+
+        '<select id="tokenGenDurationMonths">'+
+          Array.from({length:12},(_,i)=>i+1).map(m=>'<option value="'+m+'"'+(m===12?' selected':'')+'>'+m+' '+(m===1?'Month':'Months')+(m===12?' (1 Year)':'')+'</option>').join('')+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
-        '<label>Optional Mobile Number Binding (+91)</label>'+
-        '<input type="text" id="tokenGenMobile" placeholder="e.g. 9876543210 (Leave blank for open redemption)">'+
+        '<label>Max Redemptions / Uses</label>'+
+        '<input type="number" id="tokenGenMaxUses" min="1" max="1000" value="1">'+
       '</div>'+
+      '<div class="field">'+
+        '<label>Redeem By (Optional)</label>'+
+        (typeof dateInputHtml==='function'?dateInputHtml('tokenGenRedeemBy','',false):'<input id="tokenGenRedeemBy" placeholder="DD-MM-YYYY">')+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Bound Mobile Number (Optional, 10 digits)</label>'+
+        '<input type="text" id="tokenGenMobile" placeholder="e.g. 9876543210 (Leave blank for open redemption)" maxlength="10">'+
+      '</div>'+
+      '<div id="tokenGenStatusArea"></div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeTokenGenModal()">Cancel</button>'+
         '<button type="button" class="primary" onclick="generateAdminToken()">Create &amp; Reveal Token</button>'+
@@ -9306,31 +9461,74 @@ function generateAdminToken(){
     return;
   }
   const planEl=document.getElementById('tokenGenPlan');
-  const durationEl=document.getElementById('tokenGenDuration');
-  const usageEl=document.getElementById('tokenGenUsage');
+  const durationEl=document.getElementById('tokenGenDurationMonths') || document.getElementById('tokenGenDuration');
+  const maxUsesEl=document.getElementById('tokenGenMaxUses') || document.getElementById('tokenGenUsage');
+  const redeemByEl=document.getElementById('tokenGenRedeemBy');
   const mobileEl=document.getElementById('tokenGenMobile');
-  const plan=planEl?.value||'plus';
-  const duration=Number(durationEl?.value)||365;
-  const usage=usageEl?.value||'single';
-  const mobile=mobileEl?.value?.trim()||null;
 
-  executeProtectedAdminAction('Generate Activation Token',async ()=>{
+  const plan_key=planEl?.value||'plus';
+  const duration_months=parseInt(durationEl?.value,10)||12;
+  const max_uses=maxUsesEl ? (maxUsesEl.value==='multi'?50:parseInt(maxUsesEl.value,10)||1) : 1;
+  const redeem_by=(typeof dateInputValue==='function'&&redeemByEl)?dateInputValue('tokenGenRedeemBy'):null;
+  const bound_mobile=mobileEl?.value?.trim()||null;
+
+  if(isNaN(duration_months) || duration_months < 1 || duration_months > 12){
+    toast('Duration must be between 1 and 12 months.','error');
+    return;
+  }
+  if(isNaN(max_uses) || max_uses < 1){
+    toast('Max uses must be at least 1.','error');
+    return;
+  }
+  if(bound_mobile && !/^\d{10}$/.test(bound_mobile)){
+    toast('Bound mobile number must be exactly 10 digits.','error');
+    return;
+  }
+
+  executeProtectedAdminAction('Issue Activation Code',async ()=>{
     closeTokenGenModal();
-    const randHex=Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();
-    const tokenCode='TD-PLUS-'+randHex;
+
+    // Cryptographic token via Web Crypto (RFC 4122)
+    const chars='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let s1='', s2='';
+    if(typeof crypto!=='undefined'&&crypto.getRandomValues){
+      const bytes=new Uint8Array(8);
+      crypto.getRandomValues(bytes);
+      for(let i=0;i<4;i++)s1+=chars[bytes[i]%chars.length];
+      for(let i=4;i<8;i++)s2+=chars[bytes[i]%chars.length];
+    }else{
+      const now=Date.now().toString(36).toUpperCase().padStart(8,'0');
+      s1=now.substring(0,4);
+      s2=now.substring(4,8);
+    }
+    const tokenCode='TD-PLUS-'+s1+'-'+s2;
     adminRevealedToken=tokenCode;
     openTokenRevealModal(tokenCode);
 
-    workerPost('/api/admin/tokens',{
-      token:tokenCode,
-      plan:plan,
-      duration_days:duration,
-      max_uses:usage==='multi'?50:1,
-      bound_mobile:mobile
-    }).then(()=>{
-      loadAdminTokens(true);
+    const payload={
+      plan_key:plan_key,
+      duration_months:duration_months,
+      max_uses:max_uses
+    };
+    if(redeem_by)payload.redeem_by=redeem_by;
+    if(bound_mobile)payload.bound_mobile=bound_mobile;
+
+    workerPost('/api/admin/activation-codes',payload).then(res=>{
+      const serverCode=res?.code||res?.data?.code||res?.token||res?.data?.token;
+      if(serverCode){
+        adminRevealedToken=serverCode;
+        const codeEl=document.getElementById('revealedTokenCode');
+        if(codeEl)codeEl.textContent=serverCode;
+      }
+      if(typeof loadAdminTokens==='function')loadAdminTokens(true);
     }).catch(err=>{
-      console.error('Failed to register token with backend:',err?.message||err);
+      console.error('Failed to issue activation code on server:',err?.message||err);
+      const statusArea=document.getElementById('tokenGenStatusArea');
+      if(statusArea){
+        statusArea.innerHTML=typeof renderAdminBlockedCard==='function'
+          ? renderAdminBlockedCard('/api/admin/activation-codes','POST',err?.message||'Activation codes endpoint unavailable (404).')
+          : '<div class="admin-badge" style="background:#fee2e2;color:#991b1b;padding:8px">BLOCKED: POST /api/admin/activation-codes</div>';
+      }
     });
   });
 }
@@ -9724,6 +9922,8 @@ window.suspendUserAccount=suspendUserAccount;
 window.openTokenGenModal=openTokenGenModal;
 window.closeTokenGenModal=closeTokenGenModal;
 window.generateAdminToken=generateAdminToken;
+window.saveAdminPlanPrice=saveAdminPlanPrice;
+window.onTokenGenPlanChange=onTokenGenPlanChange;
 window.openTokenRevealModal=openTokenRevealModal;
 window.copyRevealedToken=copyRevealedToken;
 window.closeTokenRevealModal=closeTokenRevealModal;
