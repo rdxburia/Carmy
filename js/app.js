@@ -915,7 +915,7 @@ function renderSignupFlow() {
     <div class="auth-step-stepper" aria-label="Signup steps">
       <div class="auth-step-bubbles-wrap auth-step-bubbles">
         ${steps.map((s, idx) => `
-          <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'is-active active' : ''} ${s.num < signupState.currentStep ? 'is-done done' : ''}" title="Step ${s.num}: ${s.label}">
+          <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'is-active active' : ''} ${s.num < signupState.currentStep ? 'is-done done' : ''}" aria-label="Step ${s.num}: ${s.label}">
             ${s.num < signupState.currentStep ? '✓' : s.num}
           </div>
           ${idx < steps.length - 1 ? `<div class="auth-step-line ${s.num < signupState.currentStep ? 'is-done' : ''}"></div>` : ''}
