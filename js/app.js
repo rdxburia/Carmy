@@ -4518,40 +4518,139 @@ function toggleActivationRedeemSection(){
   }
 }
 
-async function redeemActivationCode(){
-  const input=document.getElementById('activationCodeInput');
-  const code=input?.value?.trim()?.toUpperCase()||'';
-  const msgEl=document.getElementById('activationRedeemMsg');
-  const btn=document.getElementById('btnRedeemActivationCode');
-  if(!code){
-    toast('Please enter an activation code.','error');
+async function redeemActivationCode(inputElId, msgElId, btnElId){
+  const input = document.getElementById(inputElId || 'activationCodeInput') || document.getElementById('garageActivationCodeInput');
+  const rawVal = input?.value || '';
+  const code = String(rawVal).trim().toUpperCase();
+  const msgEl = document.getElementById(msgElId || 'activationRedeemMsg') || document.getElementById('garageActivationRedeemMsg');
+  const btn = document.getElementById(btnElId || 'btnRedeemActivationCode') || document.getElementById('btnGarageRedeemCode');
+
+  if (msgEl) {
+    msgEl.style.display = 'none';
+    msgEl.textContent = '';
+  }
+
+  // UI-ONLY input validation: 8 to 24 chars, A-Z 0-9 and hyphen
+  if (!code || code.length < 8) {
+    const errText = 'Activation code must be at least 8 characters (UI-ONLY).';
+    if (typeof toast === 'function') toast(errText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = errText;
+    }
     return;
   }
-  if(btn){btn.disabled=true;btn.textContent='Verifying...';}
-  if(msgEl){msgEl.style.display='none';}
-  try{
-    const res=await workerPost('/api/activation/redeem',{code});
-    const newPlan=res?.plan||res?.data?.plan||'premium';
-    toast('Activation code redeemed successfully! Plan upgraded to '+newPlan+'.','ok');
-    if(msgEl){
-      msgEl.style.display='block';
-      msgEl.style.background='rgba(22,163,74,.08)';
-      msgEl.style.color='#166534';
-      msgEl.textContent='Success! Code '+code+' applied. Plan updated to '+newPlan+'.';
+  if (code.length > 24) {
+    const errText = 'Activation code exceeds maximum 24 characters (UI-ONLY).';
+    if (typeof toast === 'function') toast(errText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = errText;
     }
-    if(input)input.value='';
-    await loadUserPlanStatus(true);
-  }catch(err){
-    const errMsg=err?.message||'Invalid or expired activation code.';
-    toast('Redemption failed: '+errMsg,'error');
-    if(msgEl){
-      msgEl.style.display='block';
-      msgEl.style.background='rgba(220,38,38,.08)';
-      msgEl.style.color='#b91c1c';
-      msgEl.textContent=errMsg;
+    return;
+  }
+  if (!/^[A-Z0-9-]+$/.test(code)) {
+    const errText = 'Activation code contains invalid characters. Use A-Z, 0-9 and hyphen only (UI-ONLY).';
+    if (typeof toast === 'function') toast(errText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = errText;
     }
-  }finally{
-    if(btn){btn.disabled=false;btn.textContent='Apply Code';}
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+
+  try {
+    let res;
+    if (typeof workerPost === 'function') {
+      res = await workerPost('/api/activation/redeem', { code });
+    } else {
+      const response = await fetch(`${API_BASE}/api/activation/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      if (response.status === 404) {
+        const err = new Error('Route /api/activation/redeem returned 404 (BLOCKED)');
+        err.status = 404;
+        throw err;
+      }
+      res = await response.json().catch(() => ({}));
+      if (!response.ok || res.ok === false) {
+        const err = new Error(res?.error?.message || res?.message || 'Redemption failed');
+        err.code = res?.error?.code || res?.code;
+        err.status = response.status;
+        throw err;
+      }
+    }
+
+    const srvData = res?.data || res;
+    const srvPlan = srvData?.plan_name || srvData?.plan || 'Plan';
+    const srvDuration = srvData?.duration_months != null ? `${srvData.duration_months} months` : 'Valid term';
+    const srvExpires = srvData?.expires_at ? (typeof formatAdminDate === 'function' ? formatAdminDate(srvData.expires_at) : new Date(srvData.expires_at).toLocaleDateString('en-IN')) : 'Active';
+
+    const okMsg = `Code redeemed successfully! Server activated: ${srvPlan} · ${srvDuration} (Expires: ${srvExpires}).`;
+    if (typeof toast === 'function') toast(okMsg, 'ok');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(22,163,74,.08)';
+      msgEl.style.color = '#166534';
+      msgEl.textContent = okMsg;
+    }
+    if (input) input.value = '';
+
+    if (typeof loadUserPlanStatus === 'function') await loadUserPlanStatus(true);
+    if (typeof renderPlansScreen === 'function') renderPlansScreen();
+  } catch (err) {
+    const is404 = err?.status === 404 || (err?.message && (err.message.includes('404') || err.message.includes('BLOCKED')));
+    if (is404) {
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.innerHTML = typeof renderAdminBlockedCard === 'function'
+          ? renderAdminBlockedCard('/api/activation/redeem', 'POST', 'Route /api/activation/redeem returned 404 (BLOCKED).')
+          : '<div class="admin-blocked-card" style="padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px"><h4>POST /api/activation/redeem</h4><p style="margin:4px 0 0;font-size:12px;color:#991b1b">Route BLOCKED (404 Not Found)</p></div>';
+      }
+      if (typeof toast === 'function') toast('Route POST /api/activation/redeem unavailable (404).', 'error');
+      return;
+    }
+
+    const ERROR_MAP = {
+      'INVALID_CODE': 'Invalid activation code. Please check characters and try again.',
+      'CODE_EXPIRED': 'This activation code has expired and can no longer be redeemed.',
+      'CODE_ALREADY_USED': 'This activation code has already been redeemed.',
+      'ACCOUNT_TYPE_MISMATCH': 'This code is not valid for your account type.',
+      'MOBILE_MISMATCH': 'This code is bound to a different mobile number.',
+      'RATE_LIMITED': 'Too many redemption attempts. Please try again later.'
+    };
+
+    const rawCode = err?.code || err?.message || '';
+    let clearText = ERROR_MAP[rawCode];
+    if (!clearText) {
+      for (const k of Object.keys(ERROR_MAP)) {
+        if (rawCode.includes(k)) {
+          clearText = ERROR_MAP[k];
+          break;
+        }
+      }
+    }
+    if (!clearText) clearText = err?.message || 'Invalid or expired activation code.';
+
+    if (typeof toast === 'function') toast('Redemption failed: ' + clearText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = clearText;
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply Code'; }
   }
 }
 

@@ -399,9 +399,9 @@
             <div>
               <div id="tagCurrentLite" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
               <h3 class="garage-plan-title">Lite</h3>
-              <div id="trialBadgeLite" class="garage-trial-pill" style="display:none">First month free trial</div>
-              <div class="garage-plan-price" id="priceLite">₹2,999</div>
-              <div class="garage-plan-period" id="periodLite">for 6 months (₹2999) · 12-month: ₹5399</div>
+              <div id="trialBadgeLite" class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price" id="priceLite">Rs 2,999</div>
+              <div class="garage-plan-period" id="periodLite">for 6 months (2999) · 12-month: 5399 (Price on request)</div>
               <ul class="garage-plan-features">
                 <li><span>👥</span> 3 staff including owner</li>
                 <li><span>📄</span> Digital job cards &amp; estimates</li>
@@ -419,9 +419,9 @@
             <div>
               <div id="tagCurrentPro" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
               <h3 class="garage-plan-title">Pro / Premium</h3>
-              <div id="trialBadgePro" class="garage-trial-pill" style="display:none">First month free trial</div>
-              <div class="garage-plan-price" id="pricePro">₹3,299</div>
-              <div class="garage-plan-period" id="periodPro">for 6 months (₹3299) · 12-month: ₹5939</div>
+              <div id="trialBadgePro" class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price" id="pricePro">Rs 3,299</div>
+              <div class="garage-plan-period" id="periodPro">for 6 months (3299) · 12-month: 5939 (Price on request)</div>
               <ul class="garage-plan-features">
                 <li><span>👥</span> 6 staff</li>
                 <li><span>📄</span> Digital job cards &amp; estimates</li>
@@ -440,9 +440,9 @@
             <div>
               <div id="tagCurrentUltra" class="garage-plan-current-tag" style="display:none">CURRENT PLAN</div>
               <h3 class="garage-plan-title">Ultra / Max</h3>
-              <div id="trialBadgeUltra" class="garage-trial-pill" style="display:none">First month free trial</div>
-              <div class="garage-plan-price" id="priceUltra">₹9,999</div>
-              <div class="garage-plan-period" id="periodUltra">for 6 months (₹9999) · 12-month: ₹17999</div>
+              <div id="trialBadgeUltra" class="garage-trial-pill">First month free trial</div>
+              <div class="garage-plan-price" id="priceUltra">Rs 9,999</div>
+              <div class="garage-plan-period" id="periodUltra">for 6 months (9999) · 12-month: 17999 (Price on request)</div>
               <ul class="garage-plan-features">
                 <li><span>👥</span> 15 staff <span class="garage-pending-tag">Pending confirmation</span></li>
                 <li><span>⚙️</span> Parts &amp; inventory tracking</li>
@@ -455,6 +455,16 @@
               <button type="button" class="td-btn" id="btnSelectUltra" onclick="handlePlanSelection('ultra')">Select Ultra Plan</button>
             </div>
           </div>
+        </div>
+
+        <!-- Redeem Activation Code Box -->
+        <div id="garageActivationRedeemSection" style="margin-top:20px;padding:16px 20px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px">
+          <label for="garageActivationCodeInput" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;color:#0f172a">Redeem Activation Code or Workshop Voucher</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <input type="text" id="garageActivationCodeInput" placeholder="e.g. TD-LITE-XXXX-XXXX" style="flex:1;min-width:220px;text-transform:uppercase;font-family:monospace;font-weight:700;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px">
+            <button type="button" class="td-btn" id="btnGarageRedeemCode" onclick="redeemActivationCode('garageActivationCodeInput','garageActivationRedeemMsg','btnGarageRedeemCode')">Apply Code</button>
+          </div>
+          <div id="garageActivationRedeemMsg" style="display:none;margin-top:10px;font-size:12.5px;padding:10px 14px;border-radius:8px"></div>
         </div>
 
         <div class="garage-plan-footer-note">
