@@ -5293,3 +5293,38 @@ test("Client Production: signup step labels have the auth-step class", async (t)
 
   assert.ok(flowHtml.includes("is-active") || flowHtml.includes("auth-step-active"), "Active step must have active indicator class");
 });
+
+test("Client Production: stepper has 6 bubbles, 5 connectors, and zero stray tooltips or bare numbers", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("showTorqDeskAuth('signup')");
+  h.eval("signupState.currentStep = 1; renderSignupFlow();");
+
+  const flowHtml = h.eval("document.getElementById('authSignupFlow')?.innerHTML || ''");
+
+  // 1. Stepper has 6 bubbles and 5 connectors
+  const bubbles = (flowHtml.match(/class="[^"]*\bauth-step-bubble\b[^"]*"/g) || []);
+  const connectors = (flowHtml.match(/class="[^"]*\bauth-step-line\b[^"]*"/g) || []);
+  assert.equal(bubbles.length, 6, "Stepper must have exactly 6 bubbles");
+  assert.equal(connectors.length, 5, "Stepper must have exactly 5 connectors");
+
+  // 2. No "Step 6: Ready" tooltip text or title attributes creating hover tooltips
+  assert.ok(!flowHtml.includes('title="Step 6: Ready"'), "Must not have 'Step 6: Ready' tooltip attribute");
+  assert.ok(!flowHtml.includes('title="Step'), "Must not have title attributes creating browser tooltips on steps");
+  assert.ok(!flowHtml.includes('data-tip'), "Must not contain data-tip tooltips");
+
+  // 3. No text node matching exactly "1" to "6" outside the stepper
+  // Labels row has only step labels, no bare numbers
+  const labelsText = h.eval("document.querySelector('.auth-step-labels')?.textContent || ''");
+  assert.ok(!/\b[1-6]\b/.test(labelsText), "Labels row must not contain bare step numbers");
+
+  // Head / kicker has no bare numbers
+  const kickerText = h.eval("document.querySelector('.auth-step-kicker')?.textContent || ''");
+  assert.ok(!/\b[1-6]\b/.test(kickerText), "Step kicker must not contain bare numbers");
+
+  // Outside the stepper, no text token matching exactly "1" to "6"
+  const cardText = h.eval("document.querySelector('.auth-step-card')?.textContent || ''");
+  const hasBareNumberOutside = cardText.split(/\s+/).some(token => /^([1-6])$/.test(token));
+  assert.equal(hasBareNumberOutside, false, "No text node matching exactly '1' to '6' outside the stepper");
+});
