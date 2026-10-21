@@ -4570,7 +4570,7 @@ function openPlanComparisonModal(){
   modal.setAttribute('role','dialog');
   modal.setAttribute('aria-modal','true');
 
-  modal.innerHTML='<div class="admin-modal-box" style="max-width:820px" id="planComparisonModalBox"></div>';
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:1000px" id="planComparisonModalBox"></div>';
   modal.onclick=e=>{if(e.target===modal)closePlanComparisonModal();};
   document.body.appendChild(modal);
 
@@ -4587,15 +4587,21 @@ function renderPlanComparisonModalContent(){
   if(!box)return;
 
   const isYearly=(currentComparisonCycle==='yearly');
-  const curPlan=(userPlanStatus?.plan||'lite').toLowerCase();
+  const serverPlanKey=(userPlanStatus?.plan || '').toLowerCase();
+  const isRouteBlocked=Boolean(userPlanError);
+  const curPlan=serverPlanKey || 'free';
 
   box.innerHTML='<div class="admin-modal-head">'+
     '<div>'+
-      '<h3 style="margin:0;font-size:18px">Choose the Right Plan for Your Garage</h3>'+
+      '<h3 style="margin:0;font-size:18px">Choose the Right Plan for Your Vehicles</h3>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Transparent pricing with zero hidden fees. Upgrade or cancel anytime.</p>'+
     '</div>'+
     '<button type="button" class="ghost" onclick="closePlanComparisonModal()">✕</button>'+
   '</div>'+
+  (isRouteBlocked?
+    '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:12px;margin:12px 0">'+
+      '<b>Not verified (plan route BLOCKED):</b> Subscription server route returned error. Showing catalog in fallback mode.'+
+    '</div>':'')+
   '<div style="display:flex;justify-content:center;margin:16px 0 20px">'+
     '<div class="plan-cycle-toggle">'+
       '<button type="button" class="plan-cycle-btn '+(isYearly?'':'active')+'" onclick="setComparisonCycle(\'monthly\')">Monthly Billing</button>'+
@@ -4603,73 +4609,120 @@ function renderPlanComparisonModalContent(){
     '</div>'+
   '</div>'+
   '<div class="plan-cards-grid">'+
-    '<div class="plan-tier-card '+(curPlan==='lite'?'current':'')+'">'+
+    '<div class="plan-tier-card '+(curPlan==='free'?'current':'')+'">'+
       '<div class="plan-tier-head">'+
-        '<span class="admin-badge plan-lite">LITE</span>'+
-        '<h4 style="margin:8px 0 4px">Free Forever</h4>'+
+        '<span class="admin-badge plan-lite">FREE</span>'+
+        '<h4 style="margin:8px 0 4px">Free</h4>'+
         '<div class="plan-tier-price">₹0<small>/mo</small></div>'+
         '<p class="muted" style="font-size:12px">Essential vehicle maintenance tracker for individual owners.</p>'+
+        (curPlan==='free'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
       '</div>'+
       '<ul class="plan-tier-features">'+
-        '<li><b>1 Vehicle</b> maximum</li>'+
-        '<li><b>10 MB</b> Document Vault</li>'+
-        '<li>Basic Service History Logs</li>'+
-        '<li>Digital Maintenance Reminders</li>'+
-        '<li>Standard Community Support</li>'+
+        '<li><b>1 Vehicle</b></li>'+
+        '<li><b>50 MB</b> Document Vault</li>'+
+        '<li>Basic Service History (3 years)</li>'+
+        '<li>Current documents only (no archive)</li>'+
+        '<li>Standard Maintenance Reminders</li>'+
       '</ul>'+
       '<div class="plan-tier-action">'+
-        (curPlan==='lite'?
+        (curPlan==='free'?
           '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
-          '<button type="button" class="ghost" disabled style="width:100%">Base Tier</button>')+
+          '<button type="button" class="ghost" disabled style="width:100%">Free Tier</button>')+
       '</div>'+
     '</div>'+
-    '<div class="plan-tier-card featured '+(curPlan==='premium'?'current':'')+'">'+
-      '<div class="plan-ribbon">MOST POPULAR</div>'+
+    '<div class="plan-tier-card featured '+(curPlan==='plus'?'current':'')+'">'+
+      '<div class="plan-ribbon">RECOMMENDED</div>'+
       '<div class="plan-tier-head">'+
-        '<span class="admin-badge plan-premium">PREMIUM</span>'+
-        '<h4 style="margin:8px 0 4px">Vehicle Owner Plus</h4>'+
-        '<div class="plan-tier-price">'+(isYearly?'₹708<small>/yr</small>':'₹69<small>/mo</small>')+'</div>'+
-        '<p class="muted" style="font-size:12px">'+(isYearly?'₹59/mo equivalent, billed annually':'Billed monthly, cancel anytime')+'</p>'+
+        '<span class="admin-badge plan-premium">PLUS</span>'+
+        '<h4 style="margin:8px 0 4px">Plus</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹59<small>/mo</small>':'₹69<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'₹708 billed annually (Save 15%)':'₹69 billed monthly, cancel anytime')+'</p>'+
+        (curPlan==='plus'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
       '</div>'+
       '<ul class="plan-tier-features">'+
-        '<li><b>Up to 5 Vehicles</b></li>'+
-        '<li><b>500 MB</b> Encrypted Document Vault</li>'+
-        '<li><b>RTO Transfer Pack</b> (Form 29 &amp; 30 PDF)</li>'+
-        '<li>Export Full Vehicle Dossier</li>'+
-        '<li>Priority Support Tickets (24h SLA)</li>'+
-        '<li>Ad-free Experience</li>'+
+        '<li><b>1 Vehicle</b></li>'+
+        '<li><b>Full Access</b> Document Archive &amp; Vault</li>'+
+        '<li>Full Lifetime Service History</li>'+
+        '<li>Form 29 &amp; 30 RTO Transfer Packets</li>'+
+        '<li>Export Full A4 Vehicle Report</li>'+
+        '<li>Maintenance &amp; Expiry Reminders</li>'+
       '</ul>'+
       '<div class="plan-tier-action">'+
-        (curPlan==='premium'?
+        (curPlan==='plus'?
           '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
-          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToPremium" onclick="openUpgradeRequestModal(\'premium\')">Upgrade to Premium</button>')+
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToPlus" onclick="openUpgradeRequestModal(\'plus\')">Upgrade to Plus</button>')+
       '</div>'+
     '</div>'+
-    '<div class="plan-tier-card '+(curPlan==='ultra'?'current':'')+'">'+
+    '<div class="plan-tier-card '+(curPlan==='family3'?'current':'')+'">'+
       '<div class="plan-tier-head">'+
-        '<span class="admin-badge plan-ultra">ULTRA</span>'+
-        '<h4 style="margin:8px 0 4px">Workshop SaaS</h4>'+
-        '<div class="plan-tier-price">'+(isYearly?'₹1999<small>/yr</small>':'₹199<small>/mo</small>')+'</div>'+
-        '<p class="muted" style="font-size:12px">'+(isYearly?'₹166/mo equivalent, billed annually':'For professional garages & workshops')+'</p>'+
+        '<div style="display:flex;align-items:center;justify-content:space-between">'+
+          '<span class="admin-badge plan-premium">FAMILY 3</span>'+
+          '<span class="sec-tag warn" style="font-size:10px">Pending confirmation</span>'+
+        '</div>'+
+        '<h4 style="margin:8px 0 4px">Family 3</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹129<small>/mo</small>':'₹149<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'Billed annually (₹129/mo equivalent)':'Billed monthly, cancel anytime')+'</p>'+
+        (curPlan==='family3'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
       '</div>'+
       '<ul class="plan-tier-features">'+
-        '<li><b>Unlimited Vehicles</b></li>'+
-        '<li><b>5 GB</b> Document Cloud Storage</li>'+
-        '<li>Digital Job Cards &amp; Invoicing</li>'+
-        '<li>Multi-bay Mechanic Management</li>'+
-        '<li>WhatsApp Customer Updates</li>'+
-        '<li>Dedicated Support Representative</li>'+
+        '<li><b>Up to 3 Vehicles</b></li>'+
+        '<li><b>Full Access</b> Document Archive &amp; Vault</li>'+
+        '<li>Full Lifetime Service History</li>'+
+        '<li>Form 29 &amp; 30 Packets &amp; A4 Report</li>'+
+        '<li>Multi-Vehicle Maintenance Reminders</li>'+
       '</ul>'+
       '<div class="plan-tier-action">'+
-        (curPlan==='ultra'?
+        (curPlan==='family3'?
           '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
-          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToUltra" onclick="openUpgradeRequestModal(\'ultra\')">Upgrade to Ultra</button>')+
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToFamily3" onclick="openUpgradeRequestModal(\'family3\')">Upgrade to Family 3</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card '+(curPlan==='family9'?'current':'')+'">'+
+      '<div class="plan-tier-head">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between">'+
+          '<span class="admin-badge plan-premium">FAMILY 9</span>'+
+          '<span class="sec-tag warn" style="font-size:10px">Pending confirmation</span>'+
+        '</div>'+
+        '<h4 style="margin:8px 0 4px">Family 9</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹299<small>/mo</small>':'₹349<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'Billed annually (₹299/mo equivalent)':'Billed monthly, cancel anytime')+'</p>'+
+        (curPlan==='family9'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>Up to 9 Vehicles</b></li>'+
+        '<li><b>Full Access</b> Document Archive &amp; Vault</li>'+
+        '<li>Full Lifetime Service History</li>'+
+        '<li>Form 29 &amp; 30 Packets &amp; A4 Report</li>'+
+        '<li>Priority Support &amp; Fleet Overview</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='family9'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToFamily9" onclick="openUpgradeRequestModal(\'family9\')">Upgrade to Family 9</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card">'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-lite">FLEET</span>'+
+        '<h4 style="margin:8px 0 4px">10+ Vehicles</h4>'+
+        '<div class="plan-tier-price" style="font-size:22px">Contact us</div>'+
+        '<p class="muted" style="font-size:12px">Custom quota for household fleets, car clubs and organizations.</p>'+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>10+ Vehicles</b> custom quota</li>'+
+        '<li>Dedicated Account Manager</li>'+
+        '<li>Custom Data Retention &amp; Compliance</li>'+
+        '<li>No self-serve checkout</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        '<button type="button" class="secondary" style="width:100%" id="btnUpgradeToEnterprise" onclick="openUpgradeRequestModal(\'enterprise\')">Contact Team</button>'+
       '</div>'+
     '</div>'+
   '</div>';
 }
 
-function openUpgradeRequestModal(targetPlan='premium'){
+function openUpgradeRequestModal(targetPlan){
+  if(!targetPlan)targetPlan='plus';
   closePlanComparisonModal();
   let old=document.getElementById('userUpgradeRequestModal');
   if(old)old.remove();
@@ -4694,8 +4747,10 @@ function openUpgradeRequestModal(targetPlan='premium'){
       '<div class="field">'+
         '<label>Target Plan</label>'+
         '<select id="userUpgradePlanSelect">'+
-          '<option value="premium"'+(targetPlan==='premium'?' selected':'')+'>Vehicle Owner Plus (₹69/mo or ₹708/yr)</option>'+
-          '<option value="ultra"'+(targetPlan==='ultra'?' selected':'')+'>Workshop SaaS Ultra (₹199/mo or ₹1999/yr)</option>'+
+          '<option value="plus"'+(targetPlan==='plus'||targetPlan==='premium'?' selected':'')+'>Vehicle Owner Plus (₹69/mo or ₹708/yr)</option>'+
+          '<option value="family3"'+(targetPlan==='family3'?' selected':'')+'>Family 3 (₹149/mo)</option>'+
+          '<option value="family9"'+(targetPlan==='family9'?' selected':'')+'>Family 9 (₹349/mo)</option>'+
+          '<option value="enterprise"'+(targetPlan==='enterprise'?' selected':'')+'>10+ Vehicles (Contact us)</option>'+
         '</select>'+
       '</div>'+
       '<div class="field">'+
@@ -4712,7 +4767,7 @@ function openUpgradeRequestModal(targetPlan='premium'){
       '</div>'+
       '<div class="field">'+
         '<label>Optional Notes or Billing Requirement</label>'+
-        '<textarea id="userUpgradeNotesInput" rows="2" placeholder="e.g. Need GST invoice for workshop..."></textarea>'+
+        '<textarea id="userUpgradeNotesInput" rows="2" placeholder="e.g. Need GST invoice for records..."></textarea>'+
       '</div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeUpgradeRequestModal()">Cancel</button>'+
