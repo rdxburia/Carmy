@@ -1156,3 +1156,25 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
      EXISTS
      ```
 - **Status:** Read-only inspection completed. No files modified in application code.
+
+
+## 2026-10-21 — Dev: Localhost-Only Profile Gate Bypass for Feature Testing
+
+- **Branch:** `feat/frontend-roadmap`
+- **Task & Scope:**
+  - Added a LOCAL-ONLY bypass for `checkProfileGate` so dashboard and customer portal features can be tested on localhost while backend routes (`/api/profile/status`) are missing or unmerged.
+  - **Rules & Guardrails Enforced:**
+    1. Active ONLY when `window.location.hostname` is `"localhost"` or `"127.0.0.1"` AND `localStorage.getItem('td_dev_bypass_profile_gate') === '1'`.
+    2. Default is OFF. Production and staging hostnames (`rdxburia.github.io`, `carmy-ticket-staging.pages.dev`) NEVER enable it even if the flag is set in localStorage.
+    3. When bypass is active, displays a visible sticky yellow banner (`#devProfileGateBypassBanner`, `.backend-dev-bypass-banner`): `"DEV BYPASS: profile gate disabled (localhost only)"`.
+    4. When bypass is inactive or on non-localhost hosts, removes the dev banner and executes normal gate enforcement (fails closed if `profile_status` capability is missing).
+    5. Gate logic preserved: `checkProfileGate(u)` was wrapped, not removed.
+    6. No changes to backend, worker code, database migrations, or production configuration.
+- **Files Modified:**
+  - `js/app.js`: Added `isLocalhostProfileGateBypass()`, `showDevProfileGateBypassBanner()`, `removeDevProfileGateBypassBanner()`; wrapped `checkProfileGate(u)` (lines ~1621–1672); exported functions on `window`.
+  - `css/styles.css`: Added `.backend-dev-bypass-banner` with sticky top positioning, amber background (`#fef3c7`), border (`#f59e0b`), and dark amber text (`#92400e`).
+  - `index.html`: Bumped styles version parameter (`css/styles.css?v=2026.10.21-dev-bypass`).
+  - `tests/customer-portal-regression.test.mjs`: Added automated test `"Phase 8 / Dev: Localhost-only profile gate bypass is OFF on production hostnames even if flag is set, and ON only on localhost with flag"`.
+- **Test Results:**
+  - Total test count: 185 tests across 9 test suites.
+  - Result: 185 pass, 0 fail.

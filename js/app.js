@@ -1617,11 +1617,58 @@ function finishSignup() {
   nav('dashboard');
 }
 
+/* UI-ONLY: Localhost profile gate bypass for feature testing when backend routes are missing. */
+function isLocalhostProfileGateBypass() {
+  try {
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+      ? String(window.location.hostname).toLowerCase().trim()
+      : '';
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+    if (!isLocalhost) return false;
+    return typeof localStorage !== 'undefined' && localStorage.getItem('td_dev_bypass_profile_gate') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function showDevProfileGateBypassBanner() {
+  if (typeof document === 'undefined') return;
+  let banner = document.getElementById('devProfileGateBypassBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'devProfileGateBypassBanner';
+    banner.className = 'backend-dev-bypass-banner';
+    banner.setAttribute('role', 'alert');
+    banner.textContent = 'DEV BYPASS: profile gate disabled (localhost only)';
+    if (document.body) {
+      if (typeof document.body.prepend === 'function') {
+        document.body.prepend(banner);
+      } else if (typeof document.body.appendChild === 'function') {
+        document.body.appendChild(banner);
+      }
+    }
+  }
+}
+
+function removeDevProfileGateBypassBanner() {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('devProfileGateBypassBanner');
+  if (banner) banner.remove();
+}
+
 /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
 async function checkProfileGate(u) {
   /* UI-ONLY: Team and admin role check in browser. Backend enforces server-side. */
   const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'team_lead' || u.role === 'support_agent' || u.role === 'support_executive'));
   if (isCandidateAdmin) return true;
+
+  /* UI-ONLY: Localhost dev bypass for testing when backend routes are missing. */
+  if (isLocalhostProfileGateBypass()) {
+    showDevProfileGateBypassBanner();
+    removeProfileGateOverlay();
+    return true;
+  }
+  removeDevProfileGateBypassBanner();
 
   if (typeof backendAvailable === 'function' && !backendAvailable('profile_status')) {
     renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile gate capability is BLOCKED because the backend route is not deployed.');
@@ -1866,6 +1913,9 @@ window.submitMobileOtp = submitMobileOtp;
 window.submitSignupProfile = submitSignupProfile;
 window.finishSignup = finishSignup;
 window.checkProfileGate = checkProfileGate;
+window.isLocalhostProfileGateBypass = isLocalhostProfileGateBypass;
+window.showDevProfileGateBypassBanner = showDevProfileGateBypassBanner;
+window.removeDevProfileGateBypassBanner = removeDevProfileGateBypassBanner;
 window.removeProfileGateOverlay = removeProfileGateOverlay;
 window.renderProfileGateBlocked = renderProfileGateBlocked;
 window.renderProfileGateMissing = renderProfileGateMissing;

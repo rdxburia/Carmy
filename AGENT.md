@@ -326,3 +326,14 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
   * `origin/main` HEAD: `e89a84f`.
   * `origin/feat/support-ticket-backend-v2` HEAD: `13655ce`.
   * Checked existence of `worker/migrations/0008_team_members.sql` on `origin/feat/support-ticket-backend-v2`: verified **EXISTS**.
+
+
+## 2026-10-21 — Dev: Localhost-Only Profile Gate Bypass for Feature Testing
+- Scope: Added local-only bypass for `checkProfileGate` on `feat/frontend-roadmap`.
+  * Condition: `(hostname === 'localhost' || hostname === '127.0.0.1') && localStorage.getItem('td_dev_bypass_profile_gate') === '1'`.
+  * Default: OFF. Hostnames like `rdxburia.github.io` and `carmy-ticket-staging.pages.dev` never trigger bypass even if localStorage key is present.
+  * Visual feedback: Shows top sticky yellow banner `#devProfileGateBypassBanner` with text `"DEV BYPASS: profile gate disabled (localhost only)"`.
+  * Non-localhost / flag absent: Dev banner removed, gate runs fail-closed if `profile_status` capability missing.
+  * Files modified: `js/app.js`, `css/styles.css`, `index.html`, `tests/customer-portal-regression.test.mjs`, `PROGRESS.md`, `AGENT.md`.
+  * Regression test added: Confirmed 185/185 tests passing in `npm.cmd test`.
+  * Backend, migrations, and production untouched.

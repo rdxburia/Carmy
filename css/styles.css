@@ -4925,3 +4925,17 @@ body.td-admin-mode #admin.view.active {
   border-top: 1px dashed #cbd5e1;
   font-weight: 500;
 }
+/* UI-ONLY: Localhost profile gate dev bypass banner */
+.backend-dev-bypass-banner {
+  background: #fef3c7;
+  color: #92400e;
+  border-bottom: 2px solid #f59e0b;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 99999;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}

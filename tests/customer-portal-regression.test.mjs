@@ -269,7 +269,7 @@ function createAppHarness(overrides = {}) {
       return results;
     },
     head: { ...makeEl('head'), appendChild: () => {} },
-    body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, contains: () => true }
+    body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, prepend: () => {}, contains: () => true }
   };
 
   const activeTimers = new Set();
@@ -468,6 +468,9 @@ function createAppHarness(overrides = {}) {
     context.submitSignupProfile = context.window.submitSignupProfile;
     context.finishSignup = context.window.finishSignup;
     context.checkProfileGate = context.window.checkProfileGate;
+    context.isLocalhostProfileGateBypass = context.window.isLocalhostProfileGateBypass;
+    context.showDevProfileGateBypassBanner = context.window.showDevProfileGateBypassBanner;
+    context.removeDevProfileGateBypassBanner = context.window.removeDevProfileGateBypassBanner;
     context.removeProfileGateOverlay = context.window.removeProfileGateOverlay;
     context.renderProfileGateBlocked = context.window.renderProfileGateBlocked;
     context.renderProfileGateMissing = context.window.renderProfileGateMissing;
@@ -4536,6 +4539,93 @@ test("Phase 8 Profile Gate: Every login checks GET /api/profile/status, fails cl
   const teamMeResult = await h.eval("checkProfileGate({ id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' })");
   assert.equal(teamMeResult, true, "Team member must bypass vehicle owner profile gate");
 });
+
+test("Phase 8 / Dev: Localhost-only profile gate bypass is OFF on production hostnames even if flag is set, and ON only on localhost with flag", async (t) => {
+  const h = createAppHarness({
+    db: {
+      from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }) }),
+      auth: { getUser: async () => ({ data: { user: { id: "u-dev-1", email: "owner@example.com" } }, error: null }) }
+    }
+  });
+
+  // Ensure backend profile_status capability is false (simulating missing backend route)
+  h.eval("setBackendCapabilities({ profile_status: false });");
+
+  // 1. By default, bypass is OFF
+  let bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF by default");
+
+  // 2. Production hostname (rdxburia.github.io) with flag set -> must remain OFF
+  await h.eval(`
+    window.location.hostname = 'rdxburia.github.io';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF on production hostname even with localStorage flag set");
+
+  let gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, false, "Gate must block access on production hostname");
+  assert.ok(h.elements.get('profileGateOverlay'), "Overlay must be rendered on production hostname");
+  assert.ok(!h.elements.get('devProfileGateBypassBanner'), "Dev banner must NOT appear on production hostname");
+
+  // 3. Staging hostname (carmy-ticket-staging.pages.dev) with flag set -> must remain OFF
+  await h.eval(`
+    window.location.hostname = 'carmy-ticket-staging.pages.dev';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF on staging hostname even with localStorage flag set");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, false, "Gate must block access on staging hostname");
+  assert.ok(!h.elements.get('devProfileGateBypassBanner'), "Dev banner must NOT appear on staging hostname");
+
+  // 4. Localhost WITHOUT flag -> must remain OFF
+  await h.eval(`
+    window.location.hostname = 'localhost';
+    localStorage.removeItem('td_dev_bypass_profile_gate');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF on localhost when flag is absent");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, false, "Gate must block access on localhost when flag is absent");
+  assert.ok(!h.elements.get('devProfileGateBypassBanner'), "Dev banner must NOT appear without flag");
+
+  // 5. Localhost WITH flag ('1') -> must be ON and show yellow banner
+  await h.eval(`
+    window.location.hostname = 'localhost';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, true, "Bypass must be ON on localhost when flag is set to '1'");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, true, "Gate must allow access on localhost when bypass is active");
+  assert.ok(!h.elements.get('profileGateOverlay'), "Overlay must be removed when bypass is active");
+
+  const banner = h.elements.get('devProfileGateBypassBanner');
+  assert.ok(banner, "Dev banner must be in DOM when bypass is active");
+  assert.equal(banner.textContent, "DEV BYPASS: profile gate disabled (localhost only)");
+
+  // 6. 127.0.0.1 WITH flag ('1') -> also ON
+  await h.eval(`
+    window.location.hostname = '127.0.0.1';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, true, "Bypass must be ON on 127.0.0.1 when flag is set to '1'");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, true, "Gate must allow access on 127.0.0.1 when bypass is active");
+
+  // Cleanup harness
+  await h.eval(`
+    localStorage.removeItem('td_dev_bypass_profile_gate');
+    removeDevProfileGateBypassBanner();
+  `);
+});
+
 
 test("Phase 8 Profile Edit: Mobile change in Account screen requires OTP; name/address edit does not; shows BLOCKED when route missing", async (t) => {
   let profileSavedValues = null;
