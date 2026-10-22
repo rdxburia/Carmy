@@ -281,7 +281,6 @@ function createAppHarness(overrides = {}) {
       activeTimers.delete(t);
       cb(...cbArgs);
     }, ms, ...args);
-    if (t && typeof t.unref === 'function') t.unref();
     activeTimers.add(t);
     return t;
   };
@@ -293,7 +292,6 @@ function createAppHarness(overrides = {}) {
 
   const customSetInterval = (cb, ms, ...args) => {
     const id = setInterval(cb, ms, ...args);
-    if (id && typeof id.unref === 'function') id.unref();
     activeIntervals.add(id);
     return id;
   };
@@ -4552,6 +4550,7 @@ test("Phase 8 / Dev: Localhost-only profile gate bypass is OFF on production hos
       auth: { getUser: async () => ({ data: { user: { id: "u-dev-1", email: "owner@example.com" } }, error: null }) }
     }
   });
+  if (t?.after) t.after(() => h.teardown());
 
   // Ensure backend profile_status capability is false (simulating missing backend route)
   h.eval("setBackendCapabilities({ profile_status: false });");
