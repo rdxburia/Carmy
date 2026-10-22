@@ -5435,3 +5435,24 @@ test("Plans Phase 7: No plan price is written to localStorage", async (t) => {
   assert.ok(!storageDump.includes("79"), "Updated monthly price 79 must not be written to localStorage");
   assert.ok(!storageDump.includes("750"), "Updated yearly price 750 must not be written to localStorage");
 });
+
+test("Plans Phase 7: when plan route returns 404, card contains btnOpenPlanComparisonBlocked and no price is written to localStorage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    userPlanError = { status: 404, message: 'Route /api/plan/status returned 404' };
+    userPlanStatus = null;
+  `);
+
+  const cardHtml = h.eval("renderPlanStatusCard()");
+  assert.ok(cardHtml.includes('id="btnOpenPlanComparisonBlocked"'), "Card must contain button id btnOpenPlanComparisonBlocked");
+  assert.ok(cardHtml.includes("View Plans"), "Button text must be 'View Plans'");
+  assert.ok(cardHtml.includes("Plan status is not verified yet. You can still view plans. Upgrades are submitted for manual review."), "Card must contain unverified notice note");
+
+  // Opening the modal when userPlanStatus is null does not write any price to localStorage
+  h.eval("openPlanComparisonModal()");
+  const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
+  assert.ok(!storageDump.includes("69") && !storageDump.includes("708"), "Opening plan comparison modal must not write plan prices to localStorage");
+});

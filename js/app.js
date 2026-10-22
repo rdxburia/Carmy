@@ -4434,16 +4434,25 @@ function updatePlanStatusCardDom(){
 }
 
 function renderPlanStatusCard(){
+  const blockedActionHtml = '<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;display:flex;flex-direction:column;gap:8px">'+
+    '<div><button type="button" class="primary btn-sm" id="btnOpenPlanComparisonBlocked" onclick="openPlanComparisonModal()">View Plans</button></div>'+
+    '<small class="muted">Plan status is not verified yet. You can still view plans. Upgrades are submitted for manual review.</small>'+
+  '</div>';
+
   if(typeof window.backendAvailable==='function'&&!window.backendAvailable('plan_status')&&!userPlanStatus){
     return '<div class="card plan-status-card" id="userPlanStatusCard">'+
       (typeof renderAdminBlockedCard==='function'?renderAdminBlockedCard('/api/plan/status','GET','Capability plan_status is disabled (404).'):'<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>GET /api/plan/status</code></div>')+
+      blockedActionHtml+
     '</div>';
   }
   if(userPlanLoading){
     return '<div class="card plan-status-card" id="userPlanStatusCard"><div style="text-align:center;padding:24px"><span class="spinner-sm"></span> Loading subscription status from <code>GET /api/plan/status</code>...</div></div>';
   }
   if(userPlanError){
-    return '<div class="card plan-status-card" id="userPlanStatusCard">'+renderAdminBlockedCard('/api/plan/status','GET',userPlanError.message||'Plan status endpoint unavailable (404).')+'</div>';
+    return '<div class="card plan-status-card" id="userPlanStatusCard">'+
+      renderAdminBlockedCard('/api/plan/status','GET',userPlanError.message||'Plan status endpoint unavailable (404).')+
+      blockedActionHtml+
+    '</div>';
   }
 
   const st = userPlanStatus || null;
