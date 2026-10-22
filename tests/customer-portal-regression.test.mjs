@@ -5553,3 +5553,136 @@ test("Plans Phase 7: Plan modal redeem success path reloads plan status via GET 
   const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
   assert.ok(!storageDump.includes("plus") || !storageDump.includes("plan_price"), "Redeem must not write plan or plan price to localStorage");
 });
+
+
+test("Ticket Tabs Phase 10: Owner tab - tickets with status solved or closed do NOT appear under Open tab", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-1', email: 'owner@example.com' };
+    userSupportTickets = [
+      { id: 'TD-SOLVED-1', subject: 'Solved ticket issue', status: 'solved', priority: 'normal', created_at: '2026-10-20T10:00:00Z' },
+      { id: 'TD-CLOSED-2', subject: 'Closed ticket issue', status: 'closed', priority: 'normal', created_at: '2026-10-21T10:00:00Z' }
+    ];
+    customerTicketTab = 'open';
+  `);
+
+  const openHtml = h.eval("renderTicketPastList()");
+  assert.ok(!openHtml.includes("TD-SOLVED-1"), "Solved ticket must not appear under Open tab");
+  assert.ok(!openHtml.includes("TD-CLOSED-2"), "Closed ticket must not appear under Open tab");
+  assert.ok(openHtml.includes("No open tickets."), "Open tab must show 'No open tickets.' when only solved/closed tickets exist");
+  assert.ok(openHtml.includes("Open (0)"), "Open tab button count must be 0");
+  assert.ok(openHtml.includes("Closed (2)"), "Closed tab button count must be 2");
+
+  h.eval("setCustomerTicketTab('closed')");
+  const closedHtml = h.eval("renderTicketPastList()");
+  assert.ok(closedHtml.includes("TD-SOLVED-1"), "Solved ticket must appear under Closed tab");
+  assert.ok(closedHtml.includes("TD-CLOSED-2"), "Closed ticket must appear under Closed tab");
+});
+
+test("Ticket Tabs Phase 10: Owner tab - tickets with status pending appear under Open tab and not under Closed", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-1', email: 'owner@example.com' };
+    userSupportTickets = [
+      { id: 'TD-PENDING-1', subject: 'Pending query', status: 'pending', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+    customerTicketTab = 'open';
+  `);
+
+  const openHtml = h.eval("renderTicketPastList()");
+  assert.ok(openHtml.includes("TD-PENDING-1"), "Pending ticket must appear under Open tab");
+  assert.ok(openHtml.includes("Open (1)"), "Open tab button count must be 1");
+  assert.ok(openHtml.includes("Closed (0)"), "Closed tab button count must be 0");
+
+  h.eval("setCustomerTicketTab('closed')");
+  const closedHtml = h.eval("renderTicketPastList()");
+  assert.ok(!closedHtml.includes("TD-PENDING-1"), "Pending ticket must not appear under Closed tab");
+  assert.ok(closedHtml.includes("No closed tickets."), "Closed tab must show 'No closed tickets.' when only pending tickets exist");
+});
+
+test("Ticket Tabs Phase 10: Admin tab - counts for Open and Closed match the number of tickets in each group", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@torqdesk.com' };
+    adminTickets = [
+      { id: 'T-PENDING', status: 'pending', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-ASSIGNED', status: 'assigned', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-WORKING', status: 'working', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-NEEDINFO', status: 'need_info', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-SOLVED', status: 'solved', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-CLOSED', status: 'closed', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+  `);
+
+  const screenHtml = h.eval("renderScreenTickets()");
+  assert.ok(screenHtml.includes("Open (4)"), "Admin screen must show Open (4)");
+  assert.ok(screenHtml.includes("Closed (2)"), "Admin screen must show Closed (2)");
+
+  const statsHtml = h.eval("renderAdminStatsHtml()");
+  assert.ok(statsHtml.includes('<span class="admin-stat-val" style="color:#d97706">4</span><span class="admin-stat-label">In Progress</span>') ||
+            (statsHtml.includes(">4</span>") && statsHtml.includes("In Progress")), "In Progress stat card must match Open tab count 4");
+  assert.ok(statsHtml.includes('<span class="admin-stat-val" style="color:#16a34a">2</span><span class="admin-stat-label">Solved / Closed</span>') ||
+            (statsHtml.includes(">2</span>") && statsHtml.includes("Solved / Closed")), "Solved / Closed stat card must match Closed tab count 2");
+});
+
+test("Ticket Tabs Phase 10: Unknown status appears under Open with its raw label", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-1', email: 'owner@example.com' };
+    userSupportTickets = [
+      { id: 'TD-CUSTOM-1', subject: 'Custom status test', status: 'waiting_for_parts', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+    customerTicketTab = 'open';
+  `);
+
+  const ownerHtml = h.eval("renderTicketPastList()");
+  assert.ok(ownerHtml.includes("TD-CUSTOM-1"), "Ticket with unknown status must appear under Open tab");
+  assert.ok(ownerHtml.includes("waiting_for_parts"), "Ticket with unknown status must display its raw status label");
+
+  h.eval(`
+    adminTickets = [
+      { id: 'T-CUSTOM-2', subject: 'Admin custom status', status: 'escalated_to_tier3', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+    adminTicketTab = 'open';
+    adminStatusFilter = 'all';
+  `);
+
+  const adminHtml = h.eval("renderAdminListHtml()");
+  assert.ok(adminHtml.includes("T-CUSTOM-2"), "Admin ticket with unknown status must appear under Open tab");
+  assert.ok(adminHtml.includes("escalated_to_tier3"), "Admin ticket with unknown status must display its raw label");
+});
+
+test("Ticket Tabs Phase 10: Admin SLA breach filter only filters inside Open tab", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@torqdesk.com' };
+    const nowSec = Math.floor(Date.now() / 1000);
+    adminTickets = [
+      { id: 'T-OPEN-BREACHED', status: 'working', priority: 'urgent', sla_due_at: nowSec - 3600, created_at: new Date(Date.now() - 7200000).toISOString() },
+      { id: 'T-OPEN-HEALTHY', status: 'working', priority: 'normal', sla_due_at: nowSec + 3600, created_at: new Date().toISOString() },
+      { id: 'T-CLOSED-DOC', status: 'solved', priority: 'normal', sla_due_at: nowSec - 3600, created_at: new Date(Date.now() - 7200000).toISOString() }
+    ];
+    adminTicketTab = 'open';
+    adminStatusFilter = 'all';
+    adminSlaFilter = 'breached';
+  `);
+
+  const openBreached = h.eval("getFilteredAdminTickets().map(t => t.id)");
+  assert.ok(openBreached.includes("T-OPEN-BREACHED"), "Open tab must include breached open ticket");
+  assert.ok(!openBreached.includes("T-OPEN-HEALTHY"), "Open tab with SLA breach filter must exclude non-breached open ticket");
+
+  // When switching to closed tab, SLA breach filter does not filter out closed tickets
+  h.eval("adminTicketTab = 'closed'");
+  const closedTickets = h.eval("getFilteredAdminTickets().map(t => t.id)");
+  assert.ok(closedTickets.includes("T-CLOSED-DOC"), "Closed tab must not be filtered out by SLA breach filter");
+});

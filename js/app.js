@@ -5151,6 +5151,52 @@ function normalizeTicketStatus(st){
   return s;
 }
 
+function getTicketStatusGroup(st){
+  const s=normalizeTicketStatus(st);
+  if(s==='solved'||s==='closed')return 'closed';
+  return 'open';
+}
+
+let customerTicketTab='open';
+try{
+  if(typeof window!=='undefined'){
+    Object.defineProperty(window,'customerTicketTab',{
+      get(){ return customerTicketTab; },
+      set(v){ customerTicketTab=v; },
+      configurable:true
+    });
+  }
+}catch(_){}
+
+let adminTicketTab='all';
+try{
+  if(typeof window!=='undefined'){
+    Object.defineProperty(window,'adminTicketTab',{
+      get(){ return adminTicketTab; },
+      set(v){ adminTicketTab=v; },
+      configurable:true
+    });
+  }
+}catch(_){}
+
+function setCustomerTicketTab(tab){
+  customerTicketTab=(tab==='closed')?'closed':'open';
+  const pastCont=document.getElementById('ticketPastContainer');
+  if(pastCont){
+    pastCont.innerHTML=renderTicketPastList();
+    wireCustomerTicketList();
+  }
+}
+
+function setAdminTicketTab(tab){
+  adminTicketTab=(tab==='closed')?'closed':'open';
+  if(adminStatusFilter!=='all'){
+    const grp=(adminStatusFilter==='solved'||adminStatusFilter==='closed')?'closed':'open';
+    if(grp!==adminTicketTab)adminStatusFilter='all';
+  }
+  renderAdminViewContent();
+}
+
 function updateHelpUnreadBadge(count){
   ticketUnreadCount=Number(count)||0;
   const badgeText=ticketUnreadCount>99?'99+':String(ticketUnreadCount);
@@ -5351,14 +5397,30 @@ function renderTicketPastList(){
     }catch(_){ existing=[]; }
   }
   const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
-  if(!userTickets.length)return '';
-  return '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
-    userTickets.map(t=>{
+  const openTickets=userTickets.filter(t=>getTicketStatusGroup(t.status)==='open');
+  const closedTickets=userTickets.filter(t=>getTicketStatusGroup(t.status)==='closed');
+  const openCount=openTickets.length;
+  const closedCount=closedTickets.length;
+
+  const currentTab=(customerTicketTab==='closed')?'closed':'open';
+  const displayed=(currentTab==='closed')?closedTickets:openTickets;
+
+  const tabsHtml='<div class="ticket-tab-bar help-tabs-bar" style="margin:12px 0 14px">'+
+    '<button type="button" class="help-tab-btn '+(currentTab==='open'?'active':'')+'" id="ownerTicketTabOpen" onclick="setCustomerTicketTab(\'open\')">Open ('+openCount+')</button>'+
+    '<button type="button" class="help-tab-btn '+(currentTab==='closed'?'active':'')+'" id="ownerTicketTabClosed" onclick="setCustomerTicketTab(\'closed\')">Closed ('+closedCount+')</button>'+
+  '</div>';
+
+  let listContent='';
+  if(!displayed.length){
+    const emptyText=(currentTab==='closed')?'No closed tickets.':'No open tickets.';
+    listContent='<p class="muted ticket-empty-state" style="padding:16px 0;text-align:center">'+emptyText+'</p>';
+  }else{
+    listContent=displayed.map(t=>{
       const tid=esc(t.id||'TD-TICKET');
       const unreadBadge=t.has_unread?'<span class="ticket-unread-pill">● New reply</span>':'';
       const reg=t.car_reg?'<span class="muted">· '+esc(t.car_reg)+'</span>':'';
       const timeStr=esc(formatTimestamp(t.updated_at||t.created_at));
-      return '<div class="ticket-row-accessible" tabindex="0" role="button" aria-label="View ticket '+tid+'" onclick="openCustomerTicketDetail(\''+tid+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCustomerTicketDetail(\''+tid+'\');}">'+
+      return '<div class="ticket-row-accessible" data-ticket-id="'+tid+'" tabindex="0" role="button" aria-label="View ticket '+tid+'" onclick="openCustomerTicketDetail(\''+tid+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCustomerTicketDetail(\''+tid+'\');}">'+
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
           '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
             '<code style="font-weight:700;color:#2563eb">'+tid+'</code> '+
@@ -5371,8 +5433,16 @@ function renderTicketPastList(){
         '</div>'+
         '<div class="ticket-customer-row-subject" style="font-weight:600;color:#0f172a;font-size:14px;margin-top:4px"></div>'+
       '</div>';
-    }).join('')+
-    '</div></div>';
+    }).join('');
+  }
+
+  return '<div class="ticket-past-card">'+
+    '<h4>Your Submitted Tickets ('+userTickets.length+')</h4>'+
+    tabsHtml+
+    '<div style="margin-top:10px" id="ownerTicketListItems">'+
+      listContent+
+    '</div>'+
+  '</div>';
 }
 
 function wireCustomerTicketList(){
@@ -5382,10 +5452,15 @@ function wireCustomerTicketList(){
     try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
   }
   const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
+  const currentTab=(customerTicketTab==='closed')?'closed':'open';
+  const displayed=userTickets.filter(t=>getTicketStatusGroup(t.status)===currentTab);
+
   rows.forEach((row,i)=>{
+    const tid=row.getAttribute('data-ticket-id');
+    const t=(tid?userTickets.find(item=>String(item.id)===String(tid)):null)||displayed[i]||userTickets[i];
     const subEl=row.querySelector('.ticket-customer-row-subject');
-    if(subEl&&userTickets[i]){
-      subEl.textContent=userTickets[i].subject||'No Subject';
+    if(subEl&&t){
+      subEl.textContent=t.subject||'No Subject';
     }
   });
 }
@@ -5861,6 +5936,11 @@ function formatCategory(cat){
 
 function getFilteredAdminTickets(){
   return adminTickets.filter(t=>{
+    if(adminTicketTab!=='all'){
+      const group=getTicketStatusGroup(t.status);
+      if(group!==adminTicketTab)return false;
+    }
+
     const s=normalizeTicketStatus(t.status);
     if(adminStatusFilter!=='all'&&s!==adminStatusFilter)return false;
     if(adminAssigneeFilter==='me'){
@@ -5873,7 +5953,8 @@ function getFilteredAdminTickets(){
       if(String(t.priority||'normal').toLowerCase()!==adminPriorityFilter)return false;
     }
     if(adminSlaFilter==='breached'){
-      if(!isTicketSlaBreached(t))return false;
+      if(adminTicketTab==='open'&&!isTicketSlaBreached(t))return false;
+      if(adminTicketTab==='all'&&!isTicketSlaBreached(t))return false;
     }
     if(adminSearchQuery.trim()){
       const q=adminSearchQuery.toLowerCase();
@@ -5890,17 +5971,17 @@ function getFilteredAdminTickets(){
 
 function renderAdminStatsHtml(){
   const totalCount=adminTickets.length;
+  const openCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='open').length;
+  const closedCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='closed').length;
   const pendingCount=adminTickets.filter(t=>normalizeTicketStatus(t.status)==='pending').length;
-  const workingCount=adminTickets.filter(t=>['assigned','working','need_info'].includes(normalizeTicketStatus(t.status))).length;
   const slaBreachedCount=adminTickets.filter(isTicketSlaBreached).length;
-  const solvedCount=adminTickets.filter(t=>['solved','closed'].includes(normalizeTicketStatus(t.status))).length;
 
   return '<div class="admin-stats-grid">'+
     '<div class="admin-stat-card"><span class="admin-stat-val">'+totalCount+'</span><span class="admin-stat-label">Total Tickets</span></div>'+
     '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#b91c1c">'+slaBreachedCount+'</span><span class="admin-stat-label">⚠️ SLA Breached</span></div>'+
     '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#2563eb">'+pendingCount+'</span><span class="admin-stat-label">Pending Triage</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+workingCount+'</span><span class="admin-stat-label">In Progress / Working</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+solvedCount+'</span><span class="admin-stat-label">Solved / Closed</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+openCount+'</span><span class="admin-stat-label">In Progress</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+closedCount+'</span><span class="admin-stat-label">Solved / Closed</span></div>'+
   '</div>';
 }
 
@@ -5943,11 +6024,18 @@ function renderAdminListHtml(){
   const displayed=getFilteredAdminTickets();
 
   if(!displayed.length){
+    const hasFilter = (adminStatusFilter!=='all'||adminAssigneeFilter!=='all'||adminPriorityFilter!=='all'||adminSlaFilter!=='all'||adminSearchQuery);
+    const emptyMsg = (adminTickets.length===0)
+      ? 'No customer support tickets have been submitted yet.'
+      : (hasFilter
+          ? 'No tickets match the selected filters.'
+          : (adminTicketTab==='closed' ? 'No closed tickets.' : 'No open tickets.'));
+
     return '<div class="admin-state-card">'+
       '<div class="admin-state-icon">🎫</div>'+
       '<h3>No Support Tickets Found</h3>'+
-      '<p>'+(adminTickets.length===0?'No customer support tickets have been submitted yet.':'No tickets match the selected filters.')+'</p>'+
-      (adminStatusFilter!=='all'||adminAssigneeFilter!=='all'||adminPriorityFilter!=='all'||adminSlaFilter!=='all'||adminSearchQuery?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
+      '<p>'+emptyMsg+'</p>'+
+      (hasFilter?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
     '</div>';
   }
 
@@ -6784,14 +6872,20 @@ function renderScreenUpgrades(){
 }
 
 function renderScreenTickets(){
-  const statusFilters=[
+  if(adminTicketTab!=='closed')adminTicketTab='open';
+  const openCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='open').length;
+  const closedCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='closed').length;
+
+  const statusFilters=(adminTicketTab==='closed')?[
+    {id:'all',label:'All'},
+    {id:'solved',label:'Solved'},
+    {id:'closed',label:'Closed'}
+  ]:[
     {id:'all',label:'All'},
     {id:'pending',label:'Pending'},
     {id:'assigned',label:'Assigned'},
     {id:'working',label:'Working on it'},
-    {id:'need_info',label:'Required other info'},
-    {id:'solved',label:'Solved'},
-    {id:'closed',label:'Closed'}
+    {id:'need_info',label:'Required other info'}
   ];
 
   return '<div class="admin-screen-shell">'+
@@ -6811,6 +6905,10 @@ function renderScreenTickets(){
       '</div>'+
     '</div>'+
     '<div id="adminStatsContainer">'+renderAdminStatsHtml()+'</div>'+
+    '<div class="admin-ticket-tabs help-tabs-bar" style="margin:14px 0 10px">'+
+      '<button type="button" class="help-tab-btn '+(adminTicketTab==='open'?'active':'')+'" id="adminTicketTabOpen" onclick="setAdminTicketTab(\'open\')">Open ('+openCount+')</button>'+
+      '<button type="button" class="help-tab-btn '+(adminTicketTab==='closed'?'active':'')+'" id="adminTicketTabClosed" onclick="setAdminTicketTab(\'closed\')">Closed ('+closedCount+')</button>'+
+    '</div>'+
     '<div class="admin-controls-bar">'+
       '<div class="admin-filter-tabs" id="adminFilterGroup">'+
         statusFilters.map(f=>'<button type="button" class="admin-filter-pill '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+esc(f.label)+'</button>').join('')+
@@ -10125,6 +10223,14 @@ window.normalizeTicketStatus=normalizeTicketStatus;
 window.renderStatusBadge=renderStatusBadge;
 window.renderPriorityBadge=renderPriorityBadge;
 window.renderAdminListContent=renderAdminListContent;
+window.getTicketStatusGroup=getTicketStatusGroup;
+window.setCustomerTicketTab=setCustomerTicketTab;
+window.setAdminTicketTab=setAdminTicketTab;
+window.renderTicketPastList=renderTicketPastList;
+window.getFilteredAdminTickets=getFilteredAdminTickets;
+window.renderAdminStatsHtml=renderAdminStatsHtml;
+window.renderAdminListHtml=renderAdminListHtml;
+window.renderScreenTickets=renderScreenTickets;
 window.loadTeamMe=loadTeamMe;
 window.getAdminRolePermissions=getAdminRolePermissions;
 window.isTicketAssignedToCurrentSpecialist=isTicketAssignedToCurrentSpecialist;
