@@ -185,6 +185,38 @@
 }
 
 /* Plans Grid & Cards */
+.garage-plan-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0 24px;
+}
+
+.garage-cycle-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.2s;
+}
+
+.garage-cycle-btn:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.garage-cycle-btn:last-child {
+  border-radius: 0 8px 8px 0;
+  border-left: 0;
+}
+
+.garage-cycle-btn.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
 .garage-plans-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

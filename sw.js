@@ -1,8 +1,8 @@
-/* Torq Desk PWA shell. Never cache API, auth, POST or other non-GET responses. */
-const CACHE_NAME='torq-desk-shell-v14';
+/* Torq Desk PWA shell. Retired: torq-desk-shell-v15, CACHE_NAME='torq-desk-shell-v16'. Never cache API, auth, POST or other non-GET responses. */
+const CACHE_NAME='torq-desk-shell-2026.10.22-v20-tickets';
 const isLocal=self.location.hostname==='localhost'||self.location.hostname==='127.0.0.1';
 const BASE=self.location.pathname.startsWith('/Carmy/')?'/Carmy/':(isLocal?'/':'/Carmy/');
-const BUILD='2026.10.18-v14-frontend-publish';
+const BUILD='2026.10.22-v20-tickets';
 const SHELL=[
   BASE,
   BASE+'index.html',
@@ -24,6 +24,7 @@ const SHELL=[
   BASE+'css/public-site.css?v='+BUILD,
   BASE+'css/tokens.css?v='+BUILD,
   BASE+'js/public-site.js?v='+BUILD,
+  BASE+'js/plan-catalog.js?v='+BUILD,
   BASE+'js/app.js?v='+BUILD,
   BASE+'js/session-guard.js?v='+BUILD,
   BASE+'js/build-info.js?v='+BUILD,

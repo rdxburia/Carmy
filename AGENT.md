@@ -247,3 +247,93 @@ After every meaningful project task, append a dated note here and in `PROGRESS.m
 - This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
 - Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
 - Production remains HOLD and untouched. PR #161 remains open/unmerged.
+
+
+## 2026-10-19 — Phase 5: Garage Side Redesign & Administration
+- Scope: Frontend-only Super Admin garage management screen, live API loader `GET /api/admin/garages` with `.admin-blocked-card` on 404, workshop status mutation, verified onboarding wizard state preservation, and garage workspace billing/staff limits.
+- Branch: `feat/frontend-roadmap`.
+- Zero backend/Worker edits, zero DB migrations/SQL changes.
+- Test suites: `npm.cmd test` passed 160/160; `node --test tests/garage-redesign.test.mjs` passed 5/5; `node --check js/app.js` passed with zero errors.
+- Cache buster updated to `?v=2026.10.19-phase5-garage`.
+ 
+ 
+## 2026-10-19 — Phase 6: Multi-Role Team Support & First-Login Security
+- Scope: Frontend-only RBAC multi-role team console shells, live API loader `GET /api/team/me` with `.admin-blocked-card` on 404, role permission matrices (`super_admin`, `support_lead`, `billing_admin`, `auditor`), non-dismissable first-login forced password change overlay, forced specialist profile completion overlay, and auditor read-only inspection enforcement.
+- Branch: `feat/frontend-roadmap`.
+- Zero backend/Worker edits, zero DB migrations/SQL changes.
+- Test suites: `npm.cmd test` passed 166/166; `node --check js/app.js` passed with zero errors.
+- Cache buster updated to `?v=2026.10.19-phase6-team`.
+
+
+## 2026-10-19 — Phase 7: Contract Documentation & Final Polish
+- Scope: Authored canonical `docs/frontend-backend-contract.md` documenting all endpoints, HTTP methods, RBAC role clearances, request/response schemas, and `.admin-blocked-card` fallback locations for backend handoff.
+- Branch: `feat/frontend-roadmap`.
+- Zero backend/Worker edits, zero DB migrations/SQL changes. Main branch untouched; zero production deployments.
+- Test suites: `npm.cmd test` passed 166/166; `node --check js/app.js` passed with zero errors.
+- Roadmap status: All 7 phases (0 through 7) completed and committed on `feat/frontend-roadmap`.
+
+
+
+
+
+## 2026-10-20 — Phase 8: Signup Flow, Mandatory Mobile & Profile, Profile Gate & Backend Capability Switch
+- Scope: Built complete vehicle-owner and garage signup wizard (Steps 1–6), email OTP verification with resend cooldown and lockout, compulsory Indian mobile verification (+91 format, 10 digits starting 6–9, no skip button), compulsory profile registration (6-digit pincode, optional 15-char GSTIN for garages), post-login profile gate (`GET /api/profile/status`), Account screen mobile change OTP verification, and a backend capability switch (`js/backend-config.js` and `docs/backend-switch.md`).
+- Branch: `feat/frontend-roadmap` (continued from HEAD `cc47eb3ebb253e6e694e2938c112ddeeb1e09b7b`).
+- Core rules enforced: Zero mock data anywhere (truthful `.backend-blocked-card` on missing routes), zero fake success ("Verified" and "Profile saved" only after ok), zero credentials stored in storage/DOM/console, all dynamic text via `textContent`, browser checks labeled `/* UI-ONLY: ... */`, safe-area insets and zero horizontal scroll at 360px & 1280px.
+- Zero Worker edits, zero DB migrations, zero SQL modifications, zero workflow changes. Main branch untouched; zero production deployments.
+- Test suites: `npm.cmd test` passed 175/175 tests green; `node --check` passed across `js/backend-config.js`, `js/app.js`, and `tests/customer-portal-regression.test.mjs`.
+
+
+## 2026-10-20 — Owner Decisions: Approved 3-Role Matrix Purge, Vehicle Claims, Garage Matching & E-Bill
+- Scope: Implemented final Owner Decisions on branch `feat/frontend-roadmap`:
+  1. Purged `support_lead`, `billing_admin`, and `auditor` from frontend and docs. Enforced strictly the 3 approved team roles (`team_lead`, `support_agent`, `support_executive`) and owner role (`super_admin`).
+  2. Owner Vehicle Claim UI with 3 badge states (`Verified (linked)`, `Pending confirmation`, `Unclaimed (created by garage)`), mobile OTP confirmation (`POST /api/vehicle-claims/:id/otp/send` and `/verify`), and locked garage history card.
+  3. Garage side vehicle matching preview from `POST /api/garage/vehicle-match` (strictly server-authoritative; client never decides), mandatory customer name on `no_match`, bill channel delivery with WhatsApp template preview, and unchecked "Send join invite" with marketing consent note.
+  4. E-Bill preview with "Powered by Torq Desk" footer, "Preview only" badge, and server-rendered GST split.
+  5. Documented capabilities in `docs/backend-switch.md` and updated `docs/frontend-backend-contract.md`.
+  6. Pending owner decisions preserved as PENDING: Mobile OTP provider & Garage GSTIN mandatory requirement.
+- Zero Worker edits, zero DB migrations, zero SQL modifications, zero workflow changes. Main branch untouched; zero production deployments.
+- Stash `stash@{0}` preserved untouched.
+- Test suites: `npm.cmd test` passed 184/184 tests green; `node --test tests/garage-redesign.test.mjs` passed 5/5 tests green; `node --check` passed across all modified JS files.
+
+
+## 2026-10-20 — Stabilization: Support Executive Permissions Refinement, Dynamic Tax Labels & Test Integrity
+- Scope: Stabilized branch `feat/frontend-roadmap` per Owner instructions:
+  1. Support Executive permission spec: `canUpdateAssignedTicketStatus: true` (assigned tickets only), `canAddInternalNotes: true` (internal notes only). Prohibited: assign tickets, change priority, enable chat, reveal contact, view as user, manage team.
+  2. Enforced UI-ONLY check: `isTicketAssignedToCurrentSpecialist(ticket)` in `js/app.js` (server must enforce later).
+  3. Dynamic E-Bill tax labels: Removed hardcoded "SGST (9%)" and "CGST (9%)" from `js/garage-workspace.js`. Renders `tax_lines[].label` from server or displays BLOCKED card.
+  4. Test integrity: 184/184 tests passing. Verified all 19 assertion changes from `cc47eb3` were non-weakening role/fixture updates.
+  5. Garage workspace review: 0 blocks lost; all replaced/upgraded cleanly.
+  6. Documented UI-ONLY data isolation checks across garage workspace, owner vehicles, unconfirmed history, and support executive assignment.
+  7. Playwright: NOT RUN (awaiting owner approval for dev dependency).
+- Worker, migrations, SQL, workflows, and main branch untouched. Maintained DO NOT MERGE recommendation.
+
+
+## 2026-10-20 — Check & Stabilization Reconciliation: Script Loading, Line Endings, Test Count
+- Verification findings on `feat/frontend-roadmap`:
+  1. Loaded `js/backend-config.js` before `js/garage-workspace.js` in `garage-portal.html` and `garage-onboarding.html` (Commit `9489890`).
+  2. Verified git object line endings are strictly LF across all core files. `git diff --stat` confirms 0 whole-file churn.
+  3. Test count reconciliation: 184/184 tests pass. Phase 8 added 9 tests (166 $	o$ 175); Phase 9 added 9 tests (175 $	o$ 184). `customer-portal-regression.test.mjs` contains exactly 130 tests.
+  4. Verified E-bill dynamic tax lines render server labels/amounts and fail closed with BLOCKED card (`GET /api/garage/invoices/:id/taxes`).
+  5. Verified bill send never displays "Sent" when server route returns 404 or fails.
+  6. Playwright: NOT RUN (awaiting owner approval for dev dependency).
+- Worker, migrations, SQL, workflows, and main branch untouched. DO NOT MERGE recommendation maintained.
+
+
+## 2026-10-20 — Remote State Inspection: origin/main, backend-v2 branch & 0008_team_members.sql
+- Executed read-only checks:
+  * `git fetch origin` (exit 0).
+  * `origin/main` HEAD: `e89a84f`.
+  * `origin/feat/support-ticket-backend-v2` HEAD: `13655ce`.
+  * Checked existence of `worker/migrations/0008_team_members.sql` on `origin/feat/support-ticket-backend-v2`: verified **EXISTS**.
+
+
+## 2026-10-21 — Dev: Localhost-Only Profile Gate Bypass for Feature Testing
+- Scope: Added local-only bypass for `checkProfileGate` on `feat/frontend-roadmap`.
+  * Condition: `(hostname === 'localhost' || hostname === '127.0.0.1') && localStorage.getItem('td_dev_bypass_profile_gate') === '1'`.
+  * Default: OFF. Hostnames like `rdxburia.github.io` and `carmy-ticket-staging.pages.dev` never trigger bypass even if localStorage key is present.
+  * Visual feedback: Shows top sticky yellow banner `#devProfileGateBypassBanner` with text `"DEV BYPASS: profile gate disabled (localhost only)"`.
+  * Non-localhost / flag absent: Dev banner removed, gate runs fail-closed if `profile_status` capability missing.
+  * Files modified: `js/app.js`, `css/styles.css`, `index.html`, `tests/customer-portal-regression.test.mjs`, `PROGRESS.md`, `AGENT.md`.
+  * Regression test added: Confirmed 185/185 tests passing in `npm.cmd test`.
+  * Backend, migrations, and production untouched.

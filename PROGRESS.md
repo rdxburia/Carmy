@@ -669,3 +669,512 @@ ChatGPT phir bhi "Supabase project chahiye" bol kar ruke, to bolna: "Supabase co
 - This verifies the staging Worker has a `SUPABASE_SECRET_KEY` secret binding by name only; it does not validate the key's value or prove authenticated calls work.
 - Real-JWT E2E remains NOT RUN. The available connected execution tools do not provide a safe Node.js runner with the required QA password and Cloudflare API token. Do not create a synthetic ticket until a cleanup plan preserves append-only `ticket_events`/`audit_log` history; do not bypass triggers or delete audit rows.
 - Production remains HOLD and untouched. PR #161 remains open/unmerged.
+
+
+## 2026-10-19 18:50 IST — Phase 0: Baseline Verification & Feature Inventory
+- **Branch Configuration:** Initialized integration branch `feat/frontend-roadmap` based on `origin/feat/ticket-frontend` (SHA: `4b3f8206cc7058643296a399d6c7d016d6ca2e80`). Note: `origin/feat/ticket-frontend-v2` does not exist on origin; cherry-picked v2 ticket enhancements from commit `50e11ad` (`feat(support-v2): add audited view-as-user panel, roster handling, unified 48h chat enable, and test suite`).
+- **Baseline Verification:**
+  - `node --check` across all tracked `.js` and `.mjs` files: 0 syntax errors, 100% clean.
+  - `npm.cmd test`: 139 / 139 tests passed (0 failed, 0 skipped).
+  - Pre-existing test failures before changes: 0 (No pre-existing failures).
+- **Feature Inventory Table:**
+| Area | Feature | Status | File & Function | Evidence / Test |
+| :--- | :--- | :--- | :--- | :--- |
+| Auth & Session | Customer Sign-In (Password Grant) | WORKING | `js/app.js` -> `signIn()`, `authForm()` | Supabase Auth password grant; verified in tests & live staging |
+| Auth & Session | Sign-Out (Global Session Revocation) | WORKING | `js/app.js` -> `logout()` | Calls `POST /api/session/revoke`, clears storage, redirects |
+| Auth & Session | Server-Enforced Idle Timeout (120s) | WORKING | `js/session-guard.js`, `idle-session.js` | `tests/idle-session-auth.test.mjs` (5/5 PASS) |
+| Auth & Session | Customer Password Change | WORKING | `js/app.js` -> `ownerProfileView()` | Supabase `auth.updateUser()` |
+| Admin Shell | Admin Role Resolution | PARTIAL / BROKEN | `js/app.js` -> `checkSuperAdminStatus()` | Relies on hardcoded email fallback; `GET /api/admin/me` integration pending |
+| Admin Shell | Admin Sign-Out | PARTIAL | `js/app.js` -> `logout()` | Global logout works; lacks dedicated admin redirect/clean view state |
+| Admin Shell | Admin Password Change | MISSING | `js/app.js` | Not present in admin workspace shell |
+| Admin Shell | Admin Session Timeout Display | MISSING | `js/app.js` | 15-minute admin timeout constant not displayed |
+| Vehicles | Vehicle Dashboard Overview | WORKING | `js/app.js` -> `dash()` | `tests/customer-portal-regression.test.mjs` (82/82 PASS) |
+| Vehicles | Vehicle Add, Edit, Delete | WORKING | `js/app.js` -> `carForm()`, `saveCar()`, `deleteCar()` | Verified across test harnesses and DB sync |
+| Vehicles | Service History & Logging | WORKING | `js/app.js` -> `renderHistory()`, `recordForm()`, `saveRecord()` | Additive logs, prefill, date formatting verified |
+| Documents | Document Vault Upload & List | WORKING | `js/app.js` -> `docsView()`, upload handlers | R2 storage & mime signature validation |
+| Documents | Document Deletion Security PIN | PARTIAL / BROKEN | `js/app.js` -> `changeDeletePassword()` | Uses browser prompt() and plaintext localStorage PIN; requires TPIN API migration in Phase 4 |
+| Reports | Vehicle A4 Inspection Report | WORKING | `js/app.js` -> `report()` | Formatted statutory A4 report print dialog |
+| Statutory | Form 29 / 30 Ownership Transfer Packet | WORKING | `js/app.js` -> `openTransferWizard()`, `generateTransferPdf()` | Multi-step statutory PDF generation with ordinal dates & non-blank check |
+| Support | Customer Create Support Ticket | WORKING | `js/app.js` -> `submitTicket()`, `wireTicketForm()` | `POST /api/tickets` with car ownership verification |
+| Support | Customer Ticket List & Status Stepper | WORKING | `js/app.js` -> `renderTicketContent()` | Accessible list with unread pills, stepper status, conditional reply |
+| Support | Admin Support Ticket Triage | WORKING | `js/app.js` -> `loadAdminTickets()`, `openAdminTicketDetails()` | Status transitions, SLA breach indicators, 48h countdown, roster handling |
+| Support | Admin Audited View-As-User | WORKING | `js/app.js` -> `openAdminTicketViewAsUser()` | Requires min 10-char reason, calls `POST /api/admin/tickets/:id/view-as-user`, fails closed to disabled "Not available yet" on 404 |
+| Admin Console | Admin Workspace Shell (Desktop & Mobile) | WORKING | `js/app.js` -> `renderAdminShell()` | Isolated topbar, desktop sidebar, 5-tab mobile navigation with More drawer |
+| Admin Console | Overview & Health KPIs | PARTIAL | `js/app.js` -> `renderScreenHome()` | Static KPI mockup; requires `GET /api/admin/overview` |
+| Admin Console | User Directory & Entitlements | PARTIAL | `js/app.js` -> `renderScreenUsers()` | Static mockup; requires `GET /api/admin/users` and detail drawer |
+| Admin Console | Activation Token Generator | PARTIAL | `js/app.js` -> `renderScreenTokens()`, `openTokenGenModal()` | One-time reveal modal works; requires real `POST /api/admin/tokens` |
+| Admin Console | Plans, Pricing & Coupons | PARTIAL | `js/app.js` -> `renderScreenPlans()` | Hardcoded cards; requires `GET /api/admin/plans`, `GET/POST /api/admin/coupons` |
+| Admin Console | Customer Upgrade Requests | PARTIAL | `js/app.js` -> `renderScreenUpgrades()` | Static mockup; requires `GET /api/admin/upgrade-requests` |
+| Admin Console | Team Member Directory & Invite | PARTIAL | `js/app.js` -> `renderScreenTeam()` | Static mockup; requires `GET /api/admin/team/members`, `POST /api/admin/team/members` |
+| Admin Console | Cryptographic Security Audit Log | PARTIAL | `js/app.js` -> `renderScreenAudit()` | Static mockup; requires `GET /api/admin/audit` |
+| Admin Console | Admin Account & Security | MISSING | `js/app.js` | Not present in sidebar or screens |
+| TPIN | TPIN Management & Verification | MISSING | `js/app.js` | Not implemented; slated for Phase 4 |
+| Garage | Workshop Onboarding & Workspace UI | PARTIAL | `garage-onboarding.html`, `js/garage-*.js` | 5-step wizard and workspace exist; needs billing/invoice, plan limits in Phase 5 |
+| Team Member | Team Member First-Login & Restricted Shell | MISSING | `js/app.js` | Slated for Phase 6 |
+- **Phase 0 Frontend Bug Fixes:**
+  - Removed fake success toasts (`Draft changes saved locally.`, `IP allowlist placeholder saved.`, `Plan draft saved. Backend endpoint pending...`) that fired without server responses.
+  - Hardcoded admin error message updated to dynamic user context.
+- **Constraints & Governance:** Frontend-only changes; zero backend, Worker, D1, or Supabase migrations; no production touch; no merges.
+
+
+## 2026-10-19 — Phase 1: Admin Shell & Session Polish
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Admin Shell refactor and Account & Security screen.
+- **Implemented Changes:**
+  - Added dedicated Admin Account & Security screen (`account`) accessible from sidebar, topbar profile pill, and mobile More drawer:
+    - Admin Profile: Read-only Name, Email, Role (Super Admin / Support Specialist), and Status rendered strictly via `textContent`.
+    - Change Password Form: Current password, New password with live visual strength meter (`updateAdminPasswordMeter`), Confirm password, inline error card (`adminPasswordError`), and `"Password changed"` toast strictly after server confirmation via Supabase Auth `db.auth.updateUser()` or fallback `/api/admin/change-password`.
+    - Session Inactivity Policy: Visible, read-only 15-minute (900 seconds) timeout constant with Worker server time heartbeat and client-header tampering defense notice.
+    - Administrative TPIN: Phase 4 specification placeholder card.
+    - Session Sign-out: `adminSignOut()` clears local storage keys (`sb-*`, `carmy_*`, `td-admin-*`), session storage, removes `td-admin-mode` class from body, clears memory state, and securely redirects to `./?admin=1&signed_out=1`.
+  - Added CSS classes prefixed with `admin-` in `css/styles.css`: `.admin-account-shell`, `.admin-account-grid`, `.admin-account-card`, `.admin-profile-meta`, `.admin-password-meter`, `.admin-password-meter-fill`, `.admin-password-feedback`, `.admin-timeout-badge`, `.admin-blocked-card`.
+  - Bumped asset cache busters to `?v=2026.10.19-phase1-admin` in `index.html`.
+  - Added 3 new automated test cases to `tests/customer-portal-regression.test.mjs` (Account & Security read-only profile rendering, password change validation & server errors, and `adminSignOut()` storage & class cleanup).
+  - `npm.cmd test`: 142/142 tests passing (100% green, 0 failures, 0 skips).
+
+## 2026-10-19 — Phase 2: Super Admin Screens & Real Endpoints
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Super Admin console overhaul connecting all screens to real API endpoints, implementing strict blocked card rendering on missing/404 routes, eliminating fake toasts, removing hardcoded emails, and adding CSV compliance exports.
+- **Implemented Changes:**
+  - **Overview (`home`):** Connected to `GET /api/admin/overview` with KPI cards (Users, Active, Tickets, Revenue, Upgrades), system health indicator, operational quick actions, activity feed, and `.admin-blocked-card` on 404.
+  - **User Directory & Entitlements (`users`):** Connected to `GET /api/admin/users` with client-side role/plan/status filtering and search. User Drawer (`openAdminUserDetails`):
+    - Profile metadata rendered strictly with `textContent`.
+    - Plan tier changes wired to `PATCH /api/admin/users/:id/plan` (`saveUserPlanDraft`).
+    - Grace period extensions wired to `POST /api/admin/users/:id/extend-grace` (`extendUserGrace`).
+    - Suspend/unsuspend toggle wired to `POST /api/admin/users/:id/status` (`suspendUserAccount`).
+    - Registered vehicles query linked to `GET /api/admin/users/:id/vehicles`.
+    - Support inquiries linked to `GET /api/admin/users/:id/tickets`.
+  - **Activation Tokens (`tokens`):** Connected to `GET /api/admin/tokens`. Modal to generate tokens (`openTokenGenModal`, `generateAdminToken`) registers tokens via `POST /api/admin/tokens` and displays one-time reveal modal (`openTokenRevealModal`) wiped from memory on modal close. Revocation wired to `POST /api/admin/tokens/:id/revoke` (`revokeAdminToken`).
+  - **Plans, Pricing & Coupons (`plans`):** Connected to `GET /api/admin/plans` and `GET /api/admin/coupons`. Added promotional coupon creation modal (`openCreateCouponModal`, `submitCreateCoupon`) wired to `POST /api/admin/coupons` and deactivation wired to `DELETE /api/admin/coupons/:id` (`deleteAdminCoupon`).
+  - **Customer Upgrade Queue (`upgrades`):** Connected to `GET /api/admin/upgrade-requests` with triage note input and Approve/Reject buttons wired to `POST /api/admin/upgrade-requests/:id/approve` and `reject` (`handleUpgradeAction`).
+  - **Garage Network (`garages`):** Rendered Phase 5 placeholder card citing target endpoint `GET /api/admin/garages`.
+  - **Team & Access Control (`team`):** Connected to `GET /api/admin/team/members`. Invitation modal (`openTeamInviteModal`, `sendTeamInvite`) wired to `POST /api/admin/team/members` displaying one-time temporary passwords without storage. Revocation wired to `DELETE /api/admin/team/members/:id` (`revokeTeamMember`). Protected primary owner identified via server attributes (`is_owner`, `is_primary`) without hardcoded email string.
+  - **Security Audit Log (`audit`):** Connected to `GET /api/admin/audit` with actor/action filters and Export Audit CSV trigger.
+  - **Content & Policy Editor (`content`):** Rendered Phase 7 placeholder card citing target endpoint `GET /api/admin/content`.
+  - **Platform Settings (`settings`):** Rendered Phase 7 placeholder card citing target endpoint `GET /api/admin/settings`.
+  - **Platform Analytics & Reports (`reports`):** Rendered Phase 7 placeholder card citing `GET /api/admin/reports/analytics` alongside real CSV export buttons (`exportUsersCsv`, `exportTicketsCsv`, `exportAuditCsv`) using `workerDownloadCsv` on endpoints `/api/admin/users/export.csv`, `/api/admin/tickets/export.csv`, and `/api/admin/audit/export.csv`.
+  - **Styles & Classes:** Appended `.admin-phase-card`, `.admin-empty-state`, `.admin-detail-section`, `.admin-coupon-badge` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase2-admin`.
+  - **Automated Tests:** Added 4 new regression tests in `tests/customer-portal-regression.test.mjs` verifying user drawer textContent & plan PATCH, coupon creation & deactivation, CSV export endpoints, and BLOCKED card rendering on 404 responses.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 146/146 tests passing (100% green, 0 failures, 0 skips).
+
+
+## 2026-10-19 — Phase 3: User Dashboard Plan Management & Quotas
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only plan management, subscription status card, plan comparison modal, upgrade request workflow, activation code redemption, and vehicle/vault storage quota enforcement.
+- **Implemented Changes:**
+  - **Plan Status Card (`renderPlanStatusCard`, `loadUserPlanStatus`):**
+    - Mounted in Owner Profile (`ownerProfileView`).
+    - Loads authoritative plan status via `GET /api/plan/status`.
+    - Renders `.admin-blocked-card` containing HTTP method and `/api/plan/status` on endpoint failure/404.
+    - Displays active tier badge (Lite, Premium, Ultra), subscription status (ACTIVE/EXPIRED), entitlement expiration date, vehicle quota meter (`vehicleCount / maxVehicles`), and encrypted vault storage meter (`storageUsed / storageLimit MB`).
+  - **Activation Code Redemption (`toggleActivationRedeemSection`, `redeemActivationCode`):**
+    - Expandable redemption box in plan card.
+    - Submits voucher code to `POST /api/activation/redeem`.
+    - Refreshes authoritative plan status upon successful redemption and displays inline status feedback.
+  - **Plan Comparison Modal (`openPlanComparisonModal`, `setComparisonCycle`, `renderPlanComparisonModalContent`):**
+    - Multi-tier side-by-side comparison for Lite (₹0), Premium (₹69/mo or ₹708/yr), and Ultra (₹199/mo or ₹1999/yr).
+    - Monthly vs Annual billing toggle with 15% discount badge.
+    - Feature check-matrix (vehicle counts, vault storage, Form 29/30 PDF generator, priority SLA).
+    - Current plan indicator and direct upgrade action buttons.
+  - **Upgrade Request Modal (`openUpgradeRequestModal`, `submitUpgradeRequest`):**
+    - Allows requesting upgrade to Premium or Ultra with preferred payment mode (UPI, Netbanking, Card).
+    - Validates 10-digit contact mobile number and posts request to `POST /api/upgrade-requests`.
+  - **Vehicle Limit Guard (`showCarForm`, `saveCarForm`):**
+    - Compares current registered vehicle count against `userPlanStatus.max_vehicles`.
+    - Blocks opening car form and saving new cars when quota is exceeded, opening the Plan Comparison modal with a descriptive toast.
+  - **Document Vault Storage Guard (`docsView`, `openDocUploader`):**
+    - Checks document vault usage against `userPlanStatus.storage_mb_limit`.
+    - Renders `.plan-storage-banner` warning in docs view and blocks opening file uploader when vault is full, launching the comparison modal.
+  - **Expiration Warning Banner (`renderPlanExpirationBanner`):**
+    - Renders prominent warning in dashboard when `userPlanStatus.status === 'expired'` or `is_expired` is true with one-click renewal button.
+  - **CSS Styling:** Appended `.plan-status-card`, `.plan-card-head`, `.plan-badge`, `.plan-metrics-grid`, `.plan-metric-box`, `.plan-quota-meter`, `.plan-quota-fill`, `.plan-cycle-toggle`, `.plan-cycle-btn`, `.plan-save-pill`, `.plan-cards-grid`, `.plan-tier-card`, `.plan-ribbon`, `.plan-tier-price`, `.plan-tier-features`, `.plan-expired-banner`, `.plan-storage-banner`, `.plan-limit-badge` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase3-plan`.
+  - **Automated Tests:** Added 4 new regression tests in `tests/customer-portal-regression.test.mjs` verifying plan status card rendering & 404 blocked card, activation code redemption API calls, upgrade request validation & submission, and vehicle/vault quota blocking.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 150/150 tests passing (100% green, 0 failures, 0 skips).
+
+
+## 2026-10-19 — Phase 4: Administrative TPIN UI & Verification
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Administrative TPIN implementation including Account & Security management card, setup modal, change modal, email reset modal, first-login forced setup overlay, and reusable protected action verification prompt.
+- **Implemented Changes:**
+  - **Account & Security TPIN Card (`renderTpinAccountCardInner`, `loadAdminTpinStatus`):**
+    - Mounted in Admin Account & Security screen (`account`).
+    - Authoritative status loaded via `GET /api/tpin/status`.
+    - Handles endpoint failure/404 by rendering `.admin-blocked-card` containing HTTP method and `/api/tpin/status`.
+    - Shows dynamic status pill (`● TPIN Active`, `⚠️ Not Configured`, `TEMPORARILY LOCKED`).
+    - Displays lockout warning card with expiration timestamp when failed attempt threshold is breached.
+    - Provides action triggers for Setup, Change, and Email Reset.
+  - **TPIN Setup Modal (`openTpinSetupModal`, `submitTpinSetup`):**
+    - 4-digit masked PIN input with show/hide toggle and confirmation.
+    - Validates exactly 4 numeric digits and rejects trivial sequences (e.g. `0000`, `1111`, `1234`).
+    - Submits to `POST /api/tpin/setup` and renders `.admin-blocked-card` on 404.
+    - Zero-storage: Clears input values immediately from memory and DOM.
+  - **TPIN Change Modal (`openTpinChangeModal`, `submitTpinChange`):**
+    - Requires Current TPIN, New TPIN, and Confirmation.
+    - Submits to `POST /api/tpin/change`.
+    - Displays remaining attempts badge (`.tpin-attempts-badge`) on failed attempt before lockout.
+  - **TPIN Reset Request Modal (`openTpinResetModal`, `submitTpinResetRequest`):**
+    - Displays authenticated administrator's registered email (`user.email`).
+    - Submits reset request to `POST /api/tpin/reset-request`.
+  - **Protected Action Prompt (`promptTpinVerification`, `executeProtectedAdminAction`):**
+    - Reusable security gate asking for 4-digit TPIN before executing high-privilege operations:
+      * Token Generation (`generateAdminToken`)
+      * Team Member Invites (`sendTeamInvite`)
+      * Sensitive CSV Exports (`exportUsersCsv`, `exportTicketsCsv`, `exportAuditCsv`)
+      * User Suspension & Reactivation (`suspendUserAccount`)
+    - Submits authorization to `POST /api/tpin/verify` with `{ tpin, action }`.
+    - Dispatches callback strictly on server `ok: true`; fails closed and displays remaining attempts on error; displays `.admin-blocked-card` on 404.
+  - **First-Login Forced Setup Overlay (`checkForcedTpinSetup`, `submitForcedTpinSetup`):**
+    - Renders blocking, non-dismissable full-screen overlay (`#forcedTpinOverlay`) when `tpin_setup_required` or `tpin_change_required` is flagged.
+    - Removes overlay and restores access strictly upon successful `POST /api/tpin/setup`.
+  - **CSS Styling:** Appended `.tpin-card`, `.tpin-status-pill`, `.tpin-input-group`, `.tpin-digit-box`, `.tpin-toggle-btn`, `.tpin-modal-overlay`, `.tpin-modal-box`, `.tpin-attempts-badge`, `.tpin-lockout-card`, `.tpin-forced-overlay`, `.tpin-forced-box` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase4-tpin`.
+  - **Automated Tests:** Added 6 new regression tests in `tests/customer-portal-regression.test.mjs` verifying status card rendering & 404 blocked card, setup modal validation & API submission, change modal remaining attempts, email reset request, protected action verification prompt, and first-login forced overlay.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 156/156 tests passing (100% green, 0 failures, 0 skips).
+
+
+## 2026-10-19 — Phase 5: Garage Side Redesign & Administration
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only Super Admin garage management screen connecting to real API loader with `.admin-blocked-card` on 404, workshop status mutation, verified onboarding wizard state preservation, and garage workspace billing/staff limits.
+- **Implemented Changes:**
+  - **Super Admin Garages Screen (`renderScreenGarages`, `loadAdminGarages`):**
+    - Mounted in Super Admin shell under `garages` screen key (Operations & Platform navigation group).
+    - Authoritative directory loaded via `GET /api/admin/garages`.
+    - Handles endpoint failure/404 by rendering `.admin-blocked-card` containing HTTP method `GET` and `/api/admin/garages`.
+    - Directory table displays:
+      * Workshop Name & Location (`name`, `city`, `state`, `address` rendered via `esc()`).
+      * Contact & Owner Person (`phone`, `email`, `owner_name`).
+      * Trade License / GSTIN (`gstin` or `Unregistered (Non-GST)`).
+      * Plan Tier badge (`Lite`, `Premium`, `Ultra`).
+      * Bays & Staff Quota count (`bays` and `staff_count / max_staff`).
+      * Verification status badge (`status-active`, `status-pending`, `status-suspended`).
+      * Administrative actions (`Verify`, `Suspend`, `Reactivate`) calling `updateAdminGarageStatus()` wired to `PATCH /api/admin/garages/:id/status` behind administrative TPIN protection.
+    - Status filtering tabs: "All Garages", "Active / Verified", "Pending Verification", "Suspended".
+    - Live text search filtering across workshop name, city, owner, phone, email, and GSTIN.
+  - **Garage Onboarding Wizard (`garage-onboarding.html`, `js/garage-onboarding.js`):**
+    - Step 1-5 multi-stage form preserving draft in `localStorage` under `torq_garage_signup_draft`.
+    - Strict GSTIN format validation (15 alphanumeric characters).
+    - Server error display without fake success alerts; displays duplicate application conflict warning on 409.
+    - Safe dynamic DOM population using `textContent`.
+  - **Garage Workspace (`garage-portal.html`, `js/garage-workspace.js`):**
+    - Fallback plan limits declared across Lite, Premium, and Ultra tiers.
+    - Staff quota check calling `GET /api/garage/staff` (with fallback to plan limits) displaying `.garage-limit-banner` when quota is reached.
+    - Invoices & Billing GST toggle (B2B 18% GST vs B2C non-GST) with live client preview labeled with `.garage-preview-badge` (PREVIEW ONLY).
+    - Lite and Premium feature locks on inventory and WhatsApp automation.
+    - Expired plan read-only state disabling mutations with `.garage-expired-banner`.
+  - **CSS Styling:** Appended `.admin-badge.plan-lite`, `.admin-badge.plan-premium`, `.admin-badge.status-verified`, `.admin-badge.status-pending`, `.garage-admin-meta`, `.garage-admin-gstin` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase5-garage`.
+  - **Automated Tests:** Added 4 new regression tests in `tests/customer-portal-regression.test.mjs` verifying workshop directory table rendering, 404 blocked card handling, status update PATCH API dispatch, and status/search filtering.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 160/160 tests passing (100% green, 0 failures, 0 skips).
+  - `node --test tests/garage-redesign.test.mjs`: 5/5 tests passing (100% green).
+
+
+## 2026-10-19 — Phase 6: Multi-Role Team Support & First-Login Security
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend-only RBAC multi-role team console shells, authoritative profile loader `GET /api/team/me` with `.admin-blocked-card` on 404, role permission matrices, non-dismissable first-login forced password change overlay, forced specialist profile completion overlay, and auditor read-only inspection enforcement.
+- **Implemented Changes:**
+  - **Authoritative Identity & Role Clearance (`loadTeamMe`, `getAdminRolePermissions`):**
+    - Authoritative admin identity and role loaded via `GET /api/team/me`.
+    - Supports 4 role tiers:
+      * `super_admin` / `owner`: All 13 screens allowed; full administrative and mutation clearance.
+      * `support_lead`: Screens `['home', 'tickets', 'account']`; ticket status/assignee/priority/chat mutations enabled; user, token, plan, garage, team management blocked; defaultScreen `'tickets'`.
+      * `billing_admin`: Screens `['home', 'plans', 'tokens', 'upgrades', 'account']`; token generation/revocation, plan updates, coupon creation, and upgrade request triage enabled; tickets, garages, team management blocked; defaultScreen `'plans'`.
+      * `auditor`: Screens `['home', 'audit', 'tickets', 'account']`; full read-only inspection across tickets and audit trails; all mutation actions blocked; defaultScreen `'audit'`.
+    - Handles endpoint failure/404 on `GET /api/team/me` by rendering `.admin-blocked-card` containing HTTP method and target route.
+    - Profile card renders authoritative profile metadata and dynamic role badge (`.team-role-badge.role-*`).
+  - **Dynamic Console & Navigation Shells (`renderAdminViewContent`, `switchAdminScreen`, `renderAdminCurrentScreen`):**
+    - Dynamic sidebar filtering: Core and Operations screen buttons filtered strictly by `perms.allowedScreens`.
+    - Mobile bottom nav tabs and "More" sheet filtered dynamically according to role permissions.
+    - Console header dynamically reflects active role label in the title (`{Role} Console`) and security pill (`🔒 {Role}`).
+    - `switchAdminScreen` enforces access control: blocks navigation to disallowed screens and toasts permission errors.
+    - `renderAdminCurrentScreen` renders Access Restricted warning card if unauthorized screen is requested.
+  - **Auditor Read-Only Mode (`openAdminTicketDetails`):**
+    - Disables ticket status workflow, assignee select, priority dropdown, and chat controls.
+    - Replaces staff reply composer with `.admin-auditor-notice` warning that status transitions and replies are restricted.
+    - Enforces permission guards across all administrative action handlers (`handleAdminStatusChange`, `saveUserPlanDraft`, `generateAdminToken`, etc.).
+  - **First-Login Security Overlays (`checkForcedPasswordChange`, `checkForcedProfileCompletion`):**
+    - Blocking, non-dismissable modal overlay `#forcedPasswordOverlay` if `password_change_required` or `temp_password_active` is flagged.
+    - Enforces minimum 8 characters, password confirmation match, live meter feedback, and calls Supabase auth / Worker password update.
+    - Clears memory and input values upon successful update and removes overlay.
+    - Blocking `#forcedProfileOverlay` if `profile_incomplete` is flagged, validating specialist name and 10-digit mobile number before permitting workspace access.
+  - **CSS Styling:** Appended `.team-role-badge`, `.team-role-badge.role-*`, `.admin-auditor-notice`, `.admin-forced-overlay`, `.admin-forced-box` to `css/styles.css`.
+  - **Cache Busters:** Bumped `index.html` cache busters for `css/styles.css` and `js/app.js` to `?v=2026.10.19-phase6-team`.
+  - **Automated Tests:** Added 6 new regression tests in `tests/customer-portal-regression.test.mjs` covering `loadTeamMe` profile fetching, 404 blocked card rendering, `support_lead` restricted shell, `billing_admin` shell, `auditor` read-only mode & mutation blocking, and first-login forced password change overlay.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 166/166 tests passing (100% green, 0 failures, 0 skips).
+
+
+## 2026-10-19 — Phase 7: Contract Documentation & Final Polish
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Complete API contract specification, backend handoff documentation, role clearance schemas, `.admin-blocked-card` verification directory, and final roadmap completion.
+- **Implemented Changes:**
+  - **Contract Documentation (`docs/frontend-backend-contract.md`):**
+    - Authored exhaustive API specification covering all frontend loaders, mutations, and fallback behaviors for backend team handoff.
+    - Defined authoritative RBAC permission matrix for `super_admin` / `owner`, `support_lead`, `billing_admin`, `auditor`, and customer vehicle owners.
+    - Documented request headers (`Authorization: Bearer <token>`, `X-Carmy-Last-Activity`), body schemas, success responses, and error response codes across:
+      * Session Heartbeat (`POST /api/session/heartbeat`) & Revocation (`POST /api/session/revoke`)
+      * Team Identity & Profile (`GET /api/team/me`, `POST /api/team/me/profile`, `POST /api/admin/change-password`)
+      * Administrative TPIN Layer (`GET /api/tpin/status`, `POST /api/tpin/setup`, `POST /api/tpin/change`, `POST /api/tpin/verify`, `POST /api/tpin/reset-request`)
+      * Super Admin Operations (`GET /api/admin/overview`, `GET /api/admin/users`, `PATCH /api/admin/users/:id/plan`, `POST /api/admin/users/:id/extend-grace`, `POST /api/admin/users/:id/status`, `GET /api/admin/tokens`, `POST /api/admin/tokens`, `DELETE /api/admin/tokens/:token`, `GET /api/admin/plans`, `POST /api/admin/plans/coupons`, `DELETE /api/admin/plans/coupons/:id`, `GET /api/admin/upgrade-requests`, `POST /api/admin/upgrade-requests/:id/:action`, `GET /api/admin/garages`, `PATCH /api/admin/garages/:id/status`, `GET /api/admin/team`, `POST /api/admin/team/invites`, `DELETE /api/admin/team/members/:id`, `GET /api/admin/audit`, CSV exports)
+      * Customer Dashboard & Quotas (`GET /api/plan/status`, `POST /api/activation/redeem`, `POST /api/upgrade-requests`)
+      * Ticket Workflow & Specialist Operations
+    - Catalogs all 13 DOM locations where `.admin-blocked-card` is rendered with target route and HTTP method on 404/5xx or unrouted states.
+    - Reiterates Zero Mock Data Guarantee and truthful error handling protocol.
+  - **Roadmap Completion Status:**
+    - Phase 0: Baseline test suite & feature inventory (Committed `76cd361`)
+    - Phase 1: Admin Account & Security screen (`account`) (Committed `1f017d4`)
+    - Phase 2: Super Admin real API loaders with `.admin-blocked-card` on 404 (Committed `8dc8fd4`)
+    - Phase 3: User Dashboard subscription card & quotas (Committed `da1cc69`)
+    - Phase 4: Administrative TPIN layer & verification prompts (Committed `7875a6b`)
+    - Phase 5: Super Admin Garages screen & workshop administration (Committed `6c35527`)
+    - Phase 6: Multi-role team RBAC & first-login security overlays (Committed `f3780b9`)
+    - Phase 7: Complete frontend-backend contract documentation & final verification.
+- **Constraints & Governance Maintained:**
+  - Strictly frontend-only: 0 Cloudflare Worker edits, 0 database migrations, 0 SQL edits.
+  - Integration branch `feat/frontend-roadmap` retained without merging to `main` or deploying to production.
+  - 100% test pass rate maintained at every step.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `npm.cmd test`: 166/166 tests passing (100% green, 0 failures, 0 skips).
+
+
+
+
+
+
+
+
+
+## 2026-10-20 — Phase 8: Signup Flow, Mandatory Mobile & Profile Verification, Profile Gate & Backend Capability Switch
+
+- **Branch:** `feat/frontend-roadmap` (continued from HEAD `cc47eb3ebb253e6e694e2938c112ddeeb1e09b7b`)
+- **Scope:** Frontend-only signup wizard (Steps 1–6) for vehicle owners & garages, email OTP verification, compulsory Indian mobile verification (+91, no skip button), compulsory profile completion (6-digit pincode, optional 15-char GSTIN for garages), post-login profile gate (`GET /api/profile/status`), Account screen mobile change OTP verification, and a backend capability switch (`js/backend-config.js` and `docs/backend-switch.md`).
+- **Core Governance & Security Rules Enforced:**
+  - Strictly frontend-only: 0 Cloudflare Worker code changes, 0 database migrations, 0 SQL modifications, 0 workflow edits.
+  - Integration branch `feat/frontend-roadmap` retained without merging to `main` or deploying to production.
+  - Zero mock data anywhere: truthful `.backend-blocked-card` rendered whenever backend routes return 404 or are disabled in capabilities.
+  - Zero fake success: "Verified", "Account created", and "Profile saved" appear only after the server returns ok (`ok: true`).
+  - Sensitive data protection: Zero OTPs or passwords stored in `localStorage`, `sessionStorage`, `console`, or DOM. Input fields cleared on completion.
+  - Browser-only checks labeled `/* UI-ONLY: ... */` in code comments and in this report.
+  - All dynamic user text rendered via `textContent` or safe DOM builders, preventing XSS injection.
+  - CSS prefixed with `auth-`, `profile-`, `otp-`, `backend-` and appended to `css/styles.css`. Cache busters bumped to `?v=2026.10.19-phase8-auth`.
+  - Responsive at 360px and 1280px with zero horizontal scroll and safe-area inset compliance.
+
+### Implemented Components:
+1. **Backend Switch (`js/backend-config.js` & `docs/backend-switch.md`):**
+   - Centralizes `API_BASE` resolution (`<meta name="carmy-api-base">`, `APP_CONFIG.WORKER_API_URL`, fallback).
+   - Declares `DEFAULT_CAPABILITIES` (all `false` by default): `auth_signup`, `auth_email_otp`, `auth_mobile_otp`, `profile`, `profile_status`, `profile_mobile_change`, `garage_types`.
+   - Fetches from `GET /api/meta/capabilities` on app start in browser environments. Fails closed (all `false`) on 404 or network errors.
+   - Exports helper `backendAvailable(name)` called by screens before rendering action buttons.
+   - Exports `renderBackendBlockedCard(routePath, method, customMessage)` for standard blocked indicators.
+   - Documented in `docs/backend-switch.md` with explicit notice: *"Switching a capability to true without its route returning the documented shape will show errors, not success."*
+
+2. **Signup Flow Wizard (`js/app.js`):**
+   - Container `#authSignupFlow` integrated into auth overlay.
+   - **Step 1 (Account Type):** Vehicle owner vs. commercial garage. For garage, selects from 5 specialization types (Repair shop, Service provider, Car accessories, Car cleaning, Car maintenance).
+   - **Step 2 (Credentials):** Email and password. Enforces password rule: min 8 characters, at least 1 letter, at least 1 number. Real-time strength meter. Calls `POST /api/auth/signup`. Displays server duplicate error truthfully without advancing. Clears password input on success.
+   - **Step 3 (Email OTP):** Enforces 6 numeric digits. 30-second resend cooldown timer. After 5 failed attempts, displays lockout warning card. Calls `POST /api/auth/email-otp/send` and `/verify`.
+   - **Step 4 (Mandatory Mobile Number):** Compulsory Indian mobile (10 digits starting with 6, 7, 8, or 9; stored as `+91`). Displays server duplicate error. No skip button exists. Calls `POST /api/auth/mobile-otp/send` and `/verify`.
+   - **Step 5 (Mandatory Profile Details):**
+     * Vehicle Owner: Full legal name, address line, city, state, 6-digit pincode.
+     * Garage: Garage/business name, proprietor name, workshop address, city, state, 6-digit pincode, optional 15-char GSTIN.
+     * Calls `PUT /api/profile`. Displays "Profile saved" only after server returns `ok: true`.
+   - **Step 6 (Done):** Congratulatory screen with action to open vehicle-owner dashboard.
+
+3. **Profile Gate (`checkProfileGate`):**
+   - /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
+   - Runs upon user authentication in `start()`.
+   - Calls `GET /api/profile/status`. If missing or 404, fails closed: renders `#profileGateOverlay` with `.backend-blocked-card` for `GET /api/profile/status` and sign-out button.
+   - If `email_verified`, `mobile_verified`, or `profile_complete` is false, displays non-dismissable modal overlay listing missing items with action to complete verification or sign out.
+   - Super admin / team members bypass vehicle-owner profile gate (verified server team role: `super_admin`, `admin`, `support_lead`, `billing_admin`, `auditor`). No hardcoded email gates.
+   - Mobile number update in Account screen requires fresh OTP verification via `POST /api/profile/mobile-change/send` and `/verify`; blocked with `.backend-blocked-card` if route is disabled.
+
+### Automated Test Suite:
+- `node --check js/backend-config.js`: Clean (0 syntax errors).
+- `node --check js/app.js`: Clean (0 syntax errors).
+- `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
+- `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips).
+  * 9 Phase 8 tests covering: Capability switch & 404 fallback, Step 2 password validation & duplicate error, Step 3 Email OTP & lockout, Step 4 Mobile mandatory & +91 format, Step 5 Profile validation & "Profile saved" ok check, Profile gate fail-closed & non-dismissable overlay, Profile mobile change OTP, Zero credential leak in storage/console & XSS sanitization, 360px & 1280px responsive layout.
+
+
+## 2026-10-20 — Phase 8 Part B: Hardening, Server-Role Enforcement, Production Cleanup & Verification
+
+- **Branch:** `feat/frontend-roadmap` (Commit: `ce3b1bc`)
+- **Fixes Applied (B1–B7):**
+  1. **B1: Hardcoded Email Removal & Server Role Verification:**
+     - Removed all 4 gate/bypass references to `rnyburia@gmail.com` in `js/app.js` (`checkProfileGate` L1622, `nav` L2116, `start` L2492, and `adminView` L9285).
+     - Gating and administrative mode switching now strictly rely on server roles (`super_admin`, `admin`, `support_lead`, `billing_admin`, `auditor`) loaded from `GET /api/team/me` and user object claims. Missing routes fail closed.
+     - Replaced line 8047 error message with generic text: `Confirm the deployed Worker is using the active Super Admin registry entry for this account.`
+     - Replaced all owner email literals in `tests/customer-portal-regression.test.mjs` with neutral test fixtures (`email: 'admin@carmy.internal', role: 'super_admin'`).
+  2. **B2: Status Labels:**
+     - All 10 unbuilt Phase 8 backend endpoints documented and verified as `BLOCKED / MISSING` (Worker routes not implemented on this branch).
+  3. **B3: Production Code Cleanup:**
+     - Removed `manualOverride` completely from `js/backend-config.js` (0 occurrences across `js/`).
+     - Removed `setBackendCapabilities` from `js/backend-config.js` and removed its window/module exports.
+     - Verified `window.setBackendCapabilities` is strictly `undefined` on normal page load.
+     - Isolated test capability simulation strictly to `tests/customer-portal-regression.test.mjs` test harness.
+  4. **B4: Strict Assertion Restoration:**
+     - Restored strict assertion at line 4411 in `tests/customer-portal-regression.test.mjs`: `assert.equal(h.eval("document.getElementById('profileGateOverlay')"), null, "Overlay must be removed")`.
+  5. **B5: Form 29/30 Test 11 Verification:**
+     - Verified Form 29/30 Test 11 (`PDF generation after saving and reloading form data from the database`) passes 100% (23/23 transfer tests pass).
+  6. **B6: Responsive Verification:**
+     - Playwright marked as **NOT RUN** (reason: Playwright is not installed in the workspace dependencies; `package.json` contains only `wrangler` and `pdfjs-dist`).
+  7. **B7: Commit & Push:**
+     - Committed as `ce3b1bc` on `feat/frontend-roadmap`.
+     - Pushed `feat/frontend-roadmap` to `origin` tracking branch (push only, no force, no merge, no deploy).
+     - Stash `stash@{0}` preserved untouched.
+- **Test Suite Status:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `node --check js/backend-config.js`: Clean (0 syntax errors).
+  - `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
+  - `npm.cmd test`: **175/175 tests passing** (100% green, 0 failures, 0 skips, duration 3.8s).
+
+
+## 2026-10-20 — Phase 9 / Owner Decisions: Approved 3-Role Matrix Purge, Owner Claim Flow, Garage Server Matching & E-Bill Preview
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Implementation of Owner Decisions:
+  1. Purged unapproved roles (`support_lead`, `billing_admin`, `auditor`) from frontend code and documentation; strictly enforced the 3 approved team roles (`team_lead`, `support_agent`, `support_executive`) alongside owner role (`super_admin`).
+  2. Owner Vehicle Claim UI: 3-state badges (`Verified (linked)`, `Pending confirmation`, `Unclaimed (created by garage)`), pending claim confirmation card with mobile OTP verification (`POST /api/vehicle-claims/:id/otp/send` and `/verify`), confirm/reject endpoints, and locked garage service history card (`"History from a garage is waiting for your confirmation."`).
+  3. Garage Vehicle Matching & Bill Delivery: Server-authoritative vehicle matching preview (`POST /api/garage/vehicle-match`; client never decides match state), customer name mandatory on `no_match`, bill delivery channel selector (WhatsApp, SMS, none) with server template preview, and unchecked "Send join invite" checkbox with customer consent requirement note.
+  4. E-Bill Invoice Preview: Professional E-Bill layout, "Powered by Torq Desk" footer, server-rendered totals & GST split, and "Preview only" badge until finalized.
+  5. Backend switch capabilities registered: `vehicle_claims: false`, `garage_vehicle_match: false`, `bill_send: false` in `js/backend-config.js` and documented in `docs/backend-switch.md`.
+  6. Documentation alignment: Updated `docs/frontend-backend-contract.md` to reflect the approved 3-role team matrix.
+
+- **Pending Owner Decisions (Preserved as PENDING):**
+  - Mobile OTP Provider: Kept as PENDING ("Pending owner decision" shown in claim confirmation flow).
+  - Garage GSTIN Mandatory Requirement: Kept as PENDING (optional 15-character format in garage profiles and E-bill preview).
+
+- **Core Governance & Security Rules Enforced:**
+  - Strictly frontend-only: 0 Cloudflare Worker code changes, 0 database migrations, 0 SQL modifications, 0 workflow edits.
+  - Integration branch `feat/frontend-roadmap` retained without merging to `main` or deploying to production.
+  - Zero mock data: Missing endpoints render `.backend-blocked-card` / `.admin-blocked-card` with exact route names.
+  - Browser-only checks labeled `/* UI-ONLY: ... */` in code comments and progress documentation.
+  - All dynamic user text rendered via `textContent` or safe DOM builders, preventing XSS injection.
+  - Sensitive data protection: Zero OTPs stored in DOM/storage/console.
+
+- **Automated Test Suite:**
+  - `node --check js/app.js`: Clean (0 syntax errors).
+  - `node --check js/backend-config.js`: Clean (0 syntax errors).
+  - `node --check js/garage-workspace.js`: Clean (0 syntax errors).
+  - `node --check tests/customer-portal-regression.test.mjs`: Clean (0 syntax errors).
+  - `npm.cmd test`: **184/184 tests passing** (100% green, 0 failures, 0 skips, duration ~5.0s).
+    * Includes 8 new regression tests covering approved role matrix, Team Lead permissions, Support Executive read-only mode, vehicle claim badges, claim confirm with OTP, locked garage history, server-authoritative garage matching, and bill channel template delivery.
+  - `node --test tests/garage-redesign.test.mjs`: **5/5 tests passing**.
+  - Playwright UI screenshots: **NOT RUN** (reason: Playwright is not installed in the workspace dependencies).
+
+
+## 2026-10-20 — Stabilization: Support Executive Permissions Refinement, Dynamic E-Bill Tax Labels & Test Integrity Audit
+
+- **Branch:** `feat/frontend-roadmap`
+- **Scope:** Frontend stabilization tasks per Owner instructions:
+  1. **Fix 1: Support Executive Permissions & UI-ONLY Assignment Enforcement:**
+     - Updated `getAdminRolePermissions('support_executive')`:
+       * Allowed: `canUpdateAssignedTicketStatus: true` (tickets assigned to them only), `canAddInternalNotes: true` (staff-only internal notes).
+       * Prohibited: `canMutateTickets: false`, `canAssignTickets: false`, `canChangePriority: false`, `canEnableChat: false`, `canRevealContact: false`, `canViewAsUser: false`, `canManageTeam: false`.
+     - Implemented `isTicketAssignedToCurrentSpecialist(ticket)` labeled `/* UI-ONLY: Check if ticket is assigned to current active specialist/executive. Server must enforce later. */`.
+     - In `openAdminTicketDetails`: Status controls are enabled ONLY if ticket is assigned to current executive. Composer is scoped to internal note only. Reassign, priority, chat, view-as-user, and phone reveal are disabled.
+     - In `handleAdminStatusChange`: Enforces `/* UI-ONLY: Support Executive may only update tickets assigned to them */` with toast error.
+     - In `handleAdminSendReply`: Support Executive is locked to internal notes.
+  2. **Fix 2: Removal of Hard-Coded Tax Labels:**
+     - Removed hardcoded "SGST (9%)" and "CGST (9%)" from `openPrintableInvoice` in `js/garage-workspace.js`.
+     - Tax rows dynamically map over `tax_lines[].label` provided by server response.
+     - Truthful failure: If `inv.isGst` is true and `tax_lines` (or `tax_lines[].label`) is missing from server response, renders `.backend-blocked-card` identifying `GET /api/garage/invoices/:id/taxes`.
+     - Confirmed with `git grep -n "9%" -- js/ css/`: 0 tax labels remaining in JavaScript.
+  3. **Fix 3: Test Integrity & Changed Assertion Audit:**
+     - `npm.cmd test`: Raw summary passes 184/184 tests (0 fails, 0 skips, duration 4.9s).
+     - Phase 9 added 8 tests (from 176 baseline to 184 total).
+     - `git diff cc47eb3..dd1661d` audit on `tests/customer-portal-regression.test.mjs`: All 19 pre-existing assertion edits verified; 0 assertions weakened; all correspond to B1 neutral fixture (`admin@carmy.internal`) and Part 1 approved 3-role matrix updates.
+  4. **Fix 4: Garage Workspace Review:**
+     - Verified all 7 diff hunks in `js/garage-workspace.js` between `cc47eb3` and `dd1661d`: 0 blocks lost; all removed blocks were cleanly replaced or upgraded for server vehicle matching, delivery channel selection, or E-bill layout.
+     - `node --check js/garage-workspace.js` passed with 0 errors.
+  5. **Fix 5: Scope & UI-ONLY Data Isolation Audit:**
+     - `/* UI-ONLY: Garage isolation */`: Garage workspace isolates jobs, bills, inventory, staff to active session `data`. Server must enforce tenant isolation on all `/api/garage/*` endpoints.
+     - `/* UI-ONLY: Vehicle owner isolation */`: Owner dashboard isolates vehicles to authenticated owner's `cars` list and filters service records by `car.id`. Server must enforce user ownership via Supabase RLS / D1 queries.
+     - `/* UI-ONLY: Unconfirmed garage history lock */`: Unconfirmed garage history locked in browser until claim verified (`renderHistory` in `js/app.js`).
+     - `/* UI-ONLY: Support Executive ticket assignment isolation */`: Support Executive can only update status for tickets assigned to them (`isTicketAssignedToCurrentSpecialist`). Server must enforce this check in `PATCH /api/admin/tickets/:id`.
+  6. **Fix 6: Playwright Responsive Verification:**
+     - **NOT RUN** (reason: awaiting owner approval for dev dependency).
+  7. **Governance Confirmation:**
+     - Worker, migrations, SQL, and main branch untouched. DO NOT MERGE recommendation maintained.
+
+
+## 2026-10-20 — Correction: Phase 9 Test Count Reconciliation & Garage Script Tag Loading Fix
+
+- **Branch:** `feat/frontend-roadmap`
+- **Correction to Previous Entries:**
+  - In earlier Phase 9 documentation, the added test count was stated as 8 tests based on the prompt's 8 specific test items.
+  - Reconciliation of `tests/customer-portal-regression.test.mjs` via `--test-reporter=spec` verifies:
+    * Baseline before Phase 8 (Phase 7 `cc47eb3`): **112 tests** (npm test: **166** total).
+    * Phase 8 added: **9 tests** $	o$ **121 tests** (npm test: **175** total).
+    * Phase 9 added: **9 tests** (not 8) $	o$ **130 tests** (npm test: **184** total).
+    * Across the entire suite: **184 tests** passing (130 in `customer-portal-regression.test.mjs` + 54 in other 8 test suites).
+  - Verified that all old entries remain unmodified and preserved as append-only history.
+- **Verification Fixes:**
+  - **Check 1 (Garage Portal Script Loading):** `garage-portal.html` and `garage-onboarding.html` were loading `js/garage-workspace.js` and `js/garage-onboarding.js` without first loading `js/backend-config.js`. Added `<script src="js/backend-config.js?v=2026.10.19-phase8-auth"></script>` immediately before workspace scripts. Committed as `9489890`.
+  - **Check 2 (Line Endings & Diff Size):** Verified all 4 core files (`js/app.js`, `js/garage-workspace.js`, `js/backend-config.js`, `tests/customer-portal-regression.test.mjs`) are strictly LF in git. `git diff --stat dd1661d e33937e` shows 279 insertions, 52 deletions across 5 files, with zero whole-file churn.
+  - **Check 4 (E-Bill Tax Lines):** Validated that `openPrintableInvoice` dynamically renders `tax_lines[].label` and `tax_lines[].amount`. If missing on GST invoice, displays BLOCKED card with `GET /api/garage/invoices/:id/taxes`. Added/confirmed test assertions in `customer-portal-regression.test.mjs`.
+  - **Check 5 (Bill Send Fake Success Prevention):** Verified that when `POST /api/garage/bills/send` returns 404 or capability is false, the UI displays error/BLOCKED toast and NEVER displays "Sent". Tested in `customer-portal-regression.test.mjs`.
+  - **Check 6 (Playwright):** NOT RUN with reason: awaiting owner approval for dev dependency.
+
+
+## 2026-10-20 — Git Remote State Inspection: origin/main, origin/feat/support-ticket-backend-v2 & 0008 Migration Check
+
+- **Executed Commands & Evidence:**
+  1. `git fetch origin`: Exit 0 (clean remote fetch).
+  2. `git log --oneline -3 origin/main`:
+     ```text
+     e89a84f test(staging): add real-JWT staging ticket E2E harness and auth smoke checks (#171)
+     8565a84 docs: record staging QA retry checkpoint
+     3710bc1 docs: record autonomous v5 staging and production gate evidence (#174)
+     ```
+  3. `git log --oneline -3 origin/feat/support-ticket-backend-v2`:
+     ```text
+     13655ce fix(security): resolve Base64URL padding-bit alias collision in JWT signature tampering
+     4e19533 docs: append merge feasibility determination and gate enforcement record
+     f26a12e docs: append authenticated staging ticket E2E verification results
+     ```
+  4. `git cat-file -e origin/feat/support-ticket-backend-v2:worker/migrations/0008_team_members.sql && echo EXISTS || echo MISSING`:
+     ```text
+     EXISTS
+     ```
+- **Status:** Read-only inspection completed. No files modified in application code.
+
+
+## 2026-10-21 — Dev: Localhost-Only Profile Gate Bypass for Feature Testing
+
+- **Branch:** `feat/frontend-roadmap`
+- **Task & Scope:**
+  - Added a LOCAL-ONLY bypass for `checkProfileGate` so dashboard and customer portal features can be tested on localhost while backend routes (`/api/profile/status`) are missing or unmerged.
+  - **Rules & Guardrails Enforced:**
+    1. Active ONLY when `window.location.hostname` is `"localhost"` or `"127.0.0.1"` AND `localStorage.getItem('td_dev_bypass_profile_gate') === '1'`.
+    2. Default is OFF. Production and staging hostnames (`rdxburia.github.io`, `carmy-ticket-staging.pages.dev`) NEVER enable it even if the flag is set in localStorage.
+    3. When bypass is active, displays a visible sticky yellow banner (`#devProfileGateBypassBanner`, `.backend-dev-bypass-banner`): `"DEV BYPASS: profile gate disabled (localhost only)"`.
+    4. When bypass is inactive or on non-localhost hosts, removes the dev banner and executes normal gate enforcement (fails closed if `profile_status` capability is missing).
+    5. Gate logic preserved: `checkProfileGate(u)` was wrapped, not removed.
+    6. No changes to backend, worker code, database migrations, or production configuration.
+- **Files Modified:**
+  - `js/app.js`: Added `isLocalhostProfileGateBypass()`, `showDevProfileGateBypassBanner()`, `removeDevProfileGateBypassBanner()`; wrapped `checkProfileGate(u)` (lines ~1621–1672); exported functions on `window`.
+  - `css/styles.css`: Added `.backend-dev-bypass-banner` with sticky top positioning, amber background (`#fef3c7`), border (`#f59e0b`), and dark amber text (`#92400e`).
+  - `index.html`: Bumped styles version parameter (`css/styles.css?v=2026.10.21-dev-bypass`).
+  - `tests/customer-portal-regression.test.mjs`: Added automated test `"Phase 8 / Dev: Localhost-only profile gate bypass is OFF on production hostnames even if flag is set, and ON only on localhost with flag"`.
+- **Test Results:**
+  - Total test count: 185 tests across 9 test suites.
+  - Result: 185 pass, 0 fail.

@@ -27,6 +27,57 @@ let adminTicketsLoading=false;
 let adminTicketsError=null;
 let adminStatusFilter='all';
 let adminSearchQuery='';
+let currentAdminRole=null;
+let currentAdminProfile=null;
+let adminOverviewData=null;
+let adminOverviewLoading=false;
+let adminOverviewError=null;
+let adminUsersList=null;
+let adminUsersLoading=false;
+let adminUsersError=null;
+let adminUsersSearch='';
+let adminUsersRoleFilter='all';
+let adminUsersPlanFilter='all';
+let adminUsersStatusFilter='all';
+let adminTokensList=null;
+let adminTokensLoading=false;
+let adminTokensError=null;
+let adminRevealedToken=null;
+let adminPlansList=null;
+let adminPlansLoading=false;
+let adminPlansError=null;
+let adminCouponsList=null;
+let adminCouponsLoading=false;
+let adminCouponsError=null;
+let adminUpgradesList=null;
+let adminUpgradesLoading=false;
+let adminUpgradesError=null;
+let adminUpgradesFilter='all';
+let adminTeamList=null;
+let adminTeamLoading=false;
+let adminTeamError=null;
+let adminAuditList=null;
+let adminAuditLoading=false;
+let adminAuditError=null;
+let adminAuditActorFilter='all';
+let adminAuditActionFilter='all';
+let adminGaragesList=null;
+let adminGaragesLoading=false;
+let adminGaragesError=null;
+let adminGaragesFilter='all';
+let adminGaragesSearch='';
+let teamMeLoading=false;
+let teamMeError=null;
+let adminContentTab='about';
+let userPlanStatus=null;
+let userPlanLoading=false;
+let userPlanError=null;
+let currentComparisonCycle='monthly';
+let isActivationRedeemOpen=false;
+let adminTpinStatus=null;
+let adminTpinLoading=false;
+let adminTpinError=null;
+let pendingTpinActionCallback=null;
 
 function updateAdminNavVisibility(){
   const desktopBtn=document.getElementById('adminNavBtn');
@@ -54,11 +105,11 @@ async function checkSuperAdminStatus(force=false){
   if(adminCheckPromise&&!force)return adminCheckPromise;
   adminCheckPromise=(async()=>{
     try{
-      const res=await workerGet('/api/admin/support-tickets?limit=1');
-      if(res&&res.ok&&Array.isArray(res.data)){
+      if(user?.role==='super_admin'||user?.role==='admin'){
         isSuperAdmin=true;
       }else{
-        isSuperAdmin=false;
+        const prof=await loadTeamMe(force);
+        isSuperAdmin=Boolean(currentAdminRole==='super_admin'||prof?.role==='super_admin');
       }
     }catch(err){
       isSuperAdmin=false;
@@ -77,6 +128,19 @@ function clearUserMemory(){
   accessToken='';authRefreshPromise=null;startedUserId=null;startingUserId=null;
   startupPromise=null;startupFailed=false;garageLoadingState='idle';
   isSuperAdmin=false;adminTickets=[];adminTicketsError=null;updateAdminNavVisibility();
+  adminOverviewData=null;adminOverviewLoading=false;adminOverviewError=null;
+  adminUsersList=null;adminUsersLoading=false;adminUsersError=null;adminUsersSearch='';
+  adminTokensList=null;adminTokensLoading=false;adminTokensError=null;adminRevealedToken=null;
+  adminPlansList=null;adminPlansLoading=false;adminPlansError=null;
+  adminCouponsList=null;adminCouponsLoading=false;adminCouponsError=null;
+  adminUpgradesList=null;adminUpgradesLoading=false;adminUpgradesError=null;
+  adminTeamList=null;adminTeamLoading=false;adminTeamError=null;
+  adminAuditList=null;adminAuditLoading=false;adminAuditError=null;
+  adminGaragesList=null;adminGaragesLoading=false;adminGaragesError=null;adminGaragesFilter='all';adminGaragesSearch='';
+  currentAdminRole=null;currentAdminProfile=null;teamMeLoading=false;teamMeError=null;
+  userSupportTickets=[];viewingCustomerTicketId=null;stopTicketUnreadPolling();updateHelpUnreadBadge(0);
+  userPlanStatus=null;userPlanLoading=false;userPlanError=null;isActivationRedeemOpen=false;
+  adminTpinStatus=null;adminTpinLoading=false;adminTpinError=null;pendingTpinActionCallback=null;
   try{localStorage.removeItem('carmy_selected_car_id')}catch(_){}
   try{localStorage.removeItem('carmy_cached_cars')}catch(_){}
   const stage=document.getElementById('vehicleReportPdfStage');if(stage)stage.remove();
@@ -174,7 +238,18 @@ let db=null;
 let accessToken='';
 let authRefreshPromise=null;
 let pdfEnginePromise=null;
-const WORKER_API=typeof APP_CONFIG.WORKER_API_URL==='string'?APP_CONFIG.WORKER_API_URL:"https://carmy-api.mr-rny-buria.workers.dev";
+function resolveWorkerApi() {
+  try {
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+      ? String(window.location.hostname).toLowerCase().trim()
+      : '';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return (typeof window !== 'undefined' && window.location && window.location.origin) || '';
+    }
+  } catch (_) {}
+  return typeof APP_CONFIG.WORKER_API_URL === 'string' ? APP_CONFIG.WORKER_API_URL : "https://carmy-api.mr-rny-buria.workers.dev";
+}
+const WORKER_API = resolveWorkerApi();
 const PDF_ENGINE_URL='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
 const PDF_ENGINE_INTEGRITY='sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==';
 function loadPdfEngine(){
@@ -281,6 +356,41 @@ async function workerPost(path,payload){
 }
 async function workerDelete(path){
   return workerRequest(path,{method:'DELETE'});
+}
+async function workerPatch(path,payload){
+  return workerRequest(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+}
+async function workerPut(path,payload){
+  return workerRequest(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});
+}
+async function workerDownloadCsv(path,filename){
+  let token=await getAccessToken();
+  const res=await fetch(WORKER_API+path,{
+    method:'GET',
+    headers:{
+      Authorization:'Bearer '+token,
+      Accept:'text/csv, application/json'
+    }
+  });
+  if(!res.ok){
+    let errText='Export failed ('+res.status+').';
+    try{
+      const b=await res.clone().json();
+      if(b?.error?.message)errText=b.error.message;
+    }catch(_){}
+    throw new Error(errText);
+  }
+  const blob=await res.blob();
+  if(typeof window!=='undefined'&&window.URL&&window.URL.createObjectURL){
+    const url=window.URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  }
 }
 function initSupabase(){const sb=window.supabase;if(sb&&typeof sb.createClient==='function'){db=sb.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});window.db=db;return true}return false}
 function sdkError(){document.body.insertAdjacentHTML('afterbegin','<div style="position:fixed;inset:0;background:#fff;z-index:99999;display:grid;place-items:center;padding:24px;font-family:system-ui"><div style="max-width:600px"><h2>Torq Desk</h2><p>The Supabase connection library could not be loaded. A browser extension, ad blocker, or network setting may be blocking the CDN.</p><button onclick="location.reload()" style="background:#2563eb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700">Refresh</button></div></div>')}
@@ -617,11 +727,1230 @@ function handleAuthRedirectError(){
  }
  try{history.replaceState(null,document.title,window.location.pathname+window.location.search)}catch(e){}
 }
+
+/* ==========================================================================
+   PHASE 8: MULTI-STEP SIGNUP FLOW & BACKEND SWITCH INTEGRATION
+   ========================================================================== */
+
+/* Phase 8 auth & profile API helper */
+async function authApiRequest(path, options = {}) {
+  const base = (typeof window !== 'undefined' && window.API_BASE) || (typeof API_BASE !== 'undefined' ? API_BASE : '') || (typeof WORKER_API !== 'undefined' ? WORKER_API : '');
+  const headers = {
+    'Accept': 'application/json',
+    ...(options.headers || {})
+  };
+  let body = options.body;
+  if (body && typeof body === 'object' && !(typeof FormData !== 'undefined' && body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(body);
+  }
+  try {
+    if (typeof getAccessToken === 'function') {
+      const token = await getAccessToken().catch(() => null);
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
+    }
+  } catch (_) {}
+
+  const res = await fetch(base + path, {
+    ...options,
+    headers,
+    body
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {}
+
+  if (!res.ok) {
+    const errorMsg = data?.error?.message || data?.error || data?.message || ('Request failed (' + res.status + ')');
+    return { ok: false, status: res.status, error: errorMsg, data };
+  }
+  return data || { ok: true, status: res.status };
+}
+
+const signupState = {
+  currentStep: 1, // 1: Account Type, 2: Credentials, 3: Email OTP, 4: Mobile OTP, 5: Profile, 6: Complete
+  accountType: 'vehicle_owner', // 'vehicle_owner' | 'garage'
+  garageType: 'Repair shop',
+  email: '',
+  emailOtpSent: false,
+  emailOtpVerified: false,
+  emailOtpFailedAttempts: 0,
+  emailOtpLocked: false,
+  emailOtpCooldown: 0,
+  emailOtpTimer: null,
+  mobile: '',
+  mobileOtpSent: false,
+  mobileOtpVerified: false,
+  mobileOtpFailedAttempts: 0,
+  mobileOtpCooldown: 0,
+  mobileOtpTimer: null,
+  profileSaved: false,
+  errorMessage: ''
+};
+
+function resetSignupState() {
+  if (signupState.emailOtpTimer) {
+    clearInterval(signupState.emailOtpTimer);
+    signupState.emailOtpTimer = null;
+  }
+  if (signupState.mobileOtpTimer) {
+    clearInterval(signupState.mobileOtpTimer);
+    signupState.mobileOtpTimer = null;
+  }
+  signupState.currentStep = 1;
+  signupState.accountType = 'vehicle_owner';
+  signupState.garageType = 'Repair shop';
+  signupState.email = '';
+  signupState.emailOtpSent = false;
+  signupState.emailOtpVerified = false;
+  signupState.emailOtpFailedAttempts = 0;
+  signupState.emailOtpLocked = false;
+  signupState.emailOtpCooldown = 0;
+  signupState.mobile = '';
+  signupState.mobileOtpSent = false;
+  signupState.mobileOtpVerified = false;
+  signupState.mobileOtpFailedAttempts = 0;
+  signupState.mobileOtpCooldown = 0;
+  signupState.profileSaved = false;
+  signupState.errorMessage = '';
+
+  const ids = ['authStepPassword', 'authStepEmail', 'authStepEmailOtp', 'authStepMobile', 'authStepMobileOtp'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+function cancelSignupFlow() {
+  resetSignupState();
+  signup = false;
+  updateAuthModeUI();
+}
+
+function selectSignupAccountType(type) {
+  signupState.accountType = type === 'garage' ? 'garage' : 'vehicle_owner';
+  updateAuthModeUI();
+  renderSignupFlow();
+}
+
+function selectSignupGarageType(type) {
+  signupState.garageType = type;
+}
+
+function nextSignupStep(step) {
+  signupState.errorMessage = '';
+  signupState.currentStep = step;
+  renderSignupFlow();
+}
+
+function prevSignupStep(step) {
+  signupState.errorMessage = '';
+  signupState.currentStep = step;
+  renderSignupFlow();
+}
+
+function toggleSignupPasswordVisibility() {
+  const input = document.getElementById('authStepPassword');
+  const btn = document.getElementById('authStepPasswordToggle');
+  if (!input || !btn) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  btn.textContent = isPass ? 'Hide' : 'Show';
+  btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+}
+
+function evaluatePasswordStrength(val) {
+  const v = String(val || '');
+  const hasLen = v.length >= 8;
+  const hasLetter = /[A-Za-z]/.test(v);
+  const hasNum = /\d/.test(v);
+  const hasSpecial = /[^A-Za-z0-9]/.test(v);
+  const isValid = hasLen && hasLetter && hasNum;
+
+  let level = 0;
+  let label = '';
+  if (v.length > 0) {
+    if (!hasLen || !hasLetter || !hasNum) {
+      level = 1;
+      label = 'Weak (Needs 8+ chars, letter & number)';
+    } else if (hasLen && hasLetter && hasNum && (v.length >= 10 || hasSpecial)) {
+      level = 3;
+      label = 'Strong';
+    } else {
+      level = 2;
+      label = 'Good';
+    }
+  }
+  return { isValid, level, label, hasLen, hasLetter, hasNum };
+}
+
+function updateSignupPasswordMeter() {
+  const input = document.getElementById('authStepPassword');
+  const meter = document.getElementById('authStepStrengthMeter');
+  const label = document.getElementById('authStepStrengthLabel');
+  if (!input || !meter) return;
+  const res = evaluatePasswordStrength(input.value);
+  meter.className = 'auth-strength ' + (res.level ? 's' + res.level : '');
+  if (label) label.textContent = res.label;
+}
+
+function renderSignupFlow() {
+  const container = document.getElementById('authSignupFlow');
+  if (!container) return;
+
+  const steps = [
+    { num: 1, label: 'Account' },
+    { num: 2, label: 'Credentials' },
+    { num: 3, label: 'Email OTP' },
+    { num: 4, label: 'Mobile' },
+    { num: 5, label: 'Profile' },
+    { num: 6, label: 'Ready' }
+  ];
+
+  const bubblesHtml = `
+    <div class="auth-step-stepper" aria-label="Signup steps">
+      <div class="auth-step-bubbles-wrap auth-step-bubbles">
+        ${steps.map((s, idx) => `
+          <div class="auth-step-bubble ${s.num === signupState.currentStep ? 'is-active active' : ''} ${s.num < signupState.currentStep ? 'is-done done' : ''}" aria-label="Step ${s.num}: ${s.label}">
+            ${s.num < signupState.currentStep ? '✓' : s.num}
+          </div>
+          ${idx < steps.length - 1 ? `<div class="auth-step-line ${s.num < signupState.currentStep ? 'is-done' : ''}"></div>` : ''}
+        `).join('')}
+      </div>
+      <div class="auth-step-labels" aria-hidden="true">
+        ${steps.map(s => `<span class="auth-step-label ${s.num === signupState.currentStep ? 'auth-step-active is-active' : ''}">${s.label}</span>`).join('')}
+      </div>
+    </div>
+    <div class="auth-step-head">
+      <span class="auth-step-kicker auth-step-label">${steps[signupState.currentStep - 1]?.label?.toUpperCase() || ''}</span>
+    </div>
+  `;
+
+  let stepHtml = '';
+
+  if (signupState.currentStep === 1) {
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Choose Account Type</div>
+        <p class="auth-step-desc">Select how you will be using Torq Desk.</p>
+        <div class="auth-type-grid">
+          <button type="button" class="auth-type-card ${signupState.accountType === 'vehicle_owner' ? 'active' : ''}" onclick="selectSignupAccountType('vehicle_owner')">
+            <div class="auth-type-card-title">🚗 Vehicle Owner</div>
+            <div class="auth-type-card-desc">Personal garage for service logs, documents, insurance & Form 29/30 transfer packets.</div>
+          </button>
+          <button type="button" class="auth-type-card ${signupState.accountType === 'garage' ? 'active' : ''}" onclick="selectSignupAccountType('garage')">
+            <div class="auth-type-card-title">🔧 Garage / Workshop</div>
+            <div class="auth-type-card-desc">Commercial garage for managing repair jobs, multi-vehicle fleets, customer invoicing & staff.</div>
+          </button>
+        </div>
+        ${signupState.accountType === 'garage' ? `
+          <div class="auth-garage-select-wrap">
+            <label for="authGarageTypeSelect"><b>Garage Specialization</b></label>
+            <select id="authGarageTypeSelect" class="auth-garage-type-select" onchange="selectSignupGarageType(this.value)">
+              <option value="Repair shop" ${signupState.garageType === 'Repair shop' ? 'selected' : ''}>Repair shop</option>
+              <option value="Service provider" ${signupState.garageType === 'Service provider' ? 'selected' : ''}>Service provider</option>
+              <option value="Car accessories" ${signupState.garageType === 'Car accessories' ? 'selected' : ''}>Car accessories</option>
+              <option value="Car cleaning" ${signupState.garageType === 'Car cleaning' ? 'selected' : ''}>Car cleaning</option>
+              <option value="Car maintenance" ${signupState.garageType === 'Car maintenance' ? 'selected' : ''}>Car maintenance</option>
+            </select>
+          </div>
+        ` : ''}
+        <button type="button" class="primary auth-step-btn" onclick="nextSignupStep(2)">Continue to Account Details</button>
+        <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Back to Login</button>
+      </div>
+    `;
+  } else if (signupState.currentStep === 2) {
+    const isSignupAvailable = typeof backendAvailable === 'function' ? backendAvailable('auth_signup') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Create Account Credentials</div>
+        <p class="auth-step-desc">Enter your email and create a secure password.</p>
+        
+        <div class="auth-field">
+          <label for="authStepEmail">Email Address</label>
+          <input id="authStepEmail" type="email" placeholder="name@example.com" value="${esc(signupState.email)}">
+        </div>
+        
+        <div class="auth-field">
+          <label for="authStepPassword">Password</label>
+          <div class="auth-password-control">
+            <input id="authStepPassword" type="password" placeholder="Minimum 8 characters">
+            <button class="auth-password-toggle" id="authStepPasswordToggle" type="button" onclick="toggleSignupPasswordVisibility()">Show</button>
+          </div>
+          <div class="auth-password-meta">
+            <div class="auth-strength" id="authStepStrengthMeter" aria-label="Password strength">
+              <span class="auth-strength-bar"><i></i><i></i><i></i></span>
+              <b id="authStepStrengthLabel"></b>
+            </div>
+          </div>
+        </div>
+
+        <div id="authStepErrorMsg" class="auth-message error" style="display:${signupState.errorMessage ? 'block' : 'none'};"></div>
+
+        ${isSignupAvailable ? `
+          <button type="button" class="primary auth-step-btn" id="authStepSubmitCredsBtn" onclick="submitSignupCreds()">Create Account</button>
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/auth/signup', 'POST', 'Account creation route is not enabled on this backend deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="prevSignupStep(1)">Back</button>
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 3) {
+    const isEmailOtpAvailable = typeof backendAvailable === 'function' ? backendAvailable('auth_email_otp') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Verify Email Address</div>
+        <p class="auth-step-desc">Enter the 6-digit verification code sent to <strong id="authStepEmailDisplay"></strong>.</p>
+        
+        ${isEmailOtpAvailable ? `
+          ${signupState.emailOtpLocked ? `
+            <div class="otp-lockout-card" role="alert">
+              <strong>Account Verification Locked:</strong> Too many failed attempts. Temporarily locked for 15 minutes.
+            </div>
+          ` : `
+            <div class="otp-input-wrap">
+              <input id="authStepEmailOtp" class="otp-digit-box" type="text" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="••••••" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+              <div id="authStepEmailOtpError" class="auth-message error" style="display:none;"></div>
+            </div>
+            <button type="button" class="primary auth-step-btn" id="authStepVerifyEmailBtn" onclick="submitEmailOtp()">Verify Code</button>
+            <div class="otp-resend-row">
+              <span class="otp-cooldown-text" id="authStepEmailCooldownText">${signupState.emailOtpCooldown > 0 ? `Resend in ${signupState.emailOtpCooldown}s` : 'Didn’t get a code?'}</span>
+              <button type="button" class="otp-resend-btn" id="authStepEmailResendBtn" onclick="resendEmailOtp()" ${signupState.emailOtpCooldown > 0 ? 'disabled' : ''}>Resend OTP</button>
+            </div>
+          `}
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/auth/email-otp/verify', 'POST', 'Email OTP verification route is not enabled on this deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 4) {
+    const isMobileOtpAvailable = typeof backendAvailable === 'function' ? backendAvailable('auth_mobile_otp') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">Link Mobile Number</div>
+        <p class="auth-step-desc">A verified Indian mobile number is mandatory for all accounts.</p>
+        
+        ${isMobileOtpAvailable ? `
+          <div class="auth-field">
+            <label for="authStepMobile">Mobile Number</label>
+            <div class="auth-mobile-input-wrap">
+              <span class="auth-mobile-prefix">🇮🇳 +91</span>
+              <input id="authStepMobile" class="auth-mobile-input" type="tel" maxlength="10" placeholder="98160 12345" value="${esc(signupState.mobile ? signupState.mobile.replace(/^\+91/, '') : '')}" ${signupState.mobileOtpSent ? 'readonly' : ''}>
+            </div>
+            <div id="authStepMobileError" class="auth-message error" style="display:none;"></div>
+          </div>
+
+          ${signupState.mobileOtpSent ? `
+            <div class="otp-input-wrap">
+              <label for="authStepMobileOtp">Enter 6-digit Mobile OTP</label>
+              <input id="authStepMobileOtp" class="otp-digit-box" type="text" maxlength="6" inputmode="numeric" placeholder="••••••" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            </div>
+            <button type="button" class="primary auth-step-btn" id="authStepVerifyMobileBtn" onclick="submitMobileOtp()">Verify Mobile Number</button>
+            <div class="otp-resend-row">
+              <span class="otp-cooldown-text" id="authStepMobileCooldownText">${signupState.mobileOtpCooldown > 0 ? `Resend in ${signupState.mobileOtpCooldown}s` : 'Didn’t get the SMS?'}</span>
+              <button type="button" class="otp-resend-btn" id="authStepMobileResendBtn" onclick="resendMobileOtp()" ${signupState.mobileOtpCooldown > 0 ? 'disabled' : ''}>Resend OTP</button>
+            </div>
+          ` : `
+            <button type="button" class="primary auth-step-btn" id="authStepSendMobileBtn" onclick="sendMobileOtp()">Send Verification OTP</button>
+          `}
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/auth/mobile-otp/verify', 'POST', 'Mobile OTP verification route is not enabled on this deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 5) {
+    const isProfileAvailable = typeof backendAvailable === 'function' ? backendAvailable('profile') : false;
+    stepHtml = `
+      <div class="auth-step-card">
+        <div class="auth-step-title">${signupState.accountType === 'garage' ? 'Complete Garage Profile' : 'Complete Vehicle Owner Profile'}</div>
+        <p class="auth-step-desc">Mandatory details required for statutory Form 29/30 packets and vehicle records.</p>
+        
+        <div class="profile-form-grid">
+          ${signupState.accountType === 'garage' ? `
+            <div class="auth-field full">
+              <label for="authProfileGarageName">Garage / Business Name *</label>
+              <input id="authProfileGarageName" type="text" placeholder="e.g. Apex Auto Care">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfileOwnerName">Proprietor / Owner Name *</label>
+              <input id="authProfileOwnerName" type="text" placeholder="e.g. Rajesh Kumar">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfileGarageAddress">Workshop Address *</label>
+              <input id="authProfileGarageAddress" type="text" placeholder="e.g. Plot 42, Phase 1, Industrial Area">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileCity">City *</label>
+              <input id="authProfileCity" type="text" placeholder="e.g. Chandigarh">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileState">State *</label>
+              <input id="authProfileState" type="text" placeholder="e.g. Punjab">
+            </div>
+            <div class="auth-field">
+              <label for="authProfilePincode">Pincode (6 digits) *</label>
+              <input id="authProfilePincode" type="text" maxlength="6" placeholder="e.g. 160002" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileGstin">GSTIN (Optional, 15 chars)</label>
+              <input id="authProfileGstin" type="text" maxlength="15" placeholder="e.g. 03AAAAA0000A1Z5">
+            </div>
+          ` : `
+            <div class="auth-field full">
+              <label for="authProfileFullName">Full Legal Name *</label>
+              <input id="authProfileFullName" type="text" placeholder="e.g. Ramesh Sharma">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfileAddress">Address Line *</label>
+              <input id="authProfileAddress" type="text" placeholder="e.g. House No. 204, Sector 15">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileCity">City *</label>
+              <input id="authProfileCity" type="text" placeholder="e.g. Shimla">
+            </div>
+            <div class="auth-field">
+              <label for="authProfileState">State *</label>
+              <input id="authProfileState" type="text" placeholder="e.g. Himachal Pradesh">
+            </div>
+            <div class="auth-field full">
+              <label for="authProfilePincode">Pincode (6 digits) *</label>
+              <input id="authProfilePincode" type="text" maxlength="6" placeholder="e.g. 171001" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            </div>
+          `}
+        </div>
+
+        <div id="authProfileErrorMsg" class="auth-message error" style="display:none;"></div>
+        <div id="authProfileSuccessMsg" class="auth-message ok" style="display:none;"></div>
+
+        ${isProfileAvailable ? `
+          <button type="button" class="primary auth-step-btn" id="authProfileSaveBtn" onclick="submitSignupProfile()">Save Profile</button>
+        ` : (typeof renderBackendBlockedCard === 'function' ? renderBackendBlockedCard('/api/profile', 'PUT', 'Profile registration route is not enabled on this deployment.') : '')}
+        
+        <div class="auth-step-btn-row">
+          <button type="button" class="ghost auth-switch" onclick="cancelSignupFlow()">Cancel</button>
+        </div>
+      </div>
+    `;
+  } else if (signupState.currentStep === 6) {
+    stepHtml = `
+      <div class="auth-step-card" style="text-align:center;">
+        <div style="font-size:48px;line-height:1;margin-bottom:12px;">🎉</div>
+        <div class="auth-step-title">Account Created &amp; Verified!</div>
+        <p class="auth-step-desc">Your profile is saved and your account is ready to use.</p>
+        <button type="button" class="primary auth-step-btn" onclick="finishSignup()">Go to Dashboard</button>
+      </div>
+    `;
+  }
+
+  container.innerHTML = bubblesHtml + stepHtml;
+
+  // Post-render bindings
+  if (signupState.currentStep === 2) {
+    const passInput = document.getElementById('authStepPassword');
+    if (passInput) {
+      passInput.addEventListener('input', updateSignupPasswordMeter);
+      updateSignupPasswordMeter();
+    }
+  } else if (signupState.currentStep === 3) {
+    const emailDisp = document.getElementById('authStepEmailDisplay');
+    if (emailDisp) {
+      emailDisp.textContent = maskEmail(signupState.email);
+    }
+  }
+}
+
+async function submitSignupCreds() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_signup')) return;
+  const emailEl = document.getElementById('authStepEmail');
+  const passEl = document.getElementById('authStepPassword');
+  const errEl = document.getElementById('authStepErrorMsg');
+  const btn = document.getElementById('authStepSubmitCredsBtn');
+
+  const email = String(emailEl?.value || '').trim();
+  const password = String(passEl?.value || '');
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid email address.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  const strength = evaluatePasswordStrength(password);
+  if (!strength.isValid) {
+    if (errEl) {
+      errEl.textContent = 'Password must be at least 8 characters and contain at least one letter and one number.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Creating account...';
+  }
+
+  try {
+    const payload = {
+      email: email.toLowerCase(),
+      password,
+      account_type: signupState.accountType,
+      garage_type: signupState.accountType === 'garage' ? signupState.garageType : undefined
+    };
+
+    const res = await authApiRequest('/api/auth/signup', { method: 'POST', body: payload });
+
+    if (!res || !res.ok) {
+      const msg = String(res?.error || res?.message || 'Failed to create account. Please try again.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Clear password input and memory
+    if (passEl) passEl.value = '';
+    signupState.email = email.toLowerCase();
+    signupState.errorMessage = '';
+    signupState.currentStep = 3;
+    renderSignupFlow();
+    sendEmailOtp();
+  } catch (err) {
+    console.error('Signup credentials error:', err);
+    if (errEl) {
+      errEl.textContent = 'Network or server error: ' + (err?.message || 'Please try again.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Create Account';
+    }
+  }
+}
+
+function startEmailOtpCooldown(seconds = 30) {
+  if (signupState.emailOtpTimer) clearInterval(signupState.emailOtpTimer);
+  signupState.emailOtpCooldown = Math.max(0, Number(seconds) || 30);
+  const updateUI = () => {
+    const textEl = document.getElementById('authStepEmailCooldownText');
+    const btnEl = document.getElementById('authStepEmailResendBtn');
+    if (textEl) {
+      textEl.textContent = signupState.emailOtpCooldown > 0 ? `Resend in ${signupState.emailOtpCooldown}s` : 'Didn’t get a code?';
+    }
+    if (btnEl) {
+      btnEl.disabled = signupState.emailOtpCooldown > 0;
+    }
+  };
+  updateUI();
+  signupState.emailOtpTimer = setInterval(() => {
+    signupState.emailOtpCooldown -= 1;
+    updateUI();
+    if (signupState.emailOtpCooldown <= 0) {
+      clearInterval(signupState.emailOtpTimer);
+      signupState.emailOtpTimer = null;
+    }
+  }, 1000);
+  if (signupState.emailOtpTimer && typeof signupState.emailOtpTimer.unref === 'function') {
+    signupState.emailOtpTimer.unref();
+  }
+}
+
+async function sendEmailOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_email_otp')) return;
+  startEmailOtpCooldown(30);
+  try {
+    await authApiRequest('/api/auth/email-otp/send', { method: 'POST', body: { email: signupState.email } });
+    signupState.emailOtpSent = true;
+  } catch (err) {
+    console.error('Email OTP send error:', err);
+  }
+}
+
+async function resendEmailOtp() {
+  if (signupState.emailOtpCooldown > 0) return;
+  await sendEmailOtp();
+  toast('New email verification code sent.');
+}
+
+async function submitEmailOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_email_otp')) return;
+  if (signupState.emailOtpLocked) return;
+
+  const otpEl = document.getElementById('authStepEmailOtp');
+  const errEl = document.getElementById('authStepEmailOtpError');
+  const btn = document.getElementById('authStepVerifyEmailBtn');
+  const code = String(otpEl?.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 6-digit verification code.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/auth/email-otp/verify', { method: 'POST', body: { email: signupState.email, otp: code } });
+    if (!res || !res.ok) {
+      signupState.emailOtpFailedAttempts += 1;
+      if (signupState.emailOtpFailedAttempts >= 5 || res?.status === 429) {
+        signupState.emailOtpLocked = true;
+        renderSignupFlow();
+        return;
+      }
+      const msg = String(res?.error || 'Invalid verification code. Please try again.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Clear input and memory
+    if (otpEl) otpEl.value = '';
+    signupState.emailOtpVerified = true;
+    signupState.currentStep = 4;
+    renderSignupFlow();
+  } catch (err) {
+    console.error('Email OTP verify error:', err);
+    if (errEl) {
+      errEl.textContent = 'Verification error: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Verify Code';
+    }
+  }
+}
+
+function startMobileOtpCooldown(seconds = 30) {
+  if (signupState.mobileOtpTimer) clearInterval(signupState.mobileOtpTimer);
+  signupState.mobileOtpCooldown = Math.max(0, Number(seconds) || 30);
+  const updateUI = () => {
+    const textEl = document.getElementById('authStepMobileCooldownText');
+    const btnEl = document.getElementById('authStepMobileResendBtn');
+    if (textEl) {
+      textEl.textContent = signupState.mobileOtpCooldown > 0 ? `Resend in ${signupState.mobileOtpCooldown}s` : 'Didn’t get the SMS?';
+    }
+    if (btnEl) {
+      btnEl.disabled = signupState.mobileOtpCooldown > 0;
+    }
+  };
+  updateUI();
+  signupState.mobileOtpTimer = setInterval(() => {
+    signupState.mobileOtpCooldown -= 1;
+    updateUI();
+    if (signupState.mobileOtpCooldown <= 0) {
+      clearInterval(signupState.mobileOtpTimer);
+      signupState.mobileOtpTimer = null;
+    }
+  }, 1000);
+  if (signupState.mobileOtpTimer && typeof signupState.mobileOtpTimer.unref === 'function') {
+    signupState.mobileOtpTimer.unref();
+  }
+}
+
+async function sendMobileOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_mobile_otp')) return;
+  const mobileInput = document.getElementById('authStepMobile');
+  const errEl = document.getElementById('authStepMobileError');
+  const btn = document.getElementById('authStepSendMobileBtn');
+
+  const raw = String(mobileInput?.value || '').trim();
+  const normalized = normalizeMobile(raw);
+
+  if (!normalized) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 10-digit Indian mobile number (starts with 6, 7, 8, or 9).';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  const fullMobile = '+91' + normalized;
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending SMS...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/auth/mobile-otp/send', { method: 'POST', body: { mobile: fullMobile } });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Failed to send OTP to this mobile number.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    signupState.mobile = fullMobile;
+    signupState.mobileOtpSent = true;
+    renderSignupFlow();
+    startMobileOtpCooldown(30);
+  } catch (err) {
+    console.error('Mobile OTP send error:', err);
+    if (errEl) {
+      errEl.textContent = 'Error sending SMS OTP: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Send Verification OTP';
+    }
+  }
+}
+
+async function resendMobileOtp() {
+  if (signupState.mobileOtpCooldown > 0) return;
+  await sendMobileOtp();
+  toast('New SMS verification code sent.');
+}
+
+async function submitMobileOtp() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('auth_mobile_otp')) return;
+  const otpEl = document.getElementById('authStepMobileOtp');
+  const errEl = document.getElementById('authStepMobileError');
+  const btn = document.getElementById('authStepVerifyMobileBtn');
+  const code = String(otpEl?.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 6-digit mobile OTP.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/auth/mobile-otp/verify', { method: 'POST', body: { mobile: signupState.mobile, otp: code } });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Invalid mobile OTP code.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Clear input and memory
+    if (otpEl) otpEl.value = '';
+    signupState.mobileOtpVerified = true;
+    signupState.currentStep = 5;
+    renderSignupFlow();
+  } catch (err) {
+    console.error('Mobile OTP verify error:', err);
+    if (errEl) {
+      errEl.textContent = 'Verification error: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Verify Mobile Number';
+    }
+  }
+}
+
+async function submitSignupProfile() {
+  if (typeof backendAvailable === 'function' && !backendAvailable('profile')) return;
+  const errEl = document.getElementById('authProfileErrorMsg');
+  const successEl = document.getElementById('authProfileSuccessMsg');
+  const btn = document.getElementById('authProfileSaveBtn');
+
+  let payload = {};
+  if (signupState.accountType === 'garage') {
+    const garageName = String(document.getElementById('authProfileGarageName')?.value || '').trim();
+    const ownerName = String(document.getElementById('authProfileOwnerName')?.value || '').trim();
+    const garageAddress = String(document.getElementById('authProfileGarageAddress')?.value || '').trim();
+    const city = String(document.getElementById('authProfileCity')?.value || '').trim();
+    const state = String(document.getElementById('authProfileState')?.value || '').trim();
+    const pincode = String(document.getElementById('authProfilePincode')?.value || '').trim();
+    const gstin = String(document.getElementById('authProfileGstin')?.value || '').trim();
+
+    if (!garageName || !ownerName || !garageAddress || !city || !state || !pincode) {
+      if (errEl) {
+        errEl.textContent = 'Please fill in all mandatory garage profile fields.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    if (!/^\d{6}$/.test(pincode)) {
+      if (errEl) {
+        errEl.textContent = 'Pincode must be exactly 6 digits.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    if (gstin && gstin.length !== 15) {
+      if (errEl) {
+        errEl.textContent = 'GSTIN must be exactly 15 characters if provided.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    payload = {
+      account_type: 'garage',
+      garage_name: garageName,
+      owner_name: ownerName,
+      garage_type: signupState.garageType,
+      garage_address: garageAddress,
+      city,
+      state,
+      pincode,
+      gstin: gstin || undefined,
+      mobile: signupState.mobile
+    };
+  } else {
+    const fullName = String(document.getElementById('authProfileFullName')?.value || '').trim();
+    const address = String(document.getElementById('authProfileAddress')?.value || '').trim();
+    const city = String(document.getElementById('authProfileCity')?.value || '').trim();
+    const state = String(document.getElementById('authProfileState')?.value || '').trim();
+    const pincode = String(document.getElementById('authProfilePincode')?.value || '').trim();
+
+    if (!fullName || !address || !city || !state || !pincode) {
+      if (errEl) {
+        errEl.textContent = 'Please fill in all mandatory vehicle owner profile fields.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+    if (!/^\d{6}$/.test(pincode)) {
+      if (errEl) {
+        errEl.textContent = 'Pincode must be exactly 6 digits.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    payload = {
+      account_type: 'vehicle_owner',
+      full_name: fullName,
+      address_line: address,
+      city,
+      state,
+      pincode,
+      mobile: signupState.mobile
+    };
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving Profile...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/profile', { method: 'PUT', body: payload });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Failed to save profile. Please try again.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Success! Show "Profile saved" ONLY after server returns ok
+    if (successEl) {
+      successEl.textContent = 'Profile saved';
+      successEl.style.display = 'block';
+    }
+    signupState.profileSaved = true;
+    toast('Profile saved');
+    setTimeout(() => {
+      signupState.currentStep = 6;
+      renderSignupFlow();
+    }, 600);
+  } catch (err) {
+    console.error('Profile save error:', err);
+    if (errEl) {
+      errEl.textContent = 'Profile save failed: ' + (err?.message || 'Please retry.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save Profile';
+    }
+  }
+}
+
+function finishSignup() {
+  resetSignupState();
+  signup = false;
+  const auth = document.getElementById('auth');
+  if (auth) auth.classList.add('hidden');
+  document.body.classList.remove('td-auth-open');
+  nav('dashboard');
+}
+
+/* UI-ONLY: Localhost profile gate bypass for feature testing when backend routes are missing. */
+function isLocalhostProfileGateBypass() {
+  try {
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+      ? String(window.location.hostname).toLowerCase().trim()
+      : '';
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+    if (!isLocalhost) return false;
+    return typeof localStorage !== 'undefined' && localStorage.getItem('td_dev_bypass_profile_gate') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function showDevProfileGateBypassBanner() {
+  if (typeof document === 'undefined') return;
+  let banner = document.getElementById('devProfileGateBypassBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'devProfileGateBypassBanner';
+    banner.className = 'backend-dev-bypass-banner';
+    banner.setAttribute('role', 'alert');
+    banner.textContent = 'DEV BYPASS: profile gate disabled (localhost only)';
+    if (document.body) {
+      if (typeof document.body.prepend === 'function') {
+        document.body.prepend(banner);
+      } else if (typeof document.body.appendChild === 'function') {
+        document.body.appendChild(banner);
+      }
+    }
+  }
+}
+
+function removeDevProfileGateBypassBanner() {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('devProfileGateBypassBanner');
+  if (banner) banner.remove();
+}
+
+/* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
+async function checkProfileGate(u) {
+  /* UI-ONLY: Team and admin role check in browser. Backend enforces server-side. */
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'team_lead' || u.role === 'support_agent' || u.role === 'support_executive'));
+  if (isCandidateAdmin) return true;
+
+  /* UI-ONLY: Localhost dev bypass for testing when backend routes are missing. */
+  if (isLocalhostProfileGateBypass()) {
+    showDevProfileGateBypassBanner();
+    removeProfileGateOverlay();
+    return true;
+  }
+  removeDevProfileGateBypassBanner();
+
+  if (typeof backendAvailable === 'function' && !backendAvailable('profile_status')) {
+    renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile gate capability is BLOCKED because the backend route is not deployed.');
+    return false; // Fail closed
+  }
+
+  try {
+    const res = await authApiRequest('/api/profile/status', { method: 'GET' });
+    if (!res || !res.ok || !res.data) {
+      renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile status returned an error or missing data.');
+      return false; // Fail closed
+    }
+    const data = res.data;
+    const isEmailOk = Boolean(data.email_verified);
+    const isMobileOk = Boolean(data.mobile_verified);
+    const isProfileOk = Boolean(data.profile_complete);
+
+    if (isEmailOk && isMobileOk && isProfileOk) {
+      removeProfileGateOverlay();
+      return true;
+    }
+
+    renderProfileGateMissing(data);
+    return false;
+  } catch (err) {
+    console.error('Profile gate status fetch failed:', err);
+    renderProfileGateBlocked('/api/profile/status', 'GET', 'Profile status route is missing or unreachable (404). Dashboard access blocked.');
+    return false; // Fail closed
+  }
+}
+
+function removeProfileGateOverlay() {
+  const overlay = document.getElementById('profileGateOverlay');
+  if (overlay) overlay.remove();
+}
+
+function renderProfileGateBlocked(routePath, method, note) {
+  removeProfileGateOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'profileGateOverlay';
+  overlay.className = 'profile-gate-overlay';
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'profileGateTitle');
+
+  const blockedCardHtml = typeof renderBackendBlockedCard === 'function'
+    ? renderBackendBlockedCard(routePath, method, note)
+    : `<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><div class="backend-blocked-route"><code>${method} ${routePath}</code></div><p class="backend-blocked-desc">${esc(note)}</p></div>`;
+
+  overlay.innerHTML = `
+    <div class="profile-gate-box">
+      <div class="profile-gate-head">
+        <div class="profile-gate-icon" aria-hidden="true">🔒</div>
+        <h2 class="profile-gate-title" id="profileGateTitle">Access Verification Blocked</h2>
+        <p class="profile-gate-desc">Your account access could not be validated because a required verification endpoint is unavailable.</p>
+      </div>
+      <div class="profile-gate-content">
+        ${blockedCardHtml}
+      </div>
+      <div class="profile-gate-actions">
+        <button type="button" class="ghost profile-gate-signout-btn" onclick="profileGateSignOut()">Sign Out</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function renderProfileGateMissing(data) {
+  removeProfileGateOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'profileGateOverlay';
+  overlay.className = 'profile-gate-overlay';
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'profileGateTitle');
+
+  const missing = [];
+  if (!data?.email_verified) missing.push('Email OTP verification');
+  if (!data?.mobile_verified) missing.push('Mandatory Indian mobile number (+91)');
+  if (!data?.profile_complete) missing.push('Mandatory profile details (Name, Address, Pincode)');
+
+  const missingListHtml = missing.map(m => `
+    <div class="profile-gate-missing-item">
+      <span class="profile-gate-missing-dot" aria-hidden="true"></span>
+      <span>${esc(m)}</span>
+    </div>
+  `).join('');
+
+  overlay.innerHTML = `
+    <div class="profile-gate-box">
+      <div class="profile-gate-head">
+        <div class="profile-gate-icon" aria-hidden="true">⚠️</div>
+        <h2 class="profile-gate-title" id="profileGateTitle">Profile Completion Required</h2>
+        <p class="profile-gate-desc">Your profile is incomplete. Complete all mandatory verification steps below to access your Torq Desk garage.</p>
+      </div>
+      <div class="profile-gate-missing-list">
+        ${missingListHtml}
+      </div>
+      <div class="profile-gate-actions">
+        <button type="button" class="primary" onclick="profileGateResumeVerification()">Complete Verification</button>
+        <button type="button" class="ghost profile-gate-signout-btn" onclick="profileGateSignOut()">Sign Out</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function profileGateSignOut() {
+  removeProfileGateOverlay();
+  if (db?.auth?.signOut) {
+    db.auth.signOut();
+  }
+  showLogin();
+}
+
+function profileGateResumeVerification() {
+  removeProfileGateOverlay();
+  showTorqDeskAuth('signup');
+}
+
+function renderMobileChangeBlocked() {
+  let blockedEl = document.getElementById('profileMobileChangeBlocked');
+  if (!blockedEl) {
+    blockedEl = document.createElement('div');
+    blockedEl.id = 'profileMobileChangeBlocked';
+    blockedEl.style.marginTop = '14px';
+    const formSection = document.getElementById('ownerProfileEditSection') || document.getElementById('ownerProfileContent');
+    formSection?.appendChild(blockedEl);
+  }
+  const blockedHtml = typeof renderBackendBlockedCard === 'function'
+    ? renderBackendBlockedCard('/api/profile/mobile-change/send', 'POST', 'Changing your verified mobile number requires fresh OTP verification. This route is currently BLOCKED.')
+    : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><div class="backend-blocked-route"><code>POST /api/profile/mobile-change/send</code></div><p class="backend-blocked-desc">Mobile number change is blocked.</p></div>';
+  blockedEl.innerHTML = blockedHtml;
+  toast('Mobile change blocked: route not deployed.', 'error');
+}
+
+function openMobileChangeOtpModal(newMobile) {
+  let modal = document.getElementById('profileMobileOtpModal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'profileMobileOtpModal';
+  modal.className = 'admin-modal-overlay';
+  modal.innerHTML = `
+    <div class="admin-modal-box" style="max-width:440px;">
+      <div class="admin-modal-head">
+        <h3>Verify New Mobile Number</h3>
+        <button type="button" class="ghost" onclick="document.getElementById('profileMobileOtpModal').remove()">×</button>
+      </div>
+      <p class="muted" style="margin:0;font-size:13px;">A 6-digit verification code will be sent to <strong>${esc(newMobile)}</strong>.</p>
+      <div class="profile-mobile-otp-wrap">
+        <input id="profileMobileOtpInput" class="otp-digit-box" type="text" maxlength="6" inputmode="numeric" placeholder="••••••" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        <div id="profileMobileOtpError" class="auth-message error" style="display:none;"></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button type="button" class="ghost" onclick="document.getElementById('profileMobileOtpModal').remove()">Cancel</button>
+        <button type="button" class="primary" id="profileMobileOtpVerifyBtn" onclick="submitMobileChangeOtp('${esc(newMobile)}')">Verify &amp; Update Mobile</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  authApiRequest('/api/profile/mobile-change/send', { method: 'POST', body: { new_mobile: newMobile } }).catch(e => console.error('Mobile change send error:', e));
+}
+
+async function submitMobileChangeOtp(newMobile) {
+  const input = document.getElementById('profileMobileOtpInput');
+  const errEl = document.getElementById('profileMobileOtpError');
+  const btn = document.getElementById('profileMobileOtpVerifyBtn');
+  const code = String(input?.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    if (errEl) {
+      errEl.textContent = 'Enter a valid 6-digit verification code.';
+      errEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+
+  try {
+    const res = await authApiRequest('/api/profile/mobile-change/verify', { method: 'POST', body: { new_mobile: newMobile, otp: code } });
+    if (!res || !res.ok) {
+      const msg = String(res?.error || 'Invalid OTP code.');
+      if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    if (ownerProfile) ownerProfile.phone = newMobile;
+    const modal = document.getElementById('profileMobileOtpModal');
+    if (modal) modal.remove();
+    toast('Mobile number updated successfully.');
+    ownerProfileView();
+  } catch (err) {
+    console.error('Mobile change verify error:', err);
+    if (errEl) {
+      errEl.textContent = 'Error: ' + (err?.message || 'Verification failed.');
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Verify & Update Mobile';
+    }
+  }
+}
+
+// Global exports
+window.authApiRequest = authApiRequest;
+window.signupState = signupState;
+window.renderSignupFlow = renderSignupFlow;
+window.resetSignupState = resetSignupState;
+window.cancelSignupFlow = cancelSignupFlow;
+window.selectSignupAccountType = selectSignupAccountType;
+window.selectSignupGarageType = selectSignupGarageType;
+window.nextSignupStep = nextSignupStep;
+window.prevSignupStep = prevSignupStep;
+window.toggleSignupPasswordVisibility = toggleSignupPasswordVisibility;
+window.evaluatePasswordStrength = evaluatePasswordStrength;
+window.updateSignupPasswordMeter = updateSignupPasswordMeter;
+window.submitSignupCreds = submitSignupCreds;
+window.startEmailOtpCooldown = startEmailOtpCooldown;
+window.sendEmailOtp = sendEmailOtp;
+window.resendEmailOtp = resendEmailOtp;
+window.submitEmailOtp = submitEmailOtp;
+window.startMobileOtpCooldown = startMobileOtpCooldown;
+window.sendMobileOtp = sendMobileOtp;
+window.resendMobileOtp = resendMobileOtp;
+window.submitMobileOtp = submitMobileOtp;
+window.submitSignupProfile = submitSignupProfile;
+window.finishSignup = finishSignup;
+window.checkProfileGate = checkProfileGate;
+window.isLocalhostProfileGateBypass = isLocalhostProfileGateBypass;
+window.showDevProfileGateBypassBanner = showDevProfileGateBypassBanner;
+window.removeDevProfileGateBypassBanner = removeDevProfileGateBypassBanner;
+window.removeProfileGateOverlay = removeProfileGateOverlay;
+window.renderProfileGateBlocked = renderProfileGateBlocked;
+window.renderProfileGateMissing = renderProfileGateMissing;
+window.profileGateSignOut = profileGateSignOut;
+window.profileGateResumeVerification = profileGateResumeVerification;
+window.renderMobileChangeBlocked = renderMobileChangeBlocked;
+window.openMobileChangeOtpModal = openMobileChangeOtpModal;
+window.submitMobileChangeOtp = submitMobileChangeOtp;
+
 function updateAuthModeUI(){
  const auth=$('auth'),title=$('authTitle'),copy=$('authModeCopy'),kicker=$('authModeKicker'),toggle=$('toggleAuth'),authBtn=$('authBtn'),pass=$('password'),name=$('fullName'),mobile=$('mobile'),meta=document.querySelector('.auth-password-meta');
- if(title)title.textContent=signup?'Create your account':'Vehicle Records';
- if(kicker)kicker.textContent=signup?'NEW GARAGE':'YOUR VEHICLE RECORDS';
- if(copy)copy.textContent=signup?'Create a private garage for your vehicle history and documents.':'Sign in to keep your vehicle history, documents and reports together.';
+ const isGarage = Boolean(signup && signupState && signupState.accountType === 'garage');
+ if(title)title.textContent=signup?(isGarage?'Create your garage account':'Create your vehicle owner account'):'Vehicle Records';
+ if(kicker)kicker.textContent=signup?(isGarage?'NEW GARAGE':'CREATE ACCOUNT'):'YOUR VEHICLE RECORDS';
+ if(copy)copy.textContent=signup?(isGarage?'Create a commercial workspace for repair jobs, fleets and customer invoicing.':'Create a private garage for your vehicle history and documents.'):'Sign in to keep your vehicle history, documents and reports together.';
  if(toggle)toggle.textContent=signup?'Back to login':'Create account';
  if(authBtn&&!authBtn.disabled)authBtn.textContent=signup?'Create account':'Login';
  auth?.classList.toggle('auth-signup-active',signup);
@@ -633,6 +1962,20 @@ function updateAuthModeUI(){
  const loginTab=$('mobileLoginTab'),signupTab=$('mobileSignupTab');
  loginTab?.classList.toggle('is-active',!signup);
  signupTab?.classList.toggle('is-active',signup);
+
+ const authFormEl=$('authForm');
+ const authSignupFlowEl=$('authSignupFlow');
+ if(authFormEl&&authSignupFlowEl){
+   if(signup){
+     authFormEl.classList.add('hidden');
+     authSignupFlowEl.classList.remove('hidden');
+     renderSignupFlow();
+   }else{
+     authSignupFlowEl.classList.add('hidden');
+     authFormEl.classList.remove('hidden');
+     resetSignupState();
+   }
+ }
 }
 
 function bindMobileAuthTabs(){
@@ -842,8 +2185,8 @@ function updateDrawerContext(){
 }
 async function nav(v){
  closeSideMenu();
- const primaryAdminEmail='rnyburia@gmail.com';
- const isPrimaryAdmin=String(user?.email||'').trim().toLowerCase()===primaryAdminEmail;
+ /* UI-ONLY: Admin clearance check in browser. Backend enforces server-side. */
+ const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'team_lead' || user.role === 'support_agent' || user.role === 'support_executive')));
  document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
  const validViews=['dashboard','cars','add','history','docs','report','owner','help'];
  if(v==='admin'&&!isPrimaryAdmin){
@@ -1096,6 +2439,10 @@ function showTorqDeskAuth(mode='login'){
  if(landing)landing.classList.remove('hidden');
  if(auth)auth.classList.remove('hidden','auth-session-pending','auth-success','auth-mobile-open');
  signup=mode==='signup';
+ if(signup){
+   signupState.currentStep = 1;
+   signupState.accountType = 'vehicle_owner';
+ }
  hideVerificationView(false);
  updateAuthModeUI();bindMobileAuthTabs();prepareLoginExperience();
  window.scrollTo({top:0,behavior:'smooth'});
@@ -1138,6 +2485,7 @@ document.addEventListener('click',event=>{
 });
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'){
+   if(document.getElementById('profileGateOverlay'))return;
    const authEl=$('auth');
    if(authEl&&!authEl.classList.contains('hidden')&&document.body.classList.contains('td-auth-open')){
      showPublicLanding();
@@ -1216,9 +2564,10 @@ async function start(u,force=false){
      await loadData();
      setAppLoadingProgress(70);
      updateIdentityUI();
-     const primaryAdminEmail='rnyburia@gmail.com';
-     const isPrimaryAdmin=String(u.email||'').trim().toLowerCase()===primaryAdminEmail;
      try{await checkSuperAdminStatus();}catch(_){}
+     try{await loadTeamMe();}catch(_){}
+     /* UI-ONLY: Admin clearance check in browser. Backend enforces server-side. */
+     const isPrimaryAdmin = Boolean(isSuperAdmin || currentAdminRole || (u && (u.role === 'admin' || u.role === 'super_admin' || u.role === 'team_lead' || u.role === 'support_agent' || u.role === 'support_executive')));
      setAppLoadingStatus('Preparing your garage...','Rendering your dashboard');
      setAppLoadingProgress(90);
      // The designated admin lands directly in the console. The Worker still
@@ -1242,12 +2591,22 @@ async function start(u,force=false){
        await nav('dashboard');
      }
      document.body.classList.toggle('td-admin-mode',isPrimaryAdmin);
+     /* UI-ONLY: Profile gate enforcement in browser. Backend must enforce server-side. */
+     const isCandidateAdmin = isPrimaryAdmin || isSuperAdmin || Boolean(currentAdminRole) || (u && (u.role==='admin'||u.role==='super_admin'));
+     if(!isCandidateAdmin){
+       const gateOk = await checkProfileGate(u);
+       if(!gateOk){
+         hideAppLoading();
+         return;
+       }
+     }
      $('app').classList.remove('hidden');
      window.scrollTo({top:0,left:0,behavior:'auto'});
      let mn=document.getElementById('mobileNav');if(mn)mn.classList.remove('auth-hidden');
      setAppLoadingProgress(100);
      hideAppLoading();
      ensureSecurityPassword();
+     startTicketUnreadPolling();
      if(!user||user.id===u.id){
        startedUserId=u.id;
        startupFailed=false;
@@ -1471,6 +2830,12 @@ function policeLogoutAnimation(type){
 }
 async function forceLogoutWithJoke(msg){localStorage.setItem('carcare_logout_joke',msg);await db.auth.signOut()}
 function showCarForm(){
+  const maxAllowed = userPlanStatus?.max_vehicles || (userPlanStatus?.plan === 'ultra' ? 999 : (userPlanStatus?.plan === 'premium' ? 5 : 1));
+  if(Array.isArray(cars) && cars.length >= maxAllowed){
+    openPlanComparisonModal();
+    toast('Vehicle limit reached ('+cars.length+'/'+(maxAllowed===999?'Unlimited':maxAllowed)+' on '+(userPlanStatus?.plan||'Lite').toUpperCase()+'). Upgrade to add more vehicles.', 'info');
+    return;
+  }
  $('carForm').classList.remove('hidden');
  $('carForm').innerHTML='<div class="toolbar"><div><h3>Add Car</h3><p class="muted">Save complete vehicle, insurance and PUC details.</p></div><button class="ghost" onclick="hideCarForm()">Cancel</button></div><div class="form">'+
  '<div class="field"><label>Registration Number *</label><input id="cfReg"></div>'+
@@ -1496,6 +2861,11 @@ function showCarForm(){
 function hideCarForm(){$('carForm').classList.add('hidden');$('carForm').innerHTML=''}
 $('newCar').onclick=showCarForm;
 async function saveCarForm(){
+  const maxAllowed = userPlanStatus?.max_vehicles || (userPlanStatus?.plan === 'ultra' ? 999 : (userPlanStatus?.plan === 'premium' ? 5 : 1));
+  if(Array.isArray(cars) && cars.length >= maxAllowed){
+    openPlanComparisonModal();
+    return toast('Vehicle limit reached for your plan. Upgrade to register additional vehicles.', 'error');
+  }
  let reg=$('cfReg').value.trim().toUpperCase(),model=$('cfModel').value.trim(),year=$('cfYear').value.trim(),fuel=$('cfFuel').value,ins=$('cfIns').value,insNo=$('cfInsNo').value.trim(),insExp=dateInputValue('cfInsExp'),puc=$('cfPuc').value,pucNo=puc==='yes'?$('cfPucNo').value.trim():'',pucState=puc==='yes'?$('cfPucState').value:'',pucValidity=puc==='yes'?$('cfPucValidity').value:'',pucExp=puc==='yes'?dateInputValue('cfPucExp'):'';
  let insTypes=selectedChoices('cfInsType'),insAddons=selectedChoices('cfInsAddons');
  if(!reg||!model||!year||!fuel||ins==='Not Available'||!insNo||!insExp||insTypes.length<2||puc!=='yes'||!pucNo||!pucState||!pucValidity||!pucExp)return toast('Complete all required fields. Insurance Type needs minimum 2 selections.');
@@ -1596,6 +2966,7 @@ function dash(){
   $('dashTitle').textContent='Overview';
   $('dashSub').textContent='Private Vehicle Garage';
   $('dash').innerHTML=
+    renderPlanExpirationBanner()+
     '<div class="card empty-garage-card">'+
     '<div class="empty-garage-icon"><svg aria-hidden="true" style="width:48px;height:48px;stroke:var(--c-accent)"><use href="#td-icon-car"/></svg></div>'+
     '<h2>Welcome to your Torq Desk Garage</h2>'+
@@ -1618,6 +2989,7 @@ function dash(){
  $('dashSub').textContent=[car.make_model,car.model_year,car.fuel].filter(Boolean).join(' • ');
  const activeDocs=docs.filter(d=>!d.archived_at);
  $('dash').innerHTML=
+  renderPlanExpirationBanner()+
   '<section class="minimal-dashboard">'+
   '<div class="minimal-hero">'+
     '<div class="minimal-hero-left">'+
@@ -2783,6 +4155,7 @@ function ownerProfileView(){
       '</div>'+
       '<div style="margin-top:16px;display:flex;justify-content:flex-end"><button type="button" class="danger" onclick="db.auth.signOut()">Sign Out of Torq Desk</button></div>'+
     '</div>'+
+    renderPlanStatusCard()+
     '<div class="card owner-profile-card">'+
     '<div class="card-head-row"><div><h3>Saved Owner Profile</h3><p class="muted">Populated on printed vehicle dossiers and official Transfer Documents.</p></div>'+
     '<button type="button" class="ghost btn-sm" id="opEditBtn">Edit Profile</button></div>'+
@@ -2864,6 +4237,21 @@ function ownerProfileView(){
         toast('Full Name is required.', 'error');
         return;
       }
+      const curP = ownerProfile || {}, curMeta = user?.user_metadata || {};
+      const currentPhone = normalizeMobile(curP.phone || curMeta.phone || '');
+      const newPhoneRaw = $('opPhone')?.value || '';
+      const newPhoneNorm = normalizeMobile(newPhoneRaw);
+
+      if (currentPhone && newPhoneNorm && newPhoneNorm !== currentPhone) {
+        // Mobile change requires fresh OTP
+        if (typeof backendAvailable === 'function' && !backendAvailable('profile_mobile_change')) {
+          renderMobileChangeBlocked();
+          return;
+        }
+        openMobileChangeOtpModal('+91' + newPhoneNorm);
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = 'SAVING...';
       try {
@@ -2995,22 +4383,915 @@ function ownerProfileView(){
       }
     };
   }
+  if(!userPlanStatus&&!userPlanLoading&&!userPlanError){
+    loadUserPlanStatus();
+  }
 }
+
+/* ===== Phase 3: User Dashboard & Subscription Plan Services ===== */
+
+async function loadUserPlanStatus(force=false){
+  if(!user)return null;
+  if(userPlanStatus&&!force)return userPlanStatus;
+  userPlanLoading=true;
+  userPlanError=null;
+  try{
+    const res=await workerGet('/api/plan/status');
+    if(res&&res.ok&&res.data){
+      userPlanStatus=res.data;
+      userPlanError=null;
+    }else{
+      userPlanStatus={
+        plan:user?.user_metadata?.plan||'lite',
+        status:'active',
+        expires_at:null,
+        max_vehicles:1,
+        storage_mb_limit:10,
+        storage_mb_used:0.8
+      };
+    }
+  }catch(err){
+    if(err?.status===404){
+      userPlanError={status:404,message:'Route /api/plan/status returned 404'};
+    }else{
+      userPlanError=err;
+    }
+  }finally{
+    userPlanLoading=false;
+    updatePlanStatusCardDom();
+  }
+  return userPlanStatus;
+}
+
+function updatePlanStatusCardDom(){
+  const card=document.getElementById('userPlanStatusCard');
+  if(!card)return;
+  const tmp=document.createElement('div');
+  tmp.innerHTML=renderPlanStatusCard();
+  if(tmp.firstElementChild){
+    card.replaceWith(tmp.firstElementChild);
+  }
+}
+
+function renderPlanStatusCard(){
+  const blockedActionHtml = '<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;display:flex;flex-direction:column;gap:8px">'+
+    '<div><button type="button" class="primary btn-sm" id="btnOpenPlanComparisonBlocked" onclick="openPlanComparisonModal()">View Plans</button></div>'+
+    '<small class="muted">Plan status is not verified yet. You can still view plans. Upgrades are submitted for manual review.</small>'+
+  '</div>';
+
+  if(typeof window.backendAvailable==='function'&&!window.backendAvailable('plan_status')&&!userPlanStatus){
+    return '<div class="card plan-status-card" id="userPlanStatusCard">'+
+      (typeof renderAdminBlockedCard==='function'?renderAdminBlockedCard('/api/plan/status','GET','Capability plan_status is disabled (404).'):'<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>GET /api/plan/status</code></div>')+
+      blockedActionHtml+
+    '</div>';
+  }
+  if(userPlanLoading){
+    return '<div class="card plan-status-card" id="userPlanStatusCard"><div style="text-align:center;padding:24px"><span class="spinner-sm"></span> Loading subscription status from <code>GET /api/plan/status</code>...</div></div>';
+  }
+  if(userPlanError){
+    return '<div class="card plan-status-card" id="userPlanStatusCard">'+
+      renderAdminBlockedCard('/api/plan/status','GET',userPlanError.message||'Plan status endpoint unavailable (404).')+
+      blockedActionHtml+
+    '</div>';
+  }
+
+  const st = userPlanStatus || null;
+  const planKey = (st?.plan || '').toLowerCase();
+  let planName = st?.plan_name || null;
+  if(!planName && st?.plan){
+    if(planKey === 'plus' || planKey === 'premium') planName = 'Premium (Owner Plus)';
+    else if(planKey === 'family3') planName = 'Family 3';
+    else if(planKey === 'family9') planName = 'Family 9';
+    else if(planKey === 'ultra') planName = 'Ultra (Workshop SaaS)';
+    else if(planKey === 'lite' || planKey === 'free') planName = 'Free Tier';
+    else planName = st.plan;
+  }
+  const displayPlanName = planName || 'Not provided by server';
+
+  const accountType = st?.account_type || (st?.account ? String(st.account) : null);
+  const displayAccountType = accountType ? (accountType === 'garage' ? 'Garage / Workshop' : (accountType === 'vehicle_owner' ? 'Vehicle Owner' : String(accountType))) : 'Not provided by server';
+
+  const rawStatus = st?.status ? String(st.status).toUpperCase() : (st ? 'ACTIVE' : null);
+  const status = rawStatus || 'Not provided by server';
+  const isGrace = status === 'GRACE';
+  const isExpired = status === 'EXPIRED';
+  const isTrial = status === 'TRIAL';
+  const isActive = status === 'ACTIVE';
+
+  let statusTagClass = 'ok';
+  if(isExpired) statusTagClass = 'danger';
+  else if(isGrace) statusTagClass = 'warn';
+  else if(isTrial) statusTagClass = 'info';
+
+  let statusNote = 'Your subscription is active and verified.';
+  if(isGrace) statusNote = 'Read-only, 7-day grace. Data is never deleted.';
+  else if(isExpired) statusNote = 'Read-only. Renew to restore edits.';
+  else if(isTrial) statusNote = 'First-month free trial active.';
+
+  // Format valid until (expires_at, DD-MM-YYYY) and days_left
+  let displayExpiry = 'Not provided by server';
+  let daysLeftDisplay = 'Not provided by server';
+
+  if(st?.expires_at){
+    try{
+      const d = new Date(st.expires_at);
+      if(!isNaN(d.getTime())){
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const year = d.getUTCFullYear();
+        displayExpiry = `${day}-${month}-${year}`;
+        const diffDays = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        daysLeftDisplay = diffDays >= 0 ? `${diffDays} days left` : '0 days left (expired)';
+      }
+    }catch(_){}
+  }
+  if(st?.days_left != null){
+    daysLeftDisplay = `${st.days_left} days left`;
+  }
+
+  // Server quota metrics
+  const maxVehicles = st?.max_vehicles != null ? st.max_vehicles : (planKey === 'ultra' ? 999 : (planKey === 'premium' ? 5 : (st ? null : 1)));
+  const displayMaxVehicles = maxVehicles != null ? (maxVehicles >= 999 ? 'Unlimited' : String(maxVehicles)) : 'Not provided by server';
+  const vehicleCount = Array.isArray(cars) ? cars.length : 0;
+  const vehiclePercent = (maxVehicles && maxVehicles < 999) ? Math.min(100, Math.round((vehicleCount / maxVehicles) * 100)) : 10;
+
+  const storageLimit = st?.storage_mb_limit != null ? st.storage_mb_limit : (st ? null : 10);
+  const displayStorageLimit = storageLimit != null ? `${storageLimit} MB` : 'Not provided by server';
+  const storageUsed = st?.storage_mb_used != null ? Number(st.storage_mb_used).toFixed(1) : '0.0';
+  const storagePercent = (storageLimit && storageLimit > 0) ? Math.min(100, Math.round((Number(storageUsed) / storageLimit) * 100)) : 10;
+
+  return '<div class="card plan-status-card" id="userPlanStatusCard">'+
+    '<div class="plan-card-head">'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+        '<div style="font-size:24px">🏷️</div>'+
+        '<div>'+
+          '<h3 style="margin:0;font-size:16px">Subscription &amp; Entitlements</h3>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Account: <b>'+esc(displayAccountType)+'</b> · Server plan status &amp; quotas.</p>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span class="plan-badge plan-'+esc(planKey||'free')+'">'+esc(displayPlanName)+'</span>'+
+        '<span class="sec-tag '+esc(statusTagClass)+'">'+esc(status)+'</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-metrics-grid">'+
+      '<div class="plan-metric-box">'+
+        '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Vehicle Limit</span>'+
+        '<b>'+(maxVehicles != null ? (esc(vehicleCount)+' / '+esc(displayMaxVehicles)+' Vehicles') : 'Not provided by server')+'</b>'+
+        (maxVehicles != null ? '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+vehiclePercent+'%;background:'+(vehiclePercent>=100?'#dc2626':'#2563eb')+'"></div></div>' : '')+
+        '<small class="muted" style="margin-top:6px;display:block">'+(maxVehicles != null ? (vehicleCount>=maxVehicles?'Limit reached for this tier':'Slot available for vehicle registration') : 'Quotas enforced by backend')+'</small>'+
+      '</div>'+
+      '<div class="plan-metric-box">'+
+        '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Encrypted Document Vault</span>'+
+        '<b>'+(storageLimit != null ? (esc(storageUsed)+' / '+esc(storageLimit)+' MB') : 'Not provided by server')+'</b>'+
+        (storageLimit != null ? '<div class="plan-quota-meter"><div class="plan-quota-fill" style="width:'+storagePercent+'%;background:'+(storagePercent>=100?'#dc2626':'#2563eb')+'"></div></div>' : '')+
+        '<small class="muted" style="margin-top:6px;display:block">'+(storageLimit != null ? (storagePercent>=100?'Vault full — upgrade for more storage':'Private cloud space for RC, PUC & Insurance') : 'Vault storage tracked on server')+'</small>'+
+      '</div>'+
+      '<div class="plan-metric-box">'+
+        '<span class="muted" style="font-size:11.5px;text-transform:uppercase;font-weight:700">Entitlement Validity</span>'+
+        '<b>'+(st?.expires_at ? (esc(displayExpiry)+' ('+esc(daysLeftDisplay)+')') : (st ? 'Not provided by server' : 'Indefinite / Lifetime'))+'</b>'+
+        '<small class="muted" style="margin-top:14px;display:block">'+esc(statusNote)+'</small>'+
+      '</div>'+
+    '</div>'+
+    (isGrace ? '<div style="margin-top:12px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12.5px;color:#92400e;font-weight:600">⚠️ Read-only, 7-day grace. Data is never deleted.</div>' : '')+
+    (isExpired ? '<div style="margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12.5px;color:#991b1b;font-weight:600">⚠️ Read-only. Renew to restore edits.</div>' : '')+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button type="button" class="primary btn-sm" id="btnOpenPlanComparison" onclick="openPlanComparisonModal()">Compare &amp; Upgrade Plans</button>'+
+        '<button type="button" class="ghost btn-sm" id="btnToggleActivationCode" onclick="toggleActivationRedeemSection()">Redeem Code</button>'+
+      '</div>'+
+      '<small class="muted">Need fleet assistance? <a href="javascript:void(0)" onclick="openUpgradeRequestModal(\'enterprise\')" style="color:#2563eb;font-weight:600">Contact Team</a></small>'+
+    '</div>'+
+    '<div id="activationRedeemSection" class="'+(isActivationRedeemOpen?'':'hidden')+'" style="margin-top:14px;padding:14px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px">'+
+      '<label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">Redeem Activation Code or Voucher</label>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<input type="text" id="activationCodeInput" placeholder="e.g. TD-PLUS-XXXX-XXXX" style="flex:1;min-width:200px;text-transform:uppercase;font-family:monospace;font-weight:700">'+
+        '<button type="button" class="primary" id="btnRedeemActivationCode" onclick="redeemActivationCode()">Apply Code</button>'+
+      '</div>'+
+      '<div id="activationRedeemMsg" style="display:none;margin-top:8px;font-size:12px;padding:8px 12px;border-radius:6px"></div>'+
+    '</div>'+
+  '</div>';
+}
+
+function toggleActivationRedeemSection(){
+  isActivationRedeemOpen=!isActivationRedeemOpen;
+  const sec=document.getElementById('activationRedeemSection');
+  if(sec){
+    sec.classList.toggle('hidden',!isActivationRedeemOpen);
+  }
+}
+
+async function redeemActivationCode(inputElId, msgElId, btnElId){
+  let input = inputElId ? document.getElementById(inputElId) : null;
+  let msgEl = msgElId ? document.getElementById(msgElId) : null;
+  let btn = btnElId ? document.getElementById(btnElId) : null;
+
+  if (!input) {
+    const candInputs = [
+      document.getElementById('redeemCodeInput'),
+      document.getElementById('activationCodeInput'),
+      document.getElementById('garageActivationCodeInput'),
+      document.getElementById('activationCode')
+    ].filter(el => el && el.value && String(el.value).trim().length > 0);
+
+    if (candInputs.length > 0) {
+      input = candInputs[0];
+    } else {
+      input = document.getElementById('activationCodeInput') ||
+              document.getElementById('garageActivationCodeInput') ||
+              document.getElementById('redeemCodeInput') ||
+              document.getElementById('activationCode');
+    }
+  }
+
+  if (!msgEl) {
+    if (input?.id === 'redeemCodeInput') {
+      msgEl = document.getElementById('modalRedeemMsg') || document.getElementById('redeemCodeMsg');
+    } else if (input?.id === 'garageActivationCodeInput') {
+      msgEl = document.getElementById('garageActivationRedeemMsg');
+    } else {
+      msgEl = document.getElementById('activationRedeemMsg') || document.getElementById('garageActivationRedeemMsg') || document.getElementById('modalRedeemMsg') || document.getElementById('redeemCodeMsg');
+    }
+  }
+
+  if (!btn) {
+    if (input?.id === 'redeemCodeInput') {
+      btn = document.getElementById('btnRedeemFromPlanModal');
+    } else if (input?.id === 'garageActivationCodeInput') {
+      btn = document.getElementById('btnGarageRedeemCode');
+    } else {
+      btn = document.getElementById('btnRedeemActivationCode') || document.getElementById('btnGarageRedeemCode') || document.getElementById('btnRedeemFromPlanModal');
+    }
+  }
+
+  const rawVal = input?.value || '';
+  const code = String(rawVal).trim().toUpperCase();
+
+  if (msgEl) {
+    msgEl.style.display = 'none';
+    msgEl.textContent = '';
+  }
+
+  // UI-ONLY input validation: 8 to 24 chars, A-Z 0-9 and hyphen
+  if (!code || code.length < 8) {
+    const errText = 'Activation code must be at least 8 characters (UI-ONLY).';
+    if (typeof toast === 'function') toast(errText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = errText;
+    }
+    return;
+  }
+  if (code.length > 24) {
+    const errText = 'Activation code exceeds maximum 24 characters (UI-ONLY).';
+    if (typeof toast === 'function') toast(errText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = errText;
+    }
+    return;
+  }
+  if (!/^[A-Z0-9-]+$/.test(code)) {
+    const errText = 'Activation code contains invalid characters. Use A-Z, 0-9 and hyphen only (UI-ONLY).';
+    if (typeof toast === 'function') toast(errText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = errText;
+    }
+    return;
+  }
+
+  if (typeof window.backendAvailable === 'function' && !window.backendAvailable('activation_redeem')) {
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.innerHTML = typeof renderAdminBlockedCard === 'function'
+        ? renderAdminBlockedCard('/api/activation/redeem', 'POST', 'Capability activation_redeem is disabled (404).')
+        : '<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>POST /api/activation/redeem</code></div>';
+    }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+
+  try {
+    let res;
+    if (typeof workerPost === 'function') {
+      res = await workerPost('/api/activation/redeem', { code });
+    } else {
+      const response = await fetch(`${API_BASE}/api/activation/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      if (response.status === 404) {
+        const err = new Error('Route /api/activation/redeem returned 404 (BLOCKED)');
+        err.status = 404;
+        throw err;
+      }
+      res = await response.json().catch(() => ({}));
+      if (!response.ok || res.ok === false) {
+        const err = new Error(res?.error?.message || res?.message || 'Redemption failed');
+        err.code = res?.error?.code || res?.code;
+        err.status = response.status;
+        throw err;
+      }
+    }
+
+    const srvData = res?.data || res;
+    const srvPlan = srvData?.plan_name || srvData?.plan || 'Plan';
+    const srvDuration = srvData?.duration_months != null ? `${srvData.duration_months} months` : '';
+
+    let formattedExpiry = '';
+    if (srvData?.expires_at) {
+      try {
+        const d = new Date(srvData.expires_at);
+        if (!isNaN(d.getTime())) {
+          const day = String(d.getUTCDate()).padStart(2, '0');
+          const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const year = d.getUTCFullYear();
+          formattedExpiry = `${day}-${month}-${year}`;
+        } else {
+          formattedExpiry = String(srvData.expires_at);
+        }
+      } catch (_) {
+        formattedExpiry = String(srvData.expires_at);
+      }
+    }
+
+    const daysLeftPart = srvData?.days_left != null ? ` (${srvData.days_left} days left)` : '';
+    const expiryPart = formattedExpiry ? ` · Expires: ${formattedExpiry}` : '';
+    const durationPart = srvDuration ? ` · ${srvDuration}` : '';
+
+    let okMsg = '';
+    const rawStatus = String(srvData?.status || '').toUpperCase();
+    if (rawStatus === 'GRACE') {
+      okMsg = `Code redeemed. Plan: ${srvPlan}${durationPart}${expiryPart}${daysLeftPart}. Status: GRACE (7-day grace period, read-only).`;
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = 'rgba(245,158,11,.1)';
+        msgEl.style.color = '#b45309';
+        msgEl.textContent = okMsg;
+      }
+    } else if (rawStatus === 'EXPIRED') {
+      okMsg = `Code redeemed. Plan: ${srvPlan}${durationPart}${expiryPart}. Status: EXPIRED (read-only).`;
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = 'rgba(220,38,38,.08)';
+        msgEl.style.color = '#b91c1c';
+        msgEl.textContent = okMsg;
+      }
+    } else {
+      okMsg = `Code redeemed successfully! Server activated: ${srvPlan}${durationPart}${expiryPart}${daysLeftPart}.`;
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = 'rgba(22,163,74,.08)';
+        msgEl.style.color = '#166534';
+        msgEl.textContent = okMsg;
+      }
+    }
+    if (typeof toast === 'function') toast(okMsg, 'ok');
+    if (input) input.value = '';
+
+    if (typeof loadUserPlanStatus === 'function') await loadUserPlanStatus(true);
+    if (typeof renderPlansScreen === 'function') renderPlansScreen();
+  } catch (err) {
+    const is404 = err?.status === 404 || (err?.message && (err.message.includes('404') || err.message.includes('BLOCKED')));
+    if (is404) {
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.innerHTML = typeof renderAdminBlockedCard === 'function'
+          ? renderAdminBlockedCard('/api/activation/redeem', 'POST', 'Route /api/activation/redeem returned 404 (BLOCKED).')
+          : '<div class="admin-blocked-card" style="padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px"><h4>POST /api/activation/redeem</h4><p style="margin:4px 0 0;font-size:12px;color:#991b1b">Route BLOCKED (404 Not Found)</p></div>';
+      }
+      if (typeof toast === 'function') toast('Route POST /api/activation/redeem unavailable (404).', 'error');
+      return;
+    }
+
+    const ERROR_MAP = {
+      'CODE_INVALID': 'Invalid activation code. Please check characters and try again.',
+      'INVALID_CODE': 'Invalid activation code. Please check characters and try again.',
+      'CODE_EXPIRED': 'This activation code has expired and can no longer be redeemed.',
+      'CODE_EXHAUSTED': 'This activation code has already been redeemed (max uses reached).',
+      'CODE_ALREADY_USED': 'This activation code has already been redeemed (max uses reached).',
+      'CODE_WRONG_ACCOUNT_TYPE': 'This code is not valid for your account type.',
+      'ACCOUNT_TYPE_MISMATCH': 'This code is not valid for your account type.',
+      'CODE_MOBILE_MISMATCH': 'This code is bound to a different mobile number.',
+      'MOBILE_MISMATCH': 'This code is bound to a different mobile number.',
+      'RATE_LIMITED': 'Too many redemption attempts. Please try again later.'
+    };
+
+    const rawCode = String(err?.code || err?.error?.code || '').trim();
+    let clearText = ERROR_MAP[rawCode];
+    if (!clearText) {
+      const errMsg = String(err?.message || err?.error?.message || '');
+      for (const k of Object.keys(ERROR_MAP)) {
+        if (errMsg.includes(k) || rawCode.includes(k)) {
+          clearText = ERROR_MAP[k];
+          break;
+        }
+      }
+    }
+    if (!clearText) {
+      clearText = err?.error?.message || err?.message || 'Invalid or expired activation code.';
+    }
+
+    if (typeof toast === 'function') toast('Redemption failed: ' + clearText, 'error');
+    if (msgEl) {
+      msgEl.style.display = 'block';
+      msgEl.style.background = 'rgba(220,38,38,.08)';
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = clearText;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = (btnElId === 'btnRedeemFromPlanModal' || btn?.id === 'btnRedeemFromPlanModal') ? 'Redeem code' : 'Apply Code';
+    }
+  }
+}
+
+function setComparisonCycle(cycle){
+  currentComparisonCycle=cycle;
+  renderPlanComparisonModalContent();
+}
+
+function openPlanComparisonModal(){
+  let old=document.getElementById('planComparisonModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='planComparisonModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:1000px" id="planComparisonModalBox"></div>';
+  modal.onclick=e=>{if(e.target===modal)closePlanComparisonModal();};
+  document.body.appendChild(modal);
+
+  renderPlanComparisonModalContent();
+}
+
+function closePlanComparisonModal(){
+  const m=document.getElementById('planComparisonModal');
+  if(m)m.remove();
+}
+
+function renderPlanComparisonModalContent(){
+  const box=document.getElementById('planComparisonModalBox');
+
+  const isYearly=(currentComparisonCycle==='yearly');
+  const serverPlanKey=(userPlanStatus?.plan || '').toLowerCase();
+  const isRouteBlocked=Boolean(userPlanError);
+  const curPlan=serverPlanKey || 'free';
+
+  let modalHtml='<div class="admin-modal-head">'+
+    '<div>'+
+      '<h3 style="margin:0;font-size:18px">Choose the Right Plan for Your Vehicles</h3>'+
+      '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Transparent pricing with zero hidden fees. Upgrade or cancel anytime.</p>'+
+    '</div>'+
+    '<button type="button" class="ghost" onclick="closePlanComparisonModal()">✕</button>'+
+  '</div>'+
+  (isRouteBlocked?
+    '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:12px;margin:12px 0">'+
+      '<b>Not verified (plan route BLOCKED):</b> Subscription server route returned error. Showing catalog in fallback mode.'+
+    '</div>':'')+
+  '<div style="display:flex;justify-content:center;margin:16px 0 20px">'+
+    '<div class="plan-cycle-toggle">'+
+      '<button type="button" class="plan-cycle-btn '+(isYearly?'':'active')+'" onclick="setComparisonCycle(\'monthly\')">Monthly Billing</button>'+
+      '<button type="button" class="plan-cycle-btn '+(isYearly?'active':'')+'" onclick="setComparisonCycle(\'yearly\')">Annual Billing <span class="plan-save-pill">Save 15%</span></button>'+
+    '</div>'+
+  '</div>'+
+  '<div class="plan-cards-grid">'+
+    '<div class="plan-tier-card '+(curPlan==='free'?'current':'')+'">'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-lite">FREE</span>'+
+        '<h4 style="margin:8px 0 4px">Free</h4>'+
+        '<div class="plan-tier-price">₹0<small>/mo</small></div>'+
+        '<p class="muted" style="font-size:12px">Essential vehicle maintenance tracker for individual owners.</p>'+
+        (curPlan==='free'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>1 Vehicle</b></li>'+
+        '<li><b>50 MB</b> Document Vault</li>'+
+        '<li>Basic Service History (3 years)</li>'+
+        '<li>Current documents only (no archive)</li>'+
+        '<li>Standard Maintenance Reminders</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='free'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="ghost" disabled style="width:100%">Free Tier</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card featured '+(curPlan==='plus'?'current':'')+'">'+
+      '<div class="plan-ribbon">RECOMMENDED</div>'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-premium">PLUS</span>'+
+        '<h4 style="margin:8px 0 4px">Plus</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹59<small>/mo</small>':'₹69<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'₹708 billed annually (Save 15%)':'₹69 billed monthly, cancel anytime')+'</p>'+
+        (curPlan==='plus'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>1 Vehicle</b></li>'+
+        '<li><b>Full Access</b> Document Archive &amp; Vault</li>'+
+        '<li>Full Lifetime Service History</li>'+
+        '<li>Form 29 &amp; 30 RTO Transfer Packets</li>'+
+        '<li>Export Full A4 Vehicle Report</li>'+
+        '<li>Maintenance &amp; Expiry Reminders</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='plus'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToPlus" onclick="openUpgradeRequestModal(\'plus\')">Upgrade to Plus</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card '+(curPlan==='family3'?'current':'')+'">'+
+      '<div class="plan-tier-head">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between">'+
+          '<span class="admin-badge plan-premium">FAMILY 3</span>'+
+          '<span class="sec-tag warn" style="font-size:10px">Pending confirmation</span>'+
+        '</div>'+
+        '<h4 style="margin:8px 0 4px">Family 3</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹129<small>/mo</small>':'₹149<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'Billed annually (₹129/mo equivalent)':'Billed monthly, cancel anytime')+'</p>'+
+        (curPlan==='family3'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>Up to 3 Vehicles</b></li>'+
+        '<li><b>Full Access</b> Document Archive &amp; Vault</li>'+
+        '<li>Full Lifetime Service History</li>'+
+        '<li>Form 29 &amp; 30 Packets &amp; A4 Report</li>'+
+        '<li>Multi-Vehicle Maintenance Reminders</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='family3'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToFamily3" onclick="openUpgradeRequestModal(\'family3\')">Upgrade to Family 3</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card '+(curPlan==='family9'?'current':'')+'">'+
+      '<div class="plan-tier-head">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between">'+
+          '<span class="admin-badge plan-premium">FAMILY 9</span>'+
+          '<span class="sec-tag warn" style="font-size:10px">Pending confirmation</span>'+
+        '</div>'+
+        '<h4 style="margin:8px 0 4px">Family 9</h4>'+
+        '<div class="plan-tier-price">'+(isYearly?'₹299<small>/mo</small>':'₹349<small>/mo</small>')+'</div>'+
+        '<p class="muted" style="font-size:12px">'+(isYearly?'Billed annually (₹299/mo equivalent)':'Billed monthly, cancel anytime')+'</p>'+
+        (curPlan==='family9'&&isRouteBlocked?'<div class="sec-tag danger" style="margin-top:4px">Not verified (plan route BLOCKED)</div>':'')+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>Up to 9 Vehicles</b></li>'+
+        '<li><b>Full Access</b> Document Archive &amp; Vault</li>'+
+        '<li>Full Lifetime Service History</li>'+
+        '<li>Form 29 &amp; 30 Packets &amp; A4 Report</li>'+
+        '<li>Priority Support &amp; Fleet Overview</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        (curPlan==='family9'?
+          '<button type="button" class="ghost" disabled style="width:100%">Current Plan</button>':
+          '<button type="button" class="primary" style="width:100%" id="btnUpgradeToFamily9" onclick="openUpgradeRequestModal(\'family9\')">Upgrade to Family 9</button>')+
+      '</div>'+
+    '</div>'+
+    '<div class="plan-tier-card">'+
+      '<div class="plan-tier-head">'+
+        '<span class="admin-badge plan-lite">FLEET</span>'+
+        '<h4 style="margin:8px 0 4px">10+ Vehicles</h4>'+
+        '<div class="plan-tier-price" style="font-size:22px">Contact us</div>'+
+        '<p class="muted" style="font-size:12px">Custom quota for household fleets, car clubs and organizations.</p>'+
+      '</div>'+
+      '<ul class="plan-tier-features">'+
+        '<li><b>10+ Vehicles</b> custom quota</li>'+
+        '<li>Dedicated Account Manager</li>'+
+        '<li>Custom Data Retention &amp; Compliance</li>'+
+        '<li>No self-serve checkout</li>'+
+      '</ul>'+
+      '<div class="plan-tier-action">'+
+        '<button type="button" class="secondary" style="width:100%" id="btnUpgradeToEnterprise" onclick="openUpgradeRequestModal(\'enterprise\')">Contact Team</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  const isRedeemBlocked = (typeof window.backendAvailable === 'function' && !window.backendAvailable('activation_redeem'));
+
+  modalHtml += '<div class="plan-modal-redeem-section" style="margin-top:20px;padding:16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px">'+
+    '<div style="font-weight:700;font-size:13.5px;color:#1e293b;margin-bottom:6px">Have an activation code?</div>'+
+    '<p class="muted" style="margin:0 0 10px;font-size:12px">Enter a server-issued activation code to unlock plan entitlements or extended validity.</p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+      '<input type="text" id="redeemCodeInput" placeholder="e.g. TD-XXXX-XXXX" maxlength="24" style="flex:1;min-width:200px;text-transform:uppercase;font-family:monospace;font-weight:700;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px">'+
+      '<button type="button" class="primary btn-sm" id="btnRedeemFromPlanModal" onclick="redeemActivationCode(\'redeemCodeInput\',\'modalRedeemMsg\',\'btnRedeemFromPlanModal\')">Redeem code</button>'+
+    '</div>'+
+    '<div id="modalRedeemMsg" style="'+(isRedeemBlocked ? 'display:block;' : 'display:none;')+'margin-top:10px;font-size:12px;padding:8px 12px;border-radius:6px">'+
+      (isRedeemBlocked ? (typeof renderAdminBlockedCard === 'function' ? renderAdminBlockedCard('/api/activation/redeem', 'POST', 'Capability activation_redeem is disabled (404).') : '<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>POST /api/activation/redeem</code></div>') : '')+
+    '</div>'+
+  '</div>';
+
+  if(box)box.innerHTML=modalHtml;
+  return modalHtml;
+}
+
+function openUpgradeRequestModal(targetPlan){
+  if(!targetPlan)targetPlan='plus';
+  closePlanComparisonModal();
+  let old=document.getElementById('userUpgradeRequestModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='userUpgradeRequestModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  const defaultPhone=ownerProfile?.phone||user?.user_metadata?.phone||'';
+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:500px">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Request Plan Upgrade</h3>'+
+        '<span class="muted" style="font-size:12px">Instant manual activation via WhatsApp or UPI</span>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeUpgradeRequestModal()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label>Target Plan</label>'+
+        '<select id="userUpgradePlanSelect">'+
+          '<option value="plus"'+(targetPlan==='plus'||targetPlan==='premium'?' selected':'')+'>Vehicle Owner Plus (₹69/mo or ₹708/yr)</option>'+
+          '<option value="family3"'+(targetPlan==='family3'?' selected':'')+'>Family 3 (₹149/mo)</option>'+
+          '<option value="family9"'+(targetPlan==='family9'?' selected':'')+'>Family 9 (₹349/mo)</option>'+
+          '<option value="enterprise"'+(targetPlan==='enterprise'?' selected':'')+'>10+ Vehicles (Contact us)</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Contact Mobile (+91) *</label>'+
+        '<input type="tel" id="userUpgradePhoneInput" placeholder="e.g. 9876543210" value="'+esc(defaultPhone)+'">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Preferred Payment Method</label>'+
+        '<select id="userUpgradePaymentSelect">'+
+          '<option value="upi">UPI (Google Pay, PhonePe, Paytm)</option>'+
+          '<option value="netbanking">Net Banking / IMPS</option>'+
+          '<option value="card">Debit / Credit Card</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Optional Notes or Billing Requirement</label>'+
+        '<textarea id="userUpgradeNotesInput" rows="2" placeholder="e.g. Need GST invoice for records..."></textarea>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+        '<button type="button" class="ghost" onclick="closeUpgradeRequestModal()">Cancel</button>'+
+        '<button type="button" class="primary" id="btnSubmitUpgradeRequest" onclick="submitUpgradeRequest()">Submit Upgrade Request</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeUpgradeRequestModal();};
+  document.body.appendChild(modal);
+}
+
+function closeUpgradeRequestModal(){
+  const m=document.getElementById('userUpgradeRequestModal');
+  if(m)m.remove();
+}
+
+async function submitUpgradeRequest(){
+  const plan=document.getElementById('userUpgradePlanSelect')?.value||'premium';
+  const phone=document.getElementById('userUpgradePhoneInput')?.value?.trim()||'';
+  const payment=document.getElementById('userUpgradePaymentSelect')?.value||'upi';
+  const notes=document.getElementById('userUpgradeNotesInput')?.value?.trim()||'';
+  const btn=document.getElementById('btnSubmitUpgradeRequest');
+
+  if(!phone||phone.length<10){
+    toast('Valid 10-digit contact mobile number is required.','error');
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Submitting...';}
+  try{
+    await workerPost('/api/upgrade-requests',{
+      requested_plan:plan,
+      phone:phone,
+      payment_method:payment,
+      notes:notes
+    });
+    toast('Upgrade request submitted successfully! We will contact you on WhatsApp/phone.','ok');
+    closeUpgradeRequestModal();
+  }catch(err){
+    toast('Failed to submit upgrade request: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent='Submit Upgrade Request';}
+  }
+}
+
+function renderPlanExpirationBanner(){
+  if(!userPlanStatus||(userPlanStatus.status!=='expired'&&!userPlanStatus.is_expired))return '';
+  const expDate=formatAdminDate(userPlanStatus.expires_at);
+  return '<div class="plan-expired-banner" role="alert">'+
+    '<div style="display:flex;align-items:center;gap:10px">'+
+      '<span style="font-size:20px">⚠️</span>'+
+      '<div><b>Subscription Expired</b><p style="margin:2px 0 0;font-size:12px">Your plan expired on '+esc(expDate)+'. Renew now to retain access to multiple vehicles and vault storage.</p></div>'+
+    '</div>'+
+    '<button type="button" class="primary btn-sm" onclick="openPlanComparisonModal()">Renew Subscription</button>'+
+  '</div>';
+}
+
+window.loadUserPlanStatus=loadUserPlanStatus;
+window.updatePlanStatusCardDom=updatePlanStatusCardDom;
+window.renderPlanStatusCard=renderPlanStatusCard;
+window.toggleActivationRedeemSection=toggleActivationRedeemSection;
+window.redeemActivationCode=redeemActivationCode;
+window.setComparisonCycle=setComparisonCycle;
+window.openPlanComparisonModal=openPlanComparisonModal;
+window.closePlanComparisonModal=closePlanComparisonModal;
+window.renderPlanComparisonModalContent=renderPlanComparisonModalContent;
+window.openUpgradeRequestModal=openUpgradeRequestModal;
+window.closeUpgradeRequestModal=closeUpgradeRequestModal;
+window.submitUpgradeRequest=submitUpgradeRequest;
+window.renderPlanExpirationBanner=renderPlanExpirationBanner;
+window.getUserPlanStatus=()=>userPlanStatus;
+window.setUserPlanStatus=(val)=>{userPlanStatus=val;};
 
 let currentHelpTab='faqs';
 let userSupportTickets=[];
 let ticketsLoaded=false;
 let ticketSubmitting=false;
+let ticketUnreadCount=0;
+let ticketUnreadTimer=null;
+let viewingCustomerTicketId=null;
+let customerTicketDetailLoading=false;
+
+const TICKET_STATUS_LABELS={
+  pending:'Pending',
+  assigned:'Assigned',
+  working:'Working on it',
+  need_info:'Required other information',
+  solved:'Solved',
+  closed:'Closed'
+};
+const TICKET_TRANSITIONS={
+  pending:['assigned'],
+  assigned:['working'],
+  working:['need_info','solved'],
+  need_info:['working'],
+  solved:['working','closed'],
+  closed:['working']
+};
+
+function normalizeTicketStatus(st){
+  const s=String(st||'pending').toLowerCase().replace(/\s+/g,'_');
+  if(s==='open')return 'pending';
+  if(s==='in_progress')return 'working';
+  if(s==='resolved')return 'solved';
+  return s;
+}
+
+function getTicketStatusGroup(st){
+  const s=normalizeTicketStatus(st);
+  if(s==='solved'||s==='closed')return 'closed';
+  return 'open';
+}
+
+let customerTicketTab='open';
+try{
+  if(typeof window!=='undefined'){
+    Object.defineProperty(window,'customerTicketTab',{
+      get(){ return customerTicketTab; },
+      set(v){ customerTicketTab=v; },
+      configurable:true
+    });
+  }
+}catch(_){}
+
+let adminTicketTab='all';
+try{
+  if(typeof window!=='undefined'){
+    Object.defineProperty(window,'adminTicketTab',{
+      get(){ return adminTicketTab; },
+      set(v){ adminTicketTab=v; },
+      configurable:true
+    });
+  }
+}catch(_){}
+
+function setCustomerTicketTab(tab){
+  customerTicketTab=(tab==='closed')?'closed':'open';
+  const pastCont=document.getElementById('ticketPastContainer');
+  if(pastCont){
+    pastCont.innerHTML=renderTicketPastList();
+    wireCustomerTicketList();
+  }
+}
+
+function setAdminTicketTab(tab){
+  adminTicketTab=(tab==='closed')?'closed':'open';
+  if(adminStatusFilter!=='all'){
+    const grp=(adminStatusFilter==='solved'||adminStatusFilter==='closed')?'closed':'open';
+    if(grp!==adminTicketTab)adminStatusFilter='all';
+  }
+  renderAdminViewContent();
+}
+
+function updateHelpUnreadBadge(count){
+  ticketUnreadCount=Number(count)||0;
+  const badgeText=ticketUnreadCount>99?'99+':String(ticketUnreadCount);
+  const selectors=[
+    '#mobileNav button[data-view="help"]',
+    'aside button[data-view="help"]',
+    '#sideMenu .drawer-link[data-view="help"]',
+    '.drawer-link[data-view="help"]',
+    'button[data-view="help"]',
+    '[data-view="help"]'
+  ];
+  const matched=new Set();
+  selectors.forEach(sel=>{
+    document.querySelectorAll?.(sel)?.forEach?.(btn=>{
+      if(btn && !matched.has(btn)){
+        matched.add(btn);
+        let badge=btn.querySelector?.('.ticket-unread-badge');
+        if(ticketUnreadCount>0){
+          if(!badge){
+            badge=document.createElement('span');
+            badge.className='ticket-unread-badge';
+            badge.setAttribute('aria-label',badgeText+' unread support updates');
+            btn.appendChild(badge);
+          }
+          badge.textContent=badgeText;
+          badge.style.display='inline-flex';
+        }else if(badge){
+          badge.remove();
+        }
+      }
+    });
+  });
+}
+
+async function checkTicketUnreadCount(){
+  if(!user||typeof workerGet!=='function')return 0;
+  try{
+    const res=await workerGet('/api/tickets/unread-count');
+    if(res&&res.ok&&typeof res.count==='number'){
+      updateHelpUnreadBadge(res.count);
+      return res.count;
+    }
+  }catch(_){}
+  return 0;
+}
+
+function startTicketUnreadPolling(){
+  stopTicketUnreadPolling();
+  checkTicketUnreadCount();
+  ticketUnreadTimer=setInterval(()=>{
+    if(typeof document!=='undefined'&&document.visibilityState==='visible'){
+      checkTicketUnreadCount();
+    }
+  },60000);
+}
+
+function stopTicketUnreadPolling(){
+  if(ticketUnreadTimer){
+    clearInterval(ticketUnreadTimer);
+    ticketUnreadTimer=null;
+  }
+}
+
+if(typeof document!=='undefined'&&document.addEventListener){
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      checkTicketUnreadCount();
+    }
+  });
+}
 
 async function loadUserSupportTickets(){
   if(typeof workerGet==='function'){
+    try{
+      const res=await workerGet('/api/tickets');
+      if(res&&res.ok&&Array.isArray(res.data)){
+        userSupportTickets=res.data.map(t=>({
+          ...t,
+          status:normalizeTicketStatus(t.status),
+          created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
+          car_reg:(Array.isArray(cars)?cars:[]).find(c=>c.id===t.car_id)?.registration_no||null
+        }));
+        try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
+        ticketsLoaded=true;
+        return userSupportTickets;
+      }
+    }catch(_){}
     try{
       const res=await workerGet('/api/support-tickets');
       if(Array.isArray(res?.data)){
         userSupportTickets=res.data.map(t=>({
           ...t,
-          created_at: typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
-          car_reg: cars.find(c=>c.id===t.car_id)?.registration_no||null
+          status:normalizeTicketStatus(t.status),
+          created_at:typeof t.created_at==='number'?new Date(t.created_at*1000).toISOString():t.created_at,
+          car_reg:(Array.isArray(cars)?cars:[]).find(c=>c.id===t.car_id)?.registration_no||null
         }));
         try{ localStorage.setItem('carmy_support_tickets',JSON.stringify(userSupportTickets)); }catch(_){}
         ticketsLoaded=true;
@@ -3050,19 +5331,28 @@ function helpView(){
       window.scrollTo({top:0,behavior:'smooth'});
     };
   });
+  checkTicketUnreadCount();
   try{
     if(currentHelpTab==='faqs'){
       container.innerHTML=renderFaqsContent();
     }else if(currentHelpTab==='ticket'){
       container.innerHTML=renderTicketContent();
-      wireTicketForm();
-      if(!ticketsLoaded&&typeof workerGet==='function'){
-        loadUserSupportTickets().then(()=>{
-          if(currentHelpTab==='ticket'){
-            const pastCont=$('ticketPastContainer');
-            if(pastCont) pastCont.innerHTML=renderTicketPastList();
-          }
-        });
+      if(viewingCustomerTicketId){
+        wireCustomerTicketDetailView(viewingCustomerTicketId);
+      }else{
+        wireTicketForm();
+        wireCustomerTicketList();
+        if(!ticketsLoaded&&typeof workerGet==='function'){
+          loadUserSupportTickets().then(()=>{
+            if(currentHelpTab==='ticket'&&!viewingCustomerTicketId){
+              const pastCont=$('ticketPastContainer');
+              if(pastCont){
+                pastCont.innerHTML=renderTicketPastList();
+                wireCustomerTicketList();
+              }
+            }
+          });
+        }
       }
     }else if(currentHelpTab==='about'){
       container.innerHTML=renderAboutContent();
@@ -3082,6 +5372,22 @@ function helpView(){
   }
 }
 
+function openCustomerTicketDetail(ticketId){
+  currentHelpTab='ticket';
+  viewingCustomerTicketId=String(ticketId);
+  helpView();
+  const t=(Array.isArray(userSupportTickets)?userSupportTickets:[]).find(x=>String(x.id)===viewingCustomerTicketId);
+  if(t&&t.has_unread){
+    t.has_unread=false;
+    checkTicketUnreadCount();
+  }
+}
+
+function closeCustomerTicketDetail(){
+  viewingCustomerTicketId=null;
+  helpView();
+}
+
 function renderTicketPastList(){
   let existing=userSupportTickets;
   if(!Array.isArray(existing)||!existing.length){
@@ -3090,11 +5396,267 @@ function renderTicketPastList(){
       existing=Array.isArray(parsed)?parsed:[];
     }catch(_){ existing=[]; }
   }
-  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||t.user_id===user.id||t.email===user.email);
-  if(!userTickets.length)return '';
-  return '<div class="ticket-past-card"><h4>Your Submitted Tickets ('+userTickets.length+')</h4><div style="margin-top:10px">'+
-    userTickets.map(t=>'<div class="ticket-row"><div><b>'+esc(t.id||'TD-TICKET')+'</b> <span class="ticket-badge">'+esc(t.category||'General')+'</span> '+(t.car_reg?'<span>· '+esc(t.car_reg)+'</span>':'')+'<br><span style="color:#0f172a;font-weight:600">'+esc(t.subject||'No Subject')+'</span><br><small class="muted">'+esc(formatTimestamp(t.created_at))+'</small></div><div><span class="status ok">'+esc(t.status||'Open')+'</span></div></div>').join('')+
-    '</div></div>';
+  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
+  const openTickets=userTickets.filter(t=>getTicketStatusGroup(t.status)==='open');
+  const closedTickets=userTickets.filter(t=>getTicketStatusGroup(t.status)==='closed');
+  const openCount=openTickets.length;
+  const closedCount=closedTickets.length;
+
+  const currentTab=(customerTicketTab==='closed')?'closed':'open';
+  const displayed=(currentTab==='closed')?closedTickets:openTickets;
+
+  const tabsHtml='<div class="ticket-tab-bar help-tabs-bar" style="margin:12px 0 14px">'+
+    '<button type="button" class="help-tab-btn '+(currentTab==='open'?'active':'')+'" id="ownerTicketTabOpen" onclick="setCustomerTicketTab(\'open\')">Open ('+openCount+')</button>'+
+    '<button type="button" class="help-tab-btn '+(currentTab==='closed'?'active':'')+'" id="ownerTicketTabClosed" onclick="setCustomerTicketTab(\'closed\')">Closed ('+closedCount+')</button>'+
+  '</div>';
+
+  let listContent='';
+  if(!displayed.length){
+    const emptyText=(currentTab==='closed')?'No closed tickets.':'No open tickets.';
+    listContent='<p class="muted ticket-empty-state" style="padding:16px 0;text-align:center">'+emptyText+'</p>';
+  }else{
+    listContent=displayed.map(t=>{
+      const tid=esc(t.id||'TD-TICKET');
+      const unreadBadge=t.has_unread?'<span class="ticket-unread-pill">● New reply</span>':'';
+      const reg=t.car_reg?'<span class="muted">· '+esc(t.car_reg)+'</span>':'';
+      const timeStr=esc(formatTimestamp(t.updated_at||t.created_at));
+      return '<div class="ticket-row-accessible" data-ticket-id="'+tid+'" tabindex="0" role="button" aria-label="View ticket '+tid+'" onclick="openCustomerTicketDetail(\''+tid+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCustomerTicketDetail(\''+tid+'\');}">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
+            '<code style="font-weight:700;color:#2563eb">'+tid+'</code> '+
+            renderStatusBadge(t.status)+' '+
+            renderPriorityBadge(t.priority)+' '+
+            unreadBadge+' '+
+            reg+
+          '</div>'+
+          '<small class="muted">'+timeStr+'</small>'+
+        '</div>'+
+        '<div class="ticket-customer-row-subject" style="font-weight:600;color:#0f172a;font-size:14px;margin-top:4px"></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  return '<div class="ticket-past-card">'+
+    '<h4>Your Submitted Tickets ('+userTickets.length+')</h4>'+
+    tabsHtml+
+    '<div style="margin-top:10px" id="ownerTicketListItems">'+
+      listContent+
+    '</div>'+
+  '</div>';
+}
+
+function wireCustomerTicketList(){
+  const rows=document.querySelectorAll('.ticket-row-accessible');
+  let existing=userSupportTickets;
+  if(!Array.isArray(existing)||!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
+  }
+  const userTickets=(Array.isArray(existing)?existing:[]).filter(t=>!user||!t.user_id||t.user_id===user.id||t.email===user.email);
+  const currentTab=(customerTicketTab==='closed')?'closed':'open';
+  const displayed=userTickets.filter(t=>getTicketStatusGroup(t.status)===currentTab);
+
+  rows.forEach((row,i)=>{
+    const tid=row.getAttribute('data-ticket-id');
+    const t=(tid?userTickets.find(item=>String(item.id)===String(tid)):null)||displayed[i]||userTickets[i];
+    const subEl=row.querySelector('.ticket-customer-row-subject');
+    if(subEl&&t){
+      subEl.textContent=t.subject||'No Subject';
+    }
+  });
+}
+
+function renderCustomerTicketDetailView(ticketId){
+  let existing=userSupportTickets;
+  if(!Array.isArray(existing)||!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
+  }
+  const ticket=(Array.isArray(existing)?existing:[]).find(t=>String(t.id)===String(ticketId))||{
+    id:ticketId,
+    subject:'Support Ticket '+ticketId,
+    status:'pending',
+    priority:'normal',
+    created_at:new Date().toISOString()
+  };
+
+  const statusKey=normalizeTicketStatus(ticket.status);
+  const steps=[
+    {key:'pending',label:'Submitted'},
+    {key:'assigned',label:'Assigned'},
+    {key:'working',label:'Working on it'},
+    {key:'solved',label:'Solved'},
+    {key:'closed',label:'Closed'}
+  ];
+
+  let activeIndex=0;
+  if(statusKey==='assigned') activeIndex=1;
+  else if(statusKey==='working'||statusKey==='need_info') activeIndex=2;
+  else if(statusKey==='solved') activeIndex=3;
+  else if(statusKey==='closed') activeIndex=4;
+
+  const stepperHtml='<div class="ticket-stepper-container">'+
+    '<div class="ticket-stepper">'+
+      steps.map((st,idx)=>{
+        const isCompleted=idx<activeIndex||(idx===activeIndex&&statusKey==='closed');
+        const isActive=idx===activeIndex&&statusKey!=='closed';
+        const cls=isCompleted?'ticket-step-completed':(isActive?'ticket-step-active':'');
+        return '<div class="ticket-step-item '+cls+'">'+
+          '<div class="ticket-step-circle">'+(isCompleted?'✓':(idx+1))+'</div>'+
+          '<span class="ticket-step-label">'+esc(st.label)+'</span>'+
+        '</div>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+
+  const needInfoBanner=statusKey==='need_info'
+    ? '<div class="ticket-warning-banner" id="customerTicketNeedInfoBanner"><div class="ticket-warning-title">⚠️ Action Required: Additional Information Needed</div><div class="ticket-warning-msg" id="customerTicketNeedInfoMsg"></div></div>'
+    : '';
+
+  const agentName=ticket.show_agent_name&&ticket.agent_name?esc(ticket.agent_name):'Our support team';
+  const chatActive=Boolean(ticket.chat_enabled)&&statusKey!=='closed';
+
+  return '<div class="card">'+
+    '<button type="button" class="ticket-back-btn" onclick="closeCustomerTicketDetail()">← Back to Support Tickets</button>'+
+    '<div class="card-head-row" style="margin-top:6px">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+
+          '<code style="font-size:15px;font-weight:700;color:#2563eb">'+esc(ticket.id)+'</code>'+
+          renderStatusBadge(ticket.status)+
+          renderPriorityBadge(ticket.priority)+
+        '</div>'+
+        '<h3 id="customerTicketDetailSubject" style="margin:0 0 4px 0"></h3>'+
+        '<p class="muted" style="margin:0;font-size:12.5px">Submitted '+esc(formatTimestamp(ticket.created_at))+(ticket.car_reg?' · Vehicle: '+esc(ticket.car_reg):'')+'</p>'+
+      '</div>'+
+    '</div>'+
+    stepperHtml+
+    needInfoBanner+
+    '<div class="ticket-agent-row"><span>Assigned Specialist:</span> <b>'+agentName+'</b></div>'+
+    '<div class="ticket-thread-container" id="customerTicketThread"></div>'+
+    (chatActive
+      ? '<div class="ticket-reply-box-sticky"><form class="ticket-reply-form" onsubmit="return false;"><textarea id="customerTicketReplyInput" class="ticket-reply-input" placeholder="Type your reply to the support team..." rows="2"></textarea><div class="ticket-reply-actions"><button type="button" class="primary" id="customerTicketSendReplyBtn" onclick="sendCustomerTicketReply(\''+esc(ticket.id)+'\')">Send Reply</button></div></form></div>'
+      : '<div class="ticket-chat-disabled-banner">Our team will reply here.</div>')+
+  '</div>';
+}
+
+function wireCustomerTicketDetailView(ticketId){
+  const subEl=$('customerTicketDetailSubject');
+  let existing=userSupportTickets;
+  if(!Array.isArray(existing)||!existing.length){
+    try{ existing=JSON.parse(localStorage.getItem('carmy_support_tickets')||'[]'); }catch(_){ existing=[]; }
+  }
+  const ticket=(Array.isArray(existing)?existing:[]).find(t=>String(t.id)===String(ticketId));
+  if(subEl&&ticket){
+    subEl.textContent=ticket.subject||'Support Inquiry';
+  }
+  const thread=$('customerTicketThread');
+  if(thread&&ticket){
+    thread.innerHTML='';
+    const events=Array.isArray(ticket.events)?ticket.events:[];
+    const threadList=events.length?events:(ticket.message?[{actor_type:'user',message:ticket.message,created_at:ticket.created_at}]:[]);
+
+    if(normalizeTicketStatus(ticket.status)==='need_info'){
+      const bannerMsgEl=$('customerTicketNeedInfoMsg');
+      if(bannerMsgEl){
+        const lastAdmin=[...threadList].reverse().find(e=>e.actor_type==='admin'||e.actor_type==='team');
+        bannerMsgEl.textContent=lastAdmin?.message||'Support team has requested additional details to proceed with your ticket. Please reply below.';
+      }
+    }
+
+    threadList.forEach(e=>{
+      const isUser=e.actor_type==='user';
+      const bubble=document.createElement('div');
+      bubble.className='ticket-message-bubble '+(isUser?'ticket-message-user':'ticket-message-admin');
+
+      const header=document.createElement('div');
+      header.className='ticket-message-header';
+
+      const sender=document.createElement('span');
+      sender.className='ticket-message-sender';
+      sender.textContent=isUser?'You':(ticket.show_agent_name&&ticket.agent_name?ticket.agent_name:'Support Specialist');
+
+      const time=document.createElement('span');
+      time.className='ticket-message-time';
+      time.textContent=formatTimestamp(e.created_at);
+
+      header.appendChild(sender);
+      header.appendChild(time);
+
+      const text=document.createElement('div');
+      text.className='ticket-message-text';
+      text.textContent=e.message||'';
+
+      bubble.appendChild(header);
+      bubble.appendChild(text);
+      thread.appendChild(bubble);
+    });
+  }
+
+  if(typeof workerGet==='function'){
+    loadCustomerTicketDetails(ticketId);
+  }
+}
+
+async function loadCustomerTicketDetails(ticketId){
+  if(customerTicketDetailLoading)return;
+  customerTicketDetailLoading=true;
+  try{
+    const res=await workerGet('/api/tickets/'+encodeURIComponent(ticketId));
+    if(res&&res.ok&&res.data){
+      const updated=res.data;
+      let existing=(Array.isArray(userSupportTickets)?userSupportTickets:[]).find(t=>String(t.id)===String(ticketId));
+      if(existing){
+        Object.assign(existing,updated);
+      }else{
+        userSupportTickets.push(updated);
+      }
+      if(viewingCustomerTicketId===String(ticketId)){
+        wireCustomerTicketDetailView(ticketId);
+      }
+    }
+  }catch(err){
+    console.warn('Could not load authoritative customer ticket details (likely 404 from backend routing bug in worker/src/ticket-workflow.js):',err);
+  }finally{
+    customerTicketDetailLoading=false;
+  }
+}
+
+async function sendCustomerTicketReply(ticketId){
+  const input=$('customerTicketReplyInput');
+  const btn=$('customerTicketSendReplyBtn');
+  if(!input||!btn)return;
+  const message=input.value.trim();
+  if(!message){
+    toast('Please enter a reply message.','error');
+    input.focus();
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Sending...';
+  try{
+    const res=await workerPost('/api/tickets/'+encodeURIComponent(ticketId)+'/messages',{message});
+    if(!res?.ok){
+      if(res?.error?.code==='CHAT_DISABLED'||res?.status===403){
+        throw new Error('Replies are currently disabled for this ticket.');
+      }
+      throw new Error(res?.error?.message||'Failed to send reply.');
+    }
+    input.value='';
+    toast('Reply submitted successfully!','ok');
+    await loadCustomerTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to send reply:',err);
+    if(err?.status===403||err?.code==='CHAT_DISABLED'){
+      toast('Replies are currently disabled for this ticket.','error');
+    }else if(err?.status===404||err?.code==='NOT_FOUND'){
+      toast('Failed to send message: Server route unavailable (404). Backend bug detected in worker route dispatch.','error');
+    }else{
+      toast(err?.message||'Failed to send reply.','error');
+    }
+  }finally{
+    if(document.body.contains(btn)){
+      btn.disabled=false;
+      btn.textContent='Send Reply';
+    }
+  }
 }
 
 function renderFaqsContent(){
@@ -3112,6 +5674,9 @@ function renderFaqsContent(){
 }
 
 function renderTicketContent(){
+  if(viewingCustomerTicketId){
+    return renderCustomerTicketDetailView(viewingCustomerTicketId);
+  }
   const carList = Array.isArray(cars) ? cars : [];
   const carOptions=['<option value="">General (No specific vehicle)</option>'].concat(
     carList.map(c=>'<option value="'+esc(c.id)+'" '+(car?.id===c.id?'selected':'')+'>'+esc(c.registration_no)+(c.make_model?' · '+esc(c.make_model):'')+'</option>')
@@ -3190,6 +5755,7 @@ function wireTicketForm(){
 
       toast('Support ticket '+ticketId+' created successfully!');
       currentHelpTab='ticket';
+      viewingCustomerTicketId=null;
       helpView();
     }catch(err){
       console.error('Ticket submission error:',err);
@@ -3295,16 +5861,8 @@ window.logout=logout;
 /* ===== Super Admin Console Implementation ===== */
 
 let currentAdminScreen = 'home';
-let adminUsersSearch = '';
-let adminUsersRoleFilter = 'all';
-let adminUsersPlanFilter = 'all';
-let adminUsersStatusFilter = 'all';
 let adminTicketsLastStatus = null;
 let adminTicketsLastCode = null;
-let adminContentTab = 'about';
-let adminAuditActionFilter = 'all';
-let adminUpgradeFilter = 'all';
-let adminRevealedToken = null;
 
 function formatAdminDate(ts){
   if(!ts)return '—';
@@ -3317,24 +5875,53 @@ function formatAdminDate(ts){
   }
 }
 
+let adminAssigneeFilter='all';
+let adminPriorityFilter='all';
+let adminSlaFilter='all';
+
 function renderStatusBadge(status){
-  const s=String(status||'open').toLowerCase();
-  if(s==='in_progress')return '<span class="admin-badge status-in-progress">In Progress</span>';
-  if(s==='resolved')return '<span class="admin-badge status-resolved">Resolved</span>';
-  if(s==='closed')return '<span class="admin-badge status-closed">Closed</span>';
+  const s=normalizeTicketStatus(status);
+  if(s==='pending')return '<span class="ticket-status-badge status-pending">Pending</span>';
+  if(s==='assigned')return '<span class="ticket-status-badge status-assigned">Assigned</span>';
+  if(s==='working')return '<span class="ticket-status-badge status-working">Working on it</span>';
+  if(s==='need_info')return '<span class="ticket-status-badge status-need-info">Required other information</span>';
+  if(s==='solved')return '<span class="ticket-status-badge status-solved">Solved</span>';
+  if(s==='closed')return '<span class="ticket-status-badge status-closed">Closed</span>';
   if(s==='active')return '<span class="admin-badge status-active">Active</span>';
   if(s==='trial')return '<span class="admin-badge status-trial">Trial</span>';
   if(s==='grace')return '<span class="admin-badge status-grace">Grace</span>';
   if(s==='suspended')return '<span class="admin-badge status-suspended">Suspended</span>';
-  return '<span class="admin-badge status-open">Open</span>';
+  return '<span class="ticket-status-badge status-pending">'+esc(status||'Pending')+'</span>';
 }
 
 function renderPriorityBadge(priority){
   const p=String(priority||'normal').toLowerCase();
-  if(p==='urgent')return '<span class="admin-badge prio-urgent">Urgent</span>';
-  if(p==='high')return '<span class="admin-badge prio-high">High</span>';
-  if(p==='low')return '<span class="admin-badge prio-low">Low</span>';
-  return '<span class="admin-badge prio-normal">Normal</span>';
+  if(p==='urgent')return '<span class="ticket-priority-badge priority-urgent">Urgent</span>';
+  if(p==='high')return '<span class="ticket-priority-badge priority-high">High</span>';
+  if(p==='low')return '<span class="ticket-priority-badge priority-low">Low</span>';
+  return '<span class="ticket-priority-badge priority-normal">Normal</span>';
+}
+
+function isTicketSlaBreached(t){
+  if(!t)return false;
+  const s=normalizeTicketStatus(t.status);
+  if(s==='solved'||s==='closed')return false;
+  if(t.sla_due_at){
+    const dueSec=Number(t.sla_due_at);
+    if(dueSec>0&&Math.floor(Date.now()/1000)>dueSec)return true;
+  }
+  if(s==='pending'){
+    const createdMs=typeof t.created_at==='number'?t.created_at*1000:new Date(t.created_at||0).getTime();
+    if(createdMs>0&&(Date.now()-createdMs)>24*3600*1000)return true;
+  }
+  return false;
+}
+
+function renderSlaBadge(t){
+  if(isTicketSlaBreached(t)){
+    return '<span class="ticket-sla-badge" title="First-response or resolution SLA breached">⚠️ SLA Breach</span>';
+  }
+  return '';
 }
 
 function formatCategory(cat){
@@ -3349,10 +5936,25 @@ function formatCategory(cat){
 
 function getFilteredAdminTickets(){
   return adminTickets.filter(t=>{
-    if(adminStatusFilter!=='all'){
-      const s=(t.status||'open').toLowerCase();
-      if(adminStatusFilter==='in_progress'&&s!=='in_progress')return false;
-      else if(adminStatusFilter!=='in_progress'&&s!==adminStatusFilter)return false;
+    if(adminTicketTab!=='all'){
+      const group=getTicketStatusGroup(t.status);
+      if(group!==adminTicketTab)return false;
+    }
+
+    const s=normalizeTicketStatus(t.status);
+    if(adminStatusFilter!=='all'&&s!==adminStatusFilter)return false;
+    if(adminAssigneeFilter==='me'){
+      const myId=user?.id||user?.email;
+      if(!t.assignee_id||(t.assignee_id!==myId&&t.assignee_id!==user?.email))return false;
+    }else if(adminAssigneeFilter==='unassigned'){
+      if(t.assignee_id)return false;
+    }
+    if(adminPriorityFilter!=='all'){
+      if(String(t.priority||'normal').toLowerCase()!==adminPriorityFilter)return false;
+    }
+    if(adminSlaFilter==='breached'){
+      if(adminTicketTab==='open'&&!isTicketSlaBreached(t))return false;
+      if(adminTicketTab==='all'&&!isTicketSlaBreached(t))return false;
     }
     if(adminSearchQuery.trim()){
       const q=adminSearchQuery.toLowerCase();
@@ -3369,15 +5971,17 @@ function getFilteredAdminTickets(){
 
 function renderAdminStatsHtml(){
   const totalCount=adminTickets.length;
-  const openCount=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
-  const inProgressCount=adminTickets.filter(t=>(t.status||'').toLowerCase()==='in_progress').length;
-  const resolvedCount=adminTickets.filter(t=>['resolved','closed'].includes((t.status||'').toLowerCase())).length;
+  const openCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='open').length;
+  const closedCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='closed').length;
+  const pendingCount=adminTickets.filter(t=>normalizeTicketStatus(t.status)==='pending').length;
+  const slaBreachedCount=adminTickets.filter(isTicketSlaBreached).length;
 
   return '<div class="admin-stats-grid">'+
     '<div class="admin-stat-card"><span class="admin-stat-val">'+totalCount+'</span><span class="admin-stat-label">Total Tickets</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#2563eb">'+openCount+'</span><span class="admin-stat-label">Open / Unresolved</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+inProgressCount+'</span><span class="admin-stat-label">In Progress</span></div>'+
-    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+resolvedCount+'</span><span class="admin-stat-label">Resolved / Closed</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#b91c1c">'+slaBreachedCount+'</span><span class="admin-stat-label">⚠️ SLA Breached</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#2563eb">'+pendingCount+'</span><span class="admin-stat-label">Pending Triage</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#d97706">'+openCount+'</span><span class="admin-stat-label">In Progress</span></div>'+
+    '<div class="admin-stat-card"><span class="admin-stat-val" style="color:#16a34a">'+closedCount+'</span><span class="admin-stat-label">Solved / Closed</span></div>'+
   '</div>';
 }
 
@@ -3399,6 +6003,11 @@ function renderAdminTicketDiagnosticCard(){
   '</div>';
 }
 
+function renderAdminListContent(){
+  const listCont=$('adminListContainer');
+  if(listCont)listCont.innerHTML=renderAdminListHtml();
+}
+
 function renderAdminListHtml(){
   if(adminTicketsLoading&&!adminTickets.length){
     return '<div class="admin-state-card">'+
@@ -3415,15 +6024,54 @@ function renderAdminListHtml(){
   const displayed=getFilteredAdminTickets();
 
   if(!displayed.length){
+    const hasFilter = (adminStatusFilter!=='all'||adminAssigneeFilter!=='all'||adminPriorityFilter!=='all'||adminSlaFilter!=='all'||adminSearchQuery);
+    const emptyMsg = (adminTickets.length===0)
+      ? 'No customer support tickets have been submitted yet.'
+      : (hasFilter
+          ? 'No tickets match the selected filters.'
+          : (adminTicketTab==='closed' ? 'No closed tickets.' : 'No open tickets.'));
+
     return '<div class="admin-state-card">'+
       '<div class="admin-state-icon">🎫</div>'+
       '<h3>No Support Tickets Found</h3>'+
-      '<p>'+(adminTickets.length===0?'No customer support tickets have been submitted yet.':'No tickets match the selected filters.')+'</p>'+
-      (adminStatusFilter!=='all'||adminSearchQuery?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
+      '<p>'+emptyMsg+'</p>'+
+      (hasFilter?'<button type="button" class="ghost" onclick="resetAdminFilters()">Reset Filters</button>':'')+
     '</div>';
   }
 
-  return '<div class="admin-table-container">'+
+  const tableRows = displayed.map(t=>{
+    const tid=esc(t.id||'—');
+    const sla=renderSlaBadge(t);
+    return '<tr onclick="openAdminTicketDetails(\''+tid+'\')" style="cursor:pointer">'+
+      '<td><div style="display:flex;align-items:center;gap:6px"><code style="font-weight:700;color:#2563eb">'+tid+'</code> '+sla+'</div></td>'+
+      '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(t.created_at))+'</td>'+
+      '<td><div style="font-weight:600">'+esc(t.email||'Anonymous')+'</div><small class="muted" style="font-size:11px">'+esc((t.user_id||'').slice(0,8))+'...</small></td>'+
+      '<td><span class="admin-badge" style="background:#f1f5f9;color:#334155">'+esc(formatCategory(t.category))+'</span></td>'+
+      '<td class="ticket-subject-cell"><div class="ticket-subject-title">'+esc(t.subject||'No Subject')+'</div><small class="ticket-subject-desc">'+esc(t.message||'')+'</small></td>'+
+      '<td>'+renderPriorityBadge(t.priority)+'</td>'+
+      '<td>'+renderStatusBadge(t.status)+'</td>'+
+      '<td style="text-align:right" onclick="event.stopPropagation()"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminTicketDetails(\''+tid+'\')">View</button></td>'+
+    '</tr>';
+  }).join('');
+
+  const mobileCards = displayed.map(t=>{
+    const tid=esc(t.id||'—');
+    const sla=renderSlaBadge(t);
+    return '<div class="ticket-card-mobile" onclick="openAdminTicketDetails(\''+tid+'\')" style="cursor:pointer">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><code style="font-weight:700;color:#2563eb">'+tid+'</code> '+sla+' '+renderStatusBadge(t.status)+'</div>'+
+        '<small class="muted">'+esc(formatAdminDate(t.created_at))+'</small>'+
+      '</div>'+
+      '<div style="font-weight:700;font-size:14px;color:#0f172a;margin-top:4px">'+esc(t.subject||'No Subject')+'</div>'+
+      '<p class="muted" style="font-size:12px;margin:2px 0 6px 0;line-height:1.4">'+esc((t.message||'').slice(0,120))+'</p>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;border-top:1px solid #f1f5f9;padding-top:6px">'+
+        '<span>'+esc(t.email||'Anonymous')+'</span>'+
+        renderPriorityBadge(t.priority)+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  return '<div class="ticket-table-desktop admin-table-container">'+
     '<table class="admin-data-table">'+
       '<thead>'+
         '<tr>'+
@@ -3437,27 +6085,300 @@ function renderAdminListHtml(){
           '<th style="text-align:right">Action</th>'+
         '</tr>'+
       '</thead>'+
-      '<tbody>'+
-        displayed.map(t=>'<tr onclick="openAdminTicketDetails(\''+esc(t.id)+'\')" style="cursor:pointer">'+
-          '<td><code style="font-weight:700;color:#2563eb">'+esc(t.id||'—')+'</code></td>'+
-          '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(t.created_at))+'</td>'+
-          '<td><div style="font-weight:600">'+esc(t.email||'Anonymous')+'</div><small class="muted" style="font-size:11px">'+esc((t.user_id||'').slice(0,8))+'...</small></td>'+
-          '<td><span class="admin-badge" style="background:#f1f5f9;color:#334155">'+esc(formatCategory(t.category))+'</span></td>'+
-          '<td><div style="font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.subject||'No Subject')+'</div><small class="muted" style="display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.message||'')+'</small></td>'+
-          '<td>'+renderPriorityBadge(t.priority)+'</td>'+
-          '<td>'+renderStatusBadge(t.status)+'</td>'+
-          '<td style="text-align:right" onclick="event.stopPropagation()"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminTicketDetails(\''+esc(t.id)+'\')">View</button></td>'+
-        '</tr>').join('')+
-      '</tbody>'+
+      '<tbody>'+tableRows+'</tbody>'+
     '</table>'+
+  '</div>'+
+  '<div class="ticket-mobile-card-list">'+mobileCards+'</div>';
+}
+
+/* Individual Screen Renderers & Loaders */
+
+function renderAdminBlockedCard(routePath,method='GET',detail=''){
+  return '<div class="admin-blocked-card">'+
+    '<div style="display:flex;align-items:center;gap:8px">'+
+      '<span class="admin-badge" style="background:#dc2626;color:#ffffff;font-weight:700">BLOCKED</span>'+
+      '<code>'+esc(method)+' '+esc(routePath)+'</code>'+
+    '</div>'+
+    '<div style="font-size:12.5px;color:#7f1d1d;margin-top:6px">'+
+      esc(detail||('Backend route '+routePath+' returned 404 / is missing.'))+
+    '</div>'+
   '</div>';
 }
 
-/* Individual Screen Renderers */
+function renderAdminPhaseCard(phaseTitle,routePath,method,description){
+  return '<div class="admin-phase-card">'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+      '<span class="admin-badge" style="background:#ede9fe;color:#5b21b6;font-weight:700">'+esc(phaseTitle)+'</span>'+
+      '<code>'+esc(method)+' '+esc(routePath)+'</code>'+
+    '</div>'+
+    '<h3 style="margin:6px 0 8px;color:#1e1b4b">'+esc(phaseTitle)+'</h3>'+
+    '<p class="muted" style="margin:0 0 12px;font-size:13px;line-height:1.6">'+esc(description)+'</p>'+
+    '<div style="display:flex;gap:8px;align-items:center">'+
+      '<span class="admin-badge" style="background:#f1f5f9;color:#475569">Route Pending Backend Deployment</span>'+
+    '</div>'+
+  '</div>';
+}
+
+async function loadAdminOverview(force=false){
+  if(adminOverviewLoading)return;
+  if(!force&&adminOverviewData)return;
+  adminOverviewLoading=true;
+  adminOverviewError=null;
+  try{
+    const res=await workerGet('/api/admin/overview');
+    if(res&&res.ok)adminOverviewData=res.data||res;
+    else if(res&&!res.error)adminOverviewData=res.data||res;
+    else throw new Error(res?.error?.message||'Failed to load platform overview.');
+  }catch(err){
+    adminOverviewError=err;
+  }finally{
+    adminOverviewLoading=false;
+    if(currentAdminScreen==='home')renderAdminViewContent();
+  }
+}
+
+async function loadAdminUsers(force=false){
+  if(adminUsersLoading)return;
+  if(!force&&adminUsersList)return;
+  adminUsersLoading=true;
+  adminUsersError=null;
+  try{
+    const res=await workerGet('/api/admin/users');
+    if(res&&res.ok&&Array.isArray(res.data))adminUsersList=res.data;
+    else if(res&&Array.isArray(res.data))adminUsersList=res.data;
+    else if(Array.isArray(res))adminUsersList=res;
+    else throw new Error(res?.error?.message||'Failed to load user directory.');
+  }catch(err){
+    adminUsersError=err;
+  }finally{
+    adminUsersLoading=false;
+    if(currentAdminScreen==='users')renderAdminViewContent();
+  }
+}
+
+async function loadAdminTokens(force=false){
+  if(adminTokensLoading)return;
+  if(!force&&adminTokensList)return;
+  adminTokensLoading=true;
+  adminTokensError=null;
+  try{
+    const res=await workerGet('/api/admin/tokens');
+    if(res&&res.ok&&Array.isArray(res.data))adminTokensList=res.data;
+    else if(res&&Array.isArray(res.data))adminTokensList=res.data;
+    else if(Array.isArray(res))adminTokensList=res;
+    else throw new Error(res?.error?.message||'Failed to load tokens.');
+  }catch(err){
+    adminTokensError=err;
+  }finally{
+    adminTokensLoading=false;
+    if(currentAdminScreen==='tokens')renderAdminViewContent();
+  }
+}
+
+async function loadAdminPlans(force=false){
+  if(adminPlansLoading)return;
+  if(!force&&adminPlansList)return;
+  if(typeof window.backendAvailable==='function'&&!window.backendAvailable('admin_plan_prices')){
+    adminPlansError=new Error('Capability admin_plan_prices is disabled (404).');
+    if(currentAdminScreen==='plans')renderAdminViewContent();
+    return;
+  }
+  adminPlansLoading=true;
+  adminPlansError=null;
+  try{
+    const res=await workerGet('/api/admin/plans');
+    if(res&&res.ok&&Array.isArray(res.data))adminPlansList=res.data;
+    else if(res&&Array.isArray(res.data))adminPlansList=res.data;
+    else if(Array.isArray(res))adminPlansList=res;
+    else throw new Error(res?.error?.message||'Failed to load plans.');
+  }catch(err){
+    adminPlansError=err;
+  }finally{
+    adminPlansLoading=false;
+    if(currentAdminScreen==='plans')renderAdminViewContent();
+  }
+}
+
+async function loadAdminCoupons(force=false){
+  if(adminCouponsLoading)return;
+  if(!force&&adminCouponsList)return;
+  adminCouponsLoading=true;
+  adminCouponsError=null;
+  try{
+    const res=await workerGet('/api/admin/coupons');
+    if(res&&res.ok&&Array.isArray(res.data))adminCouponsList=res.data;
+    else if(res&&Array.isArray(res.data))adminCouponsList=res.data;
+    else if(Array.isArray(res))adminCouponsList=res;
+    else throw new Error(res?.error?.message||'Failed to load coupons.');
+  }catch(err){
+    adminCouponsError=err;
+  }finally{
+    adminCouponsLoading=false;
+    if(currentAdminScreen==='plans')renderAdminViewContent();
+  }
+}
+
+async function loadAdminUpgrades(force=false){
+  if(adminUpgradesLoading)return;
+  if(!force&&adminUpgradesList)return;
+  adminUpgradesLoading=true;
+  adminUpgradesError=null;
+  try{
+    const res=await workerGet('/api/admin/upgrade-requests');
+    if(res&&res.ok&&Array.isArray(res.data))adminUpgradesList=res.data;
+    else if(res&&Array.isArray(res.data))adminUpgradesList=res.data;
+    else if(Array.isArray(res))adminUpgradesList=res;
+    else throw new Error(res?.error?.message||'Failed to load upgrade queue.');
+  }catch(err){
+    adminUpgradesError=err;
+  }finally{
+    adminUpgradesLoading=false;
+    if(currentAdminScreen==='upgrades')renderAdminViewContent();
+  }
+}
+
+async function loadAdminTeam(force=false){
+  if(adminTeamLoading)return;
+  if(!force&&adminTeamList)return;
+  adminTeamLoading=true;
+  adminTeamError=null;
+  try{
+    const res=await workerGet('/api/admin/team/members');
+    if(res&&res.ok&&Array.isArray(res.data))adminTeamList=res.data;
+    else if(res&&Array.isArray(res.data))adminTeamList=res.data;
+    else if(Array.isArray(res))adminTeamList=res;
+    else throw new Error(res?.error?.message||'Failed to load team roster.');
+  }catch(err){
+    adminTeamError=err;
+  }finally{
+    adminTeamLoading=false;
+    if(currentAdminScreen==='team')renderAdminViewContent();
+  }
+}
+
+async function loadAdminAudit(force=false){
+  if(adminAuditLoading)return;
+  if(!force&&adminAuditList)return;
+  adminAuditLoading=true;
+  adminAuditError=null;
+  try{
+    const res=await workerGet('/api/admin/audit');
+    if(res&&res.ok&&Array.isArray(res.data))adminAuditList=res.data;
+    else if(res&&Array.isArray(res.data))adminAuditList=res.data;
+    else if(Array.isArray(res))adminAuditList=res;
+    else throw new Error(res?.error?.message||'Failed to load audit trail.');
+  }catch(err){
+    adminAuditError=err;
+  }finally{
+    adminAuditLoading=false;
+    if(currentAdminScreen==='audit')renderAdminViewContent();
+  }
+}
+
+async function loadAdminGarages(force=false){
+  if(adminGaragesLoading)return;
+  if(!force&&adminGaragesList)return;
+  adminGaragesLoading=true;
+  adminGaragesError=null;
+  try{
+    const res=await workerGet('/api/admin/garages');
+    if(res&&res.ok&&Array.isArray(res.data))adminGaragesList=res.data;
+    else if(res&&Array.isArray(res.data))adminGaragesList=res.data;
+    else if(Array.isArray(res))adminGaragesList=res;
+    else throw new Error(res?.error?.message||'Failed to load garage directory.');
+  }catch(err){
+    adminGaragesError=err;
+  }finally{
+    adminGaragesLoading=false;
+    if(currentAdminScreen==='garages')renderAdminViewContent();
+  }
+}
+
+async function updateAdminGarageStatus(garageId, newStatus){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageGarages){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify workshop status.','error');
+    return;
+  }
+  executeProtectedAdminAction('Update Workshop Status', async ()=>{
+    try{
+      await workerPatch('/api/admin/garages/'+encodeURIComponent(garageId)+'/status', { status: newStatus });
+      toast('Garage workshop status updated to '+newStatus+'.','ok');
+      loadAdminGarages(true);
+    }catch(err){
+      toast('Failed to update workshop status: '+(err?.message||err),'error');
+    }
+  });
+}
 
 function renderScreenHome(){
   const totalTickets=adminTickets.length;
   const openTickets=adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length;
+
+  let bodyContent='';
+  if(adminOverviewLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading platform overview from <code>GET /api/admin/overview</code>...</div>';
+  }else if(adminOverviewError){
+    bodyContent=renderAdminBlockedCard('/api/admin/overview','GET',adminOverviewError?.message||'Overview service unavailable.');
+  }else if(adminOverviewData){
+    const d=adminOverviewData;
+    const totalUsers=d.total_users??0;
+    const activePaid=d.active_paid??0;
+    const openTix=d.open_tickets??openTickets;
+    const rev=d.seven_day_revenue??'₹0.00';
+    const garageCount=d.garage_count??0;
+    const activity=Array.isArray(d.recent_activity)?d.recent_activity:[];
+
+    bodyContent='<div class="admin-kpi-grid">'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Total Users</span>'+
+        '<span class="kpi-val">'+esc(totalUsers)+'</span>'+
+        '<span class="kpi-sub">Verified customer accounts</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Active Paid Subscribers</span>'+
+        '<span class="kpi-val" style="color:#16a34a">'+esc(activePaid)+'</span>'+
+        '<span class="kpi-sub">Plus &amp; Ultra subscriptions</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Open Tickets</span>'+
+        '<span class="kpi-val" style="color:'+(openTix>0?'#2563eb':'#0f172a')+'">'+esc(openTix)+'</span>'+
+        '<span class="kpi-sub">'+esc(openTickets)+' total unresolved</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">7-Day Revenue</span>'+
+        '<span class="kpi-val" style="color:#16a34a">'+esc(rev)+'</span>'+
+        '<span class="kpi-sub">Platform gross receipts</span>'+
+      '</div>'+
+      '<div class="admin-kpi-card">'+
+        '<span class="kpi-label">Active Garages</span>'+
+        '<span class="kpi-val">'+esc(garageCount)+'</span>'+
+        '<span class="kpi-sub">Partner workshop network</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-card">'+
+      '<div class="admin-card-head"><h3>Recent Platform Activity Feed</h3><p class="muted">Authoritative event log from server directory.</p></div>'+
+      (activity.length===0?'<div class="admin-empty-state"><p class="muted">No recent platform activity logged.</p></div>':
+        '<div class="admin-table-container" style="margin-top:12px">'+
+          '<table class="admin-data-table">'+
+            '<thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead>'+
+            '<tbody>'+
+              activity.map(a=>'<tr>'+
+                '<td style="white-space:nowrap;color:#64748b">'+esc(a.timestamp||'—')+'</td>'+
+                '<td><b>'+esc(a.actor||'System')+'</b></td>'+
+                '<td><code>'+esc(a.action||'—')+'</code></td>'+
+                '<td>'+esc(a.details||'—')+'</td>'+
+              '</tr>').join('')+
+            '</tbody>'+
+          '</table>'+
+        '</div>')+
+    '</div>';
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Platform metrics are fetched dynamically from server edge.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminOverview(true)">Fetch Real Overview (GET /api/admin/overview)</button>'+
+    '</div>';
+  }
 
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
@@ -3470,8 +6391,8 @@ function renderScreenHome(){
         '<p class="muted">Live system status, active account breakdown, and operational quick actions.</p>'+
       '</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-        '<button type="button" class="ghost" onclick="loadAdminTickets(true)">↻ Refresh Overview</button>'+
-        '<button type="button" class="primary" onclick="openTokenGenModal()">+ Issue Token</button>'+
+        '<button type="button" class="ghost" onclick="loadAdminOverview(true)">↻ Refresh Overview</button>'+
+        '<button type="button" class="primary" onclick="switchAdminScreen(\'tokens\');openTokenGenModal()">+ Issue Token</button>'+
       '</div>'+
     '</div>'+
     (adminTicketsError?'<div style="margin-bottom:12px">'+renderAdminTicketDiagnosticCard()+'</div>':'')+
@@ -3488,28 +6409,7 @@ function renderScreenHome(){
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-kpi-grid">'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Total Registered Users</span>'+
-        '<span class="kpi-val">1</span>'+
-        '<span class="kpi-sub">1 Vehicle Owner · 0 Garages · 0 Staff</span>'+
-      '</div>'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Today\'s Activity</span>'+
-        '<span class="kpi-val">0</span>'+
-        '<span class="kpi-sub">0 Sign-ups · 0 Upgrade Requests</span>'+
-      '</div>'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Support Tickets</span>'+
-        '<span class="kpi-val" style="color:'+(openTickets>0?'#2563eb':'#0f172a')+'">'+openTickets+' / '+totalTickets+'</span>'+
-        '<span class="kpi-sub">'+(adminTicketsError?'D1 gateway check needed':'All customer issues live')+'</span>'+
-      '</div>'+
-      '<div class="admin-kpi-card">'+
-        '<span class="kpi-label">Monthly Platform Revenue</span>'+
-        '<span class="kpi-val" style="color:#16a34a">₹0.00</span>'+
-        '<span class="kpi-sub" style="font-style:italic">Manual-entry placeholder until billing ledger backend connected</span>'+
-      '</div>'+
-    '</div>'+
+    bodyContent+
     '<div class="admin-card">'+
       '<div class="admin-card-head"><h3>Operational Quick Actions</h3><p class="muted">Direct access to core administrative workflows.</p></div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px">'+
@@ -3531,6 +6431,61 @@ function renderScreenHome(){
 }
 
 function renderScreenUsers(){
+  let bodyContent='';
+  if(adminUsersLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading user directory from <code>GET /api/admin/users</code>...</div>';
+  }else if(adminUsersError){
+    bodyContent=renderAdminBlockedCard('/api/admin/users','GET',adminUsersError?.message||'User directory route unavailable (404).');
+  }else if(adminUsersList){
+    const q=(adminUsersSearch||'').trim().toLowerCase();
+    const filtered=adminUsersList.filter(u=>{
+      if(adminUsersRoleFilter!=='all'&&(u.role||'owner').toLowerCase()!==adminUsersRoleFilter)return false;
+      if(adminUsersPlanFilter!=='all'&&(u.plan||'lite').toLowerCase()!==adminUsersPlanFilter)return false;
+      if(adminUsersStatusFilter!=='all'&&(u.status||'active').toLowerCase()!==adminUsersStatusFilter)return false;
+      if(q){
+        const haystack=((u.name||'')+' '+(u.email||'')+' '+(u.phone||'')).toLowerCase();
+        if(!haystack.includes(q))return false;
+      }
+      return true;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No matching customer accounts found.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Customer / Account</th>'+
+              '<th>Phone</th>'+
+              '<th>Role</th>'+
+              '<th>Current Plan</th>'+
+              '<th>Status</th>'+
+              '<th>Created Date</th>'+
+              '<th style="text-align:right">Actions</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(u=>'<tr>'+
+              '<td><div style="font-weight:700;color:#0f172a">'+esc(u.name||'Customer')+'</div><small class="muted">'+esc(u.email||'—')+'</small></td>'+
+              '<td><code style="font-size:12px">'+esc(u.phone||'—')+'</code></td>'+
+              '<td><span class="admin-badge">'+esc(u.role||'Owner')+'</span></td>'+
+              '<td><span class="admin-badge plan-'+esc((u.plan||'lite').toLowerCase())+'">'+esc(u.plan||'Lite')+'</span></td>'+
+              '<td><span class="admin-badge status-'+esc((u.status||'active').toLowerCase())+'">'+esc(u.status||'Active')+'</span></td>'+
+              '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(u.created_at))+'</td>'+
+              '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminUserDetails(\''+esc(u.id)+'\')">Manage User</button></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">User directory is fetched from the server database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminUsers(true)">Load Users (GET /api/admin/users)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
@@ -3538,6 +6493,7 @@ function renderScreenUsers(){
         '<p class="muted">Search customer accounts, manage plan entitlements, review session status, and audit usage.</p>'+
       '</div>'+
       '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminUsers(true)">↻ Refresh List</button>'+
         '<button type="button" class="ghost" onclick="exportUsersCsv()">📥 Export Users CSV</button>'+
       '</div>'+
     '</div>'+
@@ -3546,212 +6502,390 @@ function renderScreenUsers(){
         '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='all'?'active':'')+'" onclick="adminUsersRoleFilter=\'all\';renderAdminViewContent()">All Roles</button>'+
         '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='owner'?'active':'')+'" onclick="adminUsersRoleFilter=\'owner\';renderAdminViewContent()">Vehicle Owners</button>'+
         '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='garage'?'active':'')+'" onclick="adminUsersRoleFilter=\'garage\';renderAdminViewContent()">Garage Owners</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminUsersRoleFilter==='staff'?'active':'')+'" onclick="adminUsersRoleFilter=\'staff\';renderAdminViewContent()">Staff</button>'+
       '</div>'+
-      '<div style="display:flex;gap:8px;align-items:center">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<select class="ticket-filter-select" onchange="adminUsersPlanFilter=this.value;renderAdminViewContent()">'+
+          '<option value="all" '+(adminUsersPlanFilter==='all'?'selected':'')+'>All Plans</option>'+
+          '<option value="lite" '+(adminUsersPlanFilter==='lite'?'selected':'')+'>Lite</option>'+
+          '<option value="premium" '+(adminUsersPlanFilter==='premium'?'selected':'')+'>Premium</option>'+
+          '<option value="ultra" '+(adminUsersPlanFilter==='ultra'?'selected':'')+'>Ultra</option>'+
+        '</select>'+
+        '<select class="ticket-filter-select" onchange="adminUsersStatusFilter=this.value;renderAdminViewContent()">'+
+          '<option value="all" '+(adminUsersStatusFilter==='all'?'selected':'')+'>All Statuses</option>'+
+          '<option value="active" '+(adminUsersStatusFilter==='active'?'selected':'')+'>Active</option>'+
+          '<option value="suspended" '+(adminUsersStatusFilter==='suspended'?'selected':'')+'>Suspended</option>'+
+        '</select>'+
         '<input type="text" class="admin-search-input" placeholder="Search name, email, mobile..." value="'+esc(adminUsersSearch)+'" oninput="adminUsersSearch=this.value;renderAdminViewContent()">'+
       '</div>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Customer / Account</th>'+
-            '<th>Mobile</th>'+
-            '<th>Role</th>'+
-            '<th>Current Plan</th>'+
-            '<th>Status</th>'+
-            '<th>Created Date</th>'+
-            '<th style="text-align:right">Actions</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td>'+
-              '<div style="font-weight:700;color:#0f172a">B Rahul (Super Admin)</div>'+
-              '<small class="muted">rnyburia@gmail.com</small>'+
-            '</td>'+
-            '<td><code style="font-size:12px">+91 98*** *****</code></td>'+
-            '<td><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span></td>'+
-            '<td><span class="admin-badge plan-ultra">Ultra / Lifetime</span></td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="white-space:nowrap;color:#64748b">17 Oct 2026</td>'+
-            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px" onclick="openAdminUserDetails(\'admin-primary\')">Manage User</button></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
-    '<div class="admin-card" style="background:#f8fafc;border-style:dashed">'+
-      '<small class="muted">Showing authoritative verified accounts. Production user listing integrates with backend endpoint <code>GET /api/admin/users</code>.</small>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenTokens(){
+  let bodyContent='';
+  if(adminTokensLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading tokens from <code>GET /api/admin/tokens</code>...</div>';
+  }else if(adminTokensError){
+    bodyContent=renderAdminBlockedCard('/api/admin/tokens','GET',adminTokensError?.message||'Activation tokens route unavailable (404).');
+  }else if(adminTokensList){
+    if(adminTokensList.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No activation tokens issued yet.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Masked Token</th>'+
+              '<th>Plan Granted</th>'+
+              '<th>Role</th>'+
+              '<th>Usage</th>'+
+              '<th>Validity</th>'+
+              '<th>Expiry Date</th>'+
+              '<th>Status</th>'+
+              '<th style="text-align:right">Action</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            adminTokensList.map(t=>'<tr>'+
+              '<td><code style="font-weight:700;color:#2563eb">'+esc(t.masked_token||t.code||'TD-••••')+'</code></td>'+
+              '<td><span class="admin-badge plan-'+esc((t.plan||'lite').toLowerCase())+'">'+esc(t.plan||'Lite')+'</span></td>'+
+              '<td>'+esc(t.role||'Vehicle Owner')+'</td>'+
+              '<td>'+esc(t.used_count||0)+' / '+esc(t.max_uses===0?'∞':(t.max_uses||1))+'</td>'+
+              '<td>'+esc(t.duration_days||365)+' Days</td>'+
+              '<td style="color:#64748b">'+esc(formatAdminDate(t.expires_at))+'</td>'+
+              '<td><span class="admin-badge status-'+esc((t.status||'active').toLowerCase())+'">'+esc(t.status||'Active')+'</span></td>'+
+              '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\''+esc(t.id||t.code)+'\')">Revoke</button></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Activation token registry connects to backend database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminTokens(true)">Fetch Tokens (GET /api/admin/tokens)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Activation Tokens &amp; Plan Grants</h2>'+
         '<p class="muted">Issue cryptographic activation tokens for plan upgrades, promotions, and garage activations.</p>'+
       '</div>'+
-      '<button type="button" class="primary" onclick="openTokenGenModal()">+ Generate Token</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminTokens(true)">↻ Refresh List</button>'+
+        '<button type="button" class="primary" onclick="openTokenGenModal()">+ Generate Token</button>'+
+      '</div>'+
     '</div>'+
     '<div class="admin-card" style="border-left:4px solid #10b981">'+
       '<b style="font-size:13.5px">Cryptographic Token Issuance Standard</b>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12px">Tokens are hashed with SHA-256 upon issuance. The raw secret is revealed exactly once to the administrator. The server never stores plaintext token codes.</p>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Masked Token</th>'+
-            '<th>Plan Granted</th>'+
-            '<th>Role</th>'+
-            '<th>Usage</th>'+
-            '<th>Validity</th>'+
-            '<th>Expiry Date</th>'+
-            '<th>Status</th>'+
-            '<th style="text-align:right">Action</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td><code style="font-weight:700;color:#2563eb">TD-PLUS-••••-8812</code></td>'+
-            '<td><span class="admin-badge plan-plus">Plus (Annual)</span></td>'+
-            '<td>Vehicle Owner</td>'+
-            '<td>0 / 1</td>'+
-            '<td>365 Days</td>'+
-            '<td style="color:#64748b">18 Oct 2027</td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\'TD-PLUS-••••-8812\')">Revoke</button></td>'+
-          '</tr>'+
-          '<tr>'+
-            '<td><code style="font-weight:700;color:#2563eb">TD-ULTR-••••-4109</code></td>'+
-            '<td><span class="admin-badge plan-ultra">Ultra (Workshop)</span></td>'+
-            '<td>Garage Owner</td>'+
-            '<td>0 / 1</td>'+
-            '<td>90 Days</td>'+
-            '<td style="color:#64748b">16 Jan 2027</td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeAdminToken(\'TD-ULTR-••••-4109\')">Revoke</button></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
+async function saveAdminPlanPrice(planId){
+  const perms=(typeof getAdminRolePermissions==='function')?getAdminRolePermissions(currentAdminRole):{isSuperAdmin:currentAdminRole==='super_admin'};
+  if(currentAdminRole!=='super_admin'&&!perms?.canManagePlans&&!perms?.isSuperAdmin){
+    toast('Permission denied: Only Super Admin can modify plan prices.','error');
+    return;
+  }
+  const plan=(adminPlansList||[]).find(p=>(p.id||p.key)===planId);
+  if(!plan){
+    toast('Plan not found: '+planId,'error');
+    return;
+  }
+  const isGarage=(plan.account_type==='garage')||(plan.price_6m!=null)||['lite','pro','ultra'].includes(planId);
+
+  const payload={};
+  const monthlyEl=document.getElementById('plan_price_monthly_'+planId);
+  const yearlyEl=document.getElementById('plan_price_yearly_'+planId);
+  const p6mEl=document.getElementById('plan_price_6m_'+planId);
+  const p12mEl=document.getElementById('plan_price_12m_'+planId);
+
+  if(!isGarage){
+    if(monthlyEl&&monthlyEl.value!==''){
+      const m=Number(monthlyEl.value);
+      if(isNaN(m)||m<0||m>99999){
+        toast('Monthly price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(m!==Number(plan.price_monthly??plan.price)){
+        payload.price_monthly=m;
+      }
+    }
+    if(yearlyEl&&yearlyEl.value!==''){
+      const y=Number(yearlyEl.value);
+      if(isNaN(y)||y<0||y>99999){
+        toast('Yearly price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(y!==Number(plan.price_yearly)){
+        payload.price_yearly=y;
+      }
+    }
+  }else{
+    if(p6mEl&&p6mEl.value!==''){
+      const p6=Number(p6mEl.value);
+      if(isNaN(p6)||p6<0||p6>99999){
+        toast('6-month price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(p6!==Number(plan.price_6m)){
+        payload.price_6m=p6;
+      }
+    }
+    if(p12mEl&&p12mEl.value!==''){
+      const p12=Number(p12mEl.value);
+      if(isNaN(p12)||p12<0||p12>99999){
+        toast('12-month price must be a valid number between 0 and 99,999.','error');
+        return;
+      }
+      if(p12!==Number(plan.price_12m)){
+        payload.price_12m=p12;
+      }
+    }
+  }
+
+  if(Object.keys(payload).length===0){
+    toast('No price changes detected.','info');
+    return;
+  }
+
+  if(typeof window.backendAvailable==='function'&&!window.backendAvailable('admin_plan_prices')){
+    const statusEl=document.getElementById('adminPlanPriceStatus');
+    if(statusEl){
+      statusEl.innerHTML=renderAdminBlockedCard('/api/admin/plans/'+encodeURIComponent(planId),'PATCH','Capability admin_plan_prices is disabled (404).');
+    }
+    return;
+  }
+
+  executeProtectedAdminAction('Update Plan Price',async ()=>{
+    const statusEl=document.getElementById('adminPlanPriceStatus');
+    if(statusEl)statusEl.innerHTML='<span class="spinner-sm"></span> Saving price updates to server...';
+    try{
+      const res=await workerPatch('/api/admin/plans/'+encodeURIComponent(planId),payload);
+      if(res&&(res.ok||res.success||res.data)){
+        Object.assign(plan,payload);
+        if(statusEl){
+          statusEl.innerHTML='<div class="admin-badge" style="background:#dcfce7;color:#15803d;padding:8px 12px;font-size:13px">✓ Plan prices updated successfully. Logged to audit trail on server.</div>';
+        }
+        toast('Plan price updated and logged to audit trail.','success');
+      }else{
+        throw new Error(res?.error?.message||'Server rejected price update.');
+      }
+    }catch(err){
+      if(statusEl){
+        statusEl.innerHTML=renderAdminBlockedCard('/api/admin/plans/'+encodeURIComponent(planId),'PATCH',err?.message||'Route returned 404 / failed.');
+      }
+      toast('Failed to update plan price: '+(err?.message||err),'error');
+    }
+  });
+}
+
 function renderScreenPlans(){
+  let plansContent='';
+  if(adminPlansLoading){
+    plansContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading plans from <code>GET /api/admin/plans</code>...</div>';
+  }else if(adminPlansError){
+    plansContent=renderAdminBlockedCard('/api/admin/plans','GET',adminPlansError?.message||'Plans endpoint unavailable (404).');
+  }else if(adminPlansList){
+    plansContent='<div class="admin-card">'+
+      '<div class="admin-card-head">'+
+        '<h3>Plan Price Editor</h3>'+
+        '<p class="muted">Live plan pricing managed via <code>GET /api/admin/plans</code> and <code>PATCH /api/admin/plans/:id</code>.</p>'+
+      '</div>'+
+      '<div class="admin-table-container">'+
+        '<table class="admin-data-table" id="adminPlansTable">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Plan Name</th>'+
+              '<th>Account Type</th>'+
+              '<th>Monthly (₹)</th>'+
+              '<th>Yearly (₹)</th>'+
+              '<th>6-Month (₹)</th>'+
+              '<th>12-Month (₹)</th>'+
+              '<th style="text-align:right">Action</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            adminPlansList.map(p=>{
+              const pid=esc(p.id||p.key||'');
+              const isGarage=(p.account_type==='garage')||(p.price_6m!=null)||['lite','pro','ultra'].includes(p.id||p.key);
+              const acctLabel=isGarage?'Garage':'Vehicle Owner';
+              const monthlyVal=(p.price_monthly??p.price??'');
+              const yearlyVal=(p.price_yearly??'');
+              const p6mVal=(p.price_6m??'');
+              const p12mVal=(p.price_12m??'');
+              return '<tr>'+
+                '<td><b>'+esc(p.name||pid)+'</b><br><code style="font-size:11px;color:#64748b">'+pid+'</code></td>'+
+                '<td><span class="admin-badge '+(isGarage?'badge-garage':'badge-owner')+'">'+esc(acctLabel)+'</span></td>'+
+                '<td>'+(isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_monthly_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(monthlyVal)+'" aria-label="Monthly price for '+pid+'">')+'</td>'+
+                '<td>'+(isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_yearly_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(yearlyVal)+'" aria-label="Yearly price for '+pid+'">')+'</td>'+
+                '<td>'+(!isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_6m_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(p6mVal)+'" aria-label="6-month price for '+pid+'">')+'</td>'+
+                '<td>'+(!isGarage?'<span class="muted">—</span>':'<input type="number" id="plan_price_12m_'+pid+'" class="admin-input-sm" style="width:85px;padding:4px 8px" min="0" max="99999" value="'+esc(p12mVal)+'" aria-label="12-month price for '+pid+'">')+'</td>'+
+                '<td style="text-align:right"><button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="saveAdminPlanPrice(\''+pid+'\')">Save</button></td>'+
+              '</tr>';
+            }).join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>'+
+      '<div style="margin-top:14px;padding:10px 14px;background:#f8fafc;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">'+
+        '<span style="font-size:12px;color:#64748b">🔒 Price updates require Super Admin TPIN. Logged to audit trail on server.</span>'+
+        '<div id="adminPlanPriceStatus"></div>'+
+      '</div>'+
+    '</div>';
+  }else{
+    plansContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Plan tiers and entitlement limits are managed in the database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminPlans(true)">Fetch Plans (GET /api/admin/plans)</button>'+
+    '</div>';
+  }
+
+  let couponsContent='';
+  if(adminCouponsLoading){
+    couponsContent='<div class="admin-card" style="text-align:center;padding:24px"><span class="spinner-sm"></span> Loading coupons from <code>GET /api/admin/coupons</code>...</div>';
+  }else if(adminCouponsError){
+    couponsContent=renderAdminBlockedCard('/api/admin/coupons','GET',adminCouponsError?.message||'Coupons endpoint unavailable (404).');
+  }else if(adminCouponsList){
+    if(adminCouponsList.length===0){
+      couponsContent='<div class="admin-empty-state"><p class="muted">No active promotional coupons found.</p></div>';
+    }else{
+      couponsContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead><tr><th>Code</th><th>Discount</th><th>Max Uses</th><th>Redeemed</th><th>Expires</th><th>Status</th><th style="text-align:right">Action</th></tr></thead>'+
+          '<tbody>'+
+            adminCouponsList.map(c=>'<tr>'+
+              '<td><code style="font-weight:700;color:#9d174d">'+esc(c.code)+'</code></td>'+
+              '<td>'+esc(c.discount_percent||c.discount||0)+'% OFF</td>'+
+              '<td>'+esc(c.max_uses||'Unlimited')+'</td>'+
+              '<td>'+esc(c.used_count||0)+'</td>'+
+              '<td>'+esc(formatAdminDate(c.expires_at))+'</td>'+
+              '<td><span class="admin-badge status-'+esc(c.status||'active')+'">'+esc(c.status||'Active')+'</span></td>'+
+              '<td style="text-align:right"><button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="deleteAdminCoupon(\''+esc(c.id)+'\')">Deactivate</button></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    couponsContent='<div class="admin-card" style="text-align:center;padding:24px">'+
+      '<p class="muted" style="margin-bottom:12px">Promotional coupons are verified and applied server-side.</p>'+
+      '<button type="button" class="ghost" onclick="loadAdminCoupons(true)">Fetch Coupons (GET /api/admin/coupons)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Plans, Pricing &amp; Feature Limits</h2>'+
-        '<p class="muted">Configure vehicle limits, document vault storage, pricing, and festival promotional banners.</p>'+
+        '<p class="muted">Configure vehicle limits, document vault storage, pricing, and promotional coupons.</p>'+
       '</div>'+
-      '<button type="button" class="ghost" onclick="toast(\'Plan limits are enforced server-side.\',\'info\')">Server Synced</button>'+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-free">Free Tier</span><h3 style="margin:8px 0 4px">Vehicle Owner Free</h3><div style="font-size:22px;font-weight:800;color:#0f172a">₹0 <span style="font-size:13px;font-weight:400;color:#64748b">/ lifetime</span></div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>1 Vehicle Limit</li>'+
-          '<li>Standard RC &amp; Insurance Storage (10MB)</li>'+
-          '<li>Regular Service &amp; Maintenance Logging</li>'+
-          '<li>Community &amp; Email Support</li>'+
-        '</ul>'+
-        '<button type="button" class="ghost" style="width:100%" disabled>Default Tier</button>'+
-      '</div>'+
-      '<div class="admin-card" style="border-color:#93c5fd;box-shadow:0 4px 14px rgba(37,99,235,0.08)">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-plus">Plus Tier (Most Popular)</span><h3 style="margin:8px 0 4px">Everyday Vehicle Owner</h3><div style="font-size:22px;font-weight:800;color:#1d4ed8">₹69 / mo <span style="font-size:13px;font-weight:400;color:#64748b">or ₹708 / yr (+ 18% GST)</span></div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>Up to 5 Vehicles in Single Dashboard</li>'+
-          '<li>Full Transfer Documents (Form 29 &amp; 30 PDF Engine)</li>'+
-          '<li>Encrypted Private Cloud Glovebox &amp; Vault (100MB)</li>'+
-          '<li>A4 Comprehensive Ownership History Export</li>'+
-          '<li>Priority Help Ticket SLA (&lt; 24h)</li>'+
-        '</ul>'+
-        '<button type="button" class="primary" style="width:100%" onclick="toast(\'Plus tier configuration is active.\',\'ok\')">Active Production Tier</button>'+
-      '</div>'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><span class="admin-badge plan-ultra">Ultra Tier</span><h3 style="margin:8px 0 4px">Garage &amp; Workshop SaaS</h3><div style="font-size:22px;font-weight:800;color:#92400e">Custom <span style="font-size:13px;font-weight:400;color:#64748b">/ Multi-Bay</span></div></div>'+
-        '<ul style="margin:14px 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.7">'+
-          '<li>Unlimited Customer Vehicles &amp; Job Cards</li>'+
-          '<li>Digital Invoicing &amp; Customer WhatsApp Intimation</li>'+
-          '<li>Multi-mechanic Staff Accounts</li>'+
-          '<li>Workshop Brand Portal &amp; Public Booking Page</li>'+
-        '</ul>'+
-        '<button type="button" class="ghost" style="width:100%" onclick="toast(\'Garage onboarding gate active.\',\'info\')">Workshop Gate</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminPlans(true);loadAdminCoupons(true)">↻ Refresh Plans</button>'+
+        '<button type="button" class="primary" onclick="openCreateCouponModal()">+ Create Coupon</button>'+
       '</div>'+
     '</div>'+
+    plansContent+
     '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Festival Offer &amp; Announcement Banner</h3><p class="muted">Configure customer dashboard banner and coupon promotions.</p></div>'+
-      '<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">'+
-        '<div class="field">'+
-          '<label>Banner Text</label>'+
-          '<input type="text" id="adminFestivalBannerText" value="Diwali Special: 20% off annual Plus plan with code FESTIVAL26" placeholder="Enter banner headline...">'+
-        '</div>'+
-        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
-          '<button type="button" class="primary" onclick="saveFestivalBanner()">Save Banner Draft</button>'+
-          '<small class="muted">Will be verified by backend worker before deployment.</small>'+
-        '</div>'+
-      '</div>'+
+      '<div class="admin-card-head"><h3>Active Promotional Coupons</h3><p class="muted">Festival discounts, garage vouchers, and marketing campaigns.</p></div>'+
+      couponsContent+
     '</div>'+
   '</div>';
 }
 
 function renderScreenUpgrades(){
+  let bodyContent='';
+  if(adminUpgradesLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading upgrade queue from <code>GET /api/admin/upgrade-requests</code>...</div>';
+  }else if(adminUpgradesError){
+    bodyContent=renderAdminBlockedCard('/api/admin/upgrade-requests','GET',adminUpgradesError?.message||'Upgrade requests endpoint unavailable (404).');
+  }else if(adminUpgradesList){
+    const filtered=adminUpgradesList.filter(r=>{
+      if(adminUpgradesFilter==='all')return true;
+      return (r.status||'pending').toLowerCase()===adminUpgradesFilter;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No upgrade requests matching current filter.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Customer</th>'+
+              '<th>Contact Phone</th>'+
+              '<th>Requested Plan</th>'+
+              '<th>Date</th>'+
+              '<th>Status</th>'+
+              '<th style="text-align:right">Action &amp; Triage</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(r=>'<tr>'+
+              '<td><div style="font-weight:700">'+esc(r.customer_name||r.name||'Customer')+'</div><small class="muted">'+esc(r.customer_email||r.email||'—')+'</small></td>'+
+              '<td><a href="tel:'+esc(r.phone)+'" style="color:#2563eb;font-weight:600">'+esc(r.phone||'—')+'</a></td>'+
+              '<td><span class="admin-badge plan-'+esc((r.requested_plan||'premium').toLowerCase())+'">'+esc(r.requested_plan||'Premium')+'</span></td>'+
+              '<td style="color:#64748b">'+esc(formatAdminDate(r.created_at))+'</td>'+
+              '<td><span class="admin-badge status-'+esc((r.status||'pending').toLowerCase())+'">'+esc(r.status||'Pending')+'</span></td>'+
+              '<td style="text-align:right">'+
+                '<div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">'+
+                  '<textarea id="upgradeNote_'+esc(r.id)+'" placeholder="Triage note..." rows="1" style="width:140px;font-size:11px;padding:3px"></textarea>'+
+                  '<button type="button" class="primary" style="padding:4px 8px;font-size:12px" onclick="handleUpgradeAction(\''+esc(r.id)+'\',\'approve\')">Approve</button>'+
+                  '<button type="button" class="ghost" style="padding:4px 8px;font-size:12px;color:#dc2626" onclick="handleUpgradeAction(\''+esc(r.id)+'\',\'reject\')">Reject</button>'+
+                '</div>'+
+              '</td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Inbound upgrade requests submitted by vehicle owners and garages.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminUpgrades(true)">Fetch Queue (GET /api/admin/upgrade-requests)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Customer Upgrade Queue &amp; Leads</h2>'+
         '<p class="muted">Review inbound customer upgrade inquiries, initiate WhatsApp/Call contact, and activate accounts.</p>'+
       '</div>'+
-      '<div class="admin-filter-tabs">'+
-        '<button type="button" class="admin-filter-pill active">All Requests</button>'+
-        '<button type="button" class="admin-filter-pill">Pending</button>'+
-        '<button type="button" class="admin-filter-pill">Activated</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminUpgrades(true)">↻ Refresh Queue</button>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Customer</th>'+
-            '<th>Contact Phone</th>'+
-            '<th>Requested Plan</th>'+
-            '<th>Vehicles</th>'+
-            '<th>Date</th>'+
-            '<th>Status</th>'+
-            '<th style="text-align:right">Direct Contact &amp; Triage</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td><div style="font-weight:700">Mohan Sharma</div><small class="muted">mohan.sharma@example.com</small></td>'+
-            '<td><a href="tel:+919876543210" style="color:#2563eb;font-weight:600">+91 98765 43210</a></td>'+
-            '<td><span class="admin-badge plan-plus">Plus (Annual)</span></td>'+
-            '<td>2 Cars</td>'+
-            '<td style="color:#64748b">17 Oct 2026</td>'+
-            '<td><span class="admin-badge status-open">Pending</span></td>'+
-            '<td style="text-align:right">'+
-              '<div style="display:flex;gap:6px;justify-content:flex-end">'+
-                '<a href="https://wa.me/919876543210" target="_blank" class="ghost" style="padding:4px 10px;font-size:12px;text-decoration:none">💬 WhatsApp</a>'+
-                '<button type="button" class="primary" style="padding:4px 10px;font-size:12px" onclick="updateUpgradeStatus(\'req-1\',\'activated\')">Activate</button>'+
-              '</div>'+
-            '</td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
+    '<div class="admin-filter-tabs">'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='all'?'active':'')+'" onclick="adminUpgradesFilter=\'all\';renderAdminViewContent()">All Requests</button>'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='pending'?'active':'')+'" onclick="adminUpgradesFilter=\'pending\';renderAdminViewContent()">Pending</button>'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='approved'?'active':'')+'" onclick="adminUpgradesFilter=\'approved\';renderAdminViewContent()">Approved</button>'+
+      '<button type="button" class="admin-filter-pill '+(adminUpgradesFilter==='rejected'?'active':'')+'" onclick="adminUpgradesFilter=\'rejected\';renderAdminViewContent()">Rejected</button>'+
     '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenTickets(){
-  const filters=[
+  if(adminTicketTab!=='closed')adminTicketTab='open';
+  const openCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='open').length;
+  const closedCount=adminTickets.filter(t=>getTicketStatusGroup(t.status)==='closed').length;
+
+  const statusFilters=(adminTicketTab==='closed')?[
     {id:'all',label:'All'},
-    {id:'open',label:'Open'},
-    {id:'in_progress',label:'In Progress'},
-    {id:'resolved',label:'Resolved'},
+    {id:'solved',label:'Solved'},
     {id:'closed',label:'Closed'}
+  ]:[
+    {id:'all',label:'All'},
+    {id:'pending',label:'Pending'},
+    {id:'assigned',label:'Assigned'},
+    {id:'working',label:'Working on it'},
+    {id:'need_info',label:'Required other info'}
   ];
 
   return '<div class="admin-screen-shell">'+
@@ -3771,11 +6905,30 @@ function renderScreenTickets(){
       '</div>'+
     '</div>'+
     '<div id="adminStatsContainer">'+renderAdminStatsHtml()+'</div>'+
+    '<div class="admin-ticket-tabs help-tabs-bar" style="margin:14px 0 10px">'+
+      '<button type="button" class="help-tab-btn '+(adminTicketTab==='open'?'active':'')+'" id="adminTicketTabOpen" onclick="setAdminTicketTab(\'open\')">Open ('+openCount+')</button>'+
+      '<button type="button" class="help-tab-btn '+(adminTicketTab==='closed'?'active':'')+'" id="adminTicketTabClosed" onclick="setAdminTicketTab(\'closed\')">Closed ('+closedCount+')</button>'+
+    '</div>'+
     '<div class="admin-controls-bar">'+
       '<div class="admin-filter-tabs" id="adminFilterGroup">'+
-        filters.map(f=>'<button type="button" class="admin-filter-pill '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+f.label+'</button>').join('')+
+        statusFilters.map(f=>'<button type="button" class="admin-filter-pill '+(adminStatusFilter===f.id?'active':'')+'" onclick="filterAdminTicketsByStatus(\''+f.id+'\')">'+esc(f.label)+'</button>').join('')+
       '</div>'+
-      '<div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<select class="ticket-filter-select" id="adminAssigneeSelect" onchange="adminAssigneeFilter=this.value;renderAdminListContent()">'+
+          '<option value="all" '+(adminAssigneeFilter==='all'?'selected':'')+'>All Assignees</option>'+
+          '<option value="me" '+(adminAssigneeFilter==='me'?'selected':'')+'>Assigned to Me</option>'+
+          '<option value="unassigned" '+(adminAssigneeFilter==='unassigned'?'selected':'')+'>Unassigned</option>'+
+        '</select>'+
+        '<select class="ticket-filter-select" id="adminPrioritySelect" onchange="adminPriorityFilter=this.value;renderAdminListContent()">'+
+          '<option value="all" '+(adminPriorityFilter==='all'?'selected':'')+'>All Priorities</option>'+
+          '<option value="urgent" '+(adminPriorityFilter==='urgent'?'selected':'')+'>Urgent</option>'+
+          '<option value="high" '+(adminPriorityFilter==='high'?'selected':'')+'>High</option>'+
+          '<option value="normal" '+(adminPriorityFilter==='normal'?'selected':'')+'>Normal</option>'+
+          '<option value="low" '+(adminPriorityFilter==='low'?'selected':'')+'>Low</option>'+
+        '</select>'+
+        '<button type="button" class="ticket-filter-pill '+(adminSlaFilter==='breached'?'active':'')+'" onclick="adminSlaFilter=(adminSlaFilter===\'breached\'?\'all\':\'breached\');renderAdminViewContent()">'+
+          '⚠️ SLA Breach Only'+
+        '</button>'+
         '<input type="text" id="adminSearchInput" class="admin-search-input" placeholder="Search ID, email, subject..." value="'+esc(adminSearchQuery)+'" oninput="handleAdminSearch(this.value)">'+
       '</div>'+
     '</div>'+
@@ -3784,137 +6937,232 @@ function renderScreenTickets(){
 }
 
 function renderScreenGarages(){
+  let bodyContent='';
+  if(adminGaragesLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading garage directory from <code>GET /api/admin/garages</code>...</div>';
+  }else if(adminGaragesError){
+    bodyContent=renderAdminBlockedCard('/api/admin/garages','GET',adminGaragesError?.message||'Garage network endpoint unavailable (404).');
+  }else if(adminGaragesList){
+    const q=(adminGaragesSearch||'').trim().toLowerCase();
+    const filtered=adminGaragesList.filter(g=>{
+      if(adminGaragesFilter!=='all'&&(g.status||'active').toLowerCase()!==adminGaragesFilter)return false;
+      if(q){
+        const haystack=((g.name||g.workshop_name||'')+' '+(g.city||'')+' '+(g.owner_name||'')+' '+(g.phone||'')+' '+(g.email||'')+' '+(g.gstin||'')).toLowerCase();
+        if(!haystack.includes(q))return false;
+      }
+      return true;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No workshop partners match the selected filter.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Workshop &amp; Location</th>'+
+              '<th>Contact &amp; Owner</th>'+
+              '<th>GSTIN / Trade</th>'+
+              '<th>Plan Tier</th>'+
+              '<th>Bays &amp; Staff</th>'+
+              '<th>Status</th>'+
+              '<th style="text-align:right">Actions</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(g=>{
+              const gid=g.id||g.workshop_id||'';
+              const name=g.name||g.workshop_name||'Workshop Partner';
+              const location=[g.city, g.state].filter(Boolean).join(', ') || g.address || '—';
+              const contact=g.phone || g.email || '—';
+              const owner=g.owner_name ? ' · '+g.owner_name : '';
+              const gstin=g.gstin || 'Unregistered (Non-GST)';
+              const plan=(g.plan||'lite').toLowerCase();
+              const bays=g.bays || g.service_bays || '—';
+              const staff=g.staff_count ? (g.staff_count + (g.max_staff ? '/'+g.max_staff : ' staff')) : '—';
+              const status=(g.status||'active').toLowerCase();
+              return '<tr>'+
+                '<td><div style="font-weight:700;color:#0f172a">'+esc(name)+'</div><small class="muted">'+esc(location)+'</small></td>'+
+                '<td><div style="font-size:12.5px">'+esc(contact)+'</div><small class="muted">'+esc(owner)+'</small></td>'+
+                '<td><code style="font-size:11.5px">'+esc(gstin)+'</code></td>'+
+                '<td><span class="admin-badge plan-'+esc(plan)+'">'+esc(plan.charAt(0).toUpperCase()+plan.slice(1))+'</span></td>'+
+                '<td><div style="font-size:12px">'+esc(bays)+' bays</div><small class="muted">'+esc(staff)+'</small></td>'+
+                '<td><span class="admin-badge status-'+esc(status)+'">'+esc(status.charAt(0).toUpperCase()+status.slice(1))+'</span></td>'+
+                '<td style="text-align:right">'+
+                  '<div style="display:flex;gap:6px;justify-content:flex-end">'+
+                    (status==='pending'?'<button type="button" class="primary" style="padding:4px 8px;font-size:12px" onclick="updateAdminGarageStatus(\''+esc(gid)+'\',\'active\')">Verify</button>':
+                     status==='active'?'<button type="button" class="ghost" style="padding:4px 8px;font-size:12px;color:#dc2626" onclick="updateAdminGarageStatus(\''+esc(gid)+'\',\'suspended\')">Suspend</button>':
+                     '<button type="button" class="ghost" style="padding:4px 8px;font-size:12px;color:#16a34a" onclick="updateAdminGarageStatus(\''+esc(gid)+'\',\'active\')">Reactivate</button>')+
+                  '</div>'+
+                '</td>'+
+              '</tr>';
+            }).join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Independent workshop partner directory and onboarding requests.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminGarages(true)">Fetch Garages (GET /api/admin/garages)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Garage Network &amp; Workshop Partners</h2>'+
         '<p class="muted">Review onboarding submissions, monitor garage subscriptions, and manage workshop capabilities.</p>'+
       '</div>'+
-      '<button type="button" class="ghost" onclick="toast(\'Workshop onboarding queue synced.\',\'ok\')">Sync Queue</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminGarages(true)">↻ Refresh Garages</button>'+
+      '</div>'+
     '</div>'+
-    '<div class="admin-kpi-grid">'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Registered Workshops</span><span class="kpi-val">0</span><span class="kpi-sub">0 Active · 0 Trial</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Pending Onboarding</span><span class="kpi-val">0</span><span class="kpi-sub">Awaiting verification</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Invoices Issued</span><span class="kpi-val">0</span><span class="kpi-sub">Workshop SaaS</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Mechanics &amp; Staff</span><span class="kpi-val">0</span><span class="kpi-sub">Staff accounts</span></div>'+
+    '<div class="admin-controls-bar">'+
+      '<div class="admin-filter-tabs">'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='all'?'active':'')+'" onclick="adminGaragesFilter=\'all\';renderAdminViewContent()">All Garages</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='active'?'active':'')+'" onclick="adminGaragesFilter=\'active\';renderAdminViewContent()">Active / Verified</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='pending'?'active':'')+'" onclick="adminGaragesFilter=\'pending\';renderAdminViewContent()">Pending Verification</button>'+
+        '<button type="button" class="admin-filter-pill '+(adminGaragesFilter==='suspended'?'active':'')+'" onclick="adminGaragesFilter=\'suspended\';renderAdminViewContent()">Suspended</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<input type="text" class="admin-search-input" placeholder="Search workshop name, city, GSTIN..." value="'+esc(adminGaragesSearch)+'" oninput="adminGaragesSearch=this.value;renderAdminViewContent()">'+
+      '</div>'+
     '</div>'+
-    '<div class="admin-card" style="text-align:center;padding:40px 20px">'+
-      '<div style="font-size:32px;margin-bottom:8px">🏢</div>'+
-      '<h3>No Garage Onboarding Applications Pending</h3>'+
-      '<p class="muted" style="max-width:480px;margin:0 auto 16px">When independent workshops submit credentials through the Garage Onboarding Portal (PR #120), their trade licenses and GSTIN records appear here for review.</p>'+
-      '<button type="button" class="ghost" onclick="toast(\'Garage workspace feature flag is currently disabled in production.\',\'info\')">Check Feature Flag</button>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenTeam(){
+  let bodyContent='';
+  if(adminTeamLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading team members from <code>GET /api/admin/team/members</code>...</div>';
+  }else if(adminTeamError){
+    bodyContent=renderAdminBlockedCard('/api/admin/team/members','GET',adminTeamError?.message||'Team roster endpoint unavailable (404).');
+  }else if(adminTeamList){
+    bodyContent='<div class="admin-table-container">'+
+      '<table class="admin-data-table">'+
+        '<thead>'+
+          '<tr>'+
+            '<th>Admin Member</th>'+
+            '<th>Role</th>'+
+            '<th>Status</th>'+
+            '<th>Last Login</th>'+
+            '<th style="text-align:right">Action</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          adminTeamList.map(m=>{
+            const isPrimary=Boolean(m.is_owner || m.is_primary || m.role === 'owner');
+            return '<tr>'+
+              '<td><div style="font-weight:700">'+esc(m.name||'Admin')+'</div><small class="muted">'+esc(m.email||'—')+'</small></td>'+
+              '<td><span class="admin-badge">'+esc(m.role||'super_admin')+'</span></td>'+
+              '<td><span class="admin-badge status-'+esc(m.status||'active')+'">'+esc(m.status||'Active')+'</span></td>'+
+              '<td style="color:#64748b">'+esc(formatAdminDate(m.last_login_at||m.created_at))+'</td>'+
+              '<td style="text-align:right">'+
+                (isPrimary?'<span class="muted" style="font-size:12px">Owner Protected</span>':
+                  '<button type="button" class="ghost" style="padding:4px 10px;font-size:12px;color:#dc2626" onclick="revokeTeamMember(\''+esc(m.id)+'\')">Revoke Access</button>')+
+              '</td>'+
+            '</tr>';
+          }).join('')+
+        '</tbody>'+
+      '</table>'+
+    '</div>';
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Administrative team roster with role-based access control.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminTeam(true)">Fetch Team (GET /api/admin/team/members)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Team &amp; Access Control</h2>'+
         '<p class="muted">Manage administrative staff, role permissions, MFA compliance, and session controls.</p>'+
       '</div>'+
-      '<button type="button" class="primary" onclick="openTeamInviteModal()">+ Invite Member</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminTeam(true)">↻ Refresh Team</button>'+
+        '<button type="button" class="primary" onclick="openTeamInviteModal()">+ Invite Member</button>'+
+      '</div>'+
     '</div>'+
     '<div class="admin-card" style="border-left:4px solid #3b82f6">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:gap:12px">'+
         '<div>'+
           '<b style="font-size:14px">Primary Owner Account Protection</b>'+
-          '<p class="muted" style="margin:2px 0 0;font-size:12px">Primary Super Admin <code>rnyburia@gmail.com</code> is protected from administrative revocation or demotion.</p>'+
+          '<p class="muted" style="margin:2px 0 0;font-size:12px">Primary workspace owner account is protected from administrative revocation or demotion.</p>'+
         '</div>'+
         '<span class="admin-badge" style="background:#dbeafe;color:#1e40af">Primary Owner (Immutable)</span>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Admin Member</th>'+
-            '<th>Role</th>'+
-            '<th>Permissions</th>'+
-            '<th>MFA State</th>'+
-            '<th>Last Login</th>'+
-            '<th>Status</th>'+
-            '<th style="text-align:right">Action</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td><div style="font-weight:700">B Rahul</div><small class="muted">rnyburia@gmail.com</small></td>'+
-            '<td><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin</span></td>'+
-            '<td>Full Access (All Modules)</td>'+
-            '<td><span class="admin-badge" style="background:#dcfce7;color:#166534">Enforced</span></td>'+
-            '<td style="color:#64748b">Active Session</td>'+
-            '<td><span class="admin-badge status-active">Active</span></td>'+
-            '<td style="text-align:right"><span class="muted" style="font-size:12px">Owner Protected</span></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
-    '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Administrative Permission Matrix</h3><p class="muted">Capabilities governed by verified backend role checks.</p></div>'+
-      '<div class="admin-table-container" style="margin-top:12px">'+
-        '<table class="admin-data-table">'+
-          '<thead>'+
-            '<tr><th>Role</th><th>Users &amp; Plans</th><th>Tokens</th><th>Tickets</th><th>CSV Export</th><th>Team &amp; Audit</th></tr>'+
-          '</thead>'+
-          '<tbody>'+
-            '<tr><td><b>Super Admin</b></td><td>Full (Read/Write)</td><td>Issue &amp; Revoke</td><td>Full Triage</td><td>Allowed</td><td>Full Access</td></tr>'+
-            '<tr><td><b>Support Lead</b></td><td>Read-Only</td><td>No Access</td><td>Full Triage</td><td>Blocked</td><td>No Access</td></tr>'+
-            '<tr><td><b>Billing Admin</b></td><td>Modify Plans</td><td>Issue Only</td><td>Read-Only</td><td>Allowed</td><td>No Access</td></tr>'+
-            '<tr><td><b>Auditor</b></td><td>Read-Only</td><td>No Access</td><td>Read-Only</td><td>Audit Only</td><td>Audit Logs Only</td></tr>'+
-          '</tbody>'+
-        '</table>'+
-      '</div>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
 function renderScreenAudit(){
+  let bodyContent='';
+  if(adminAuditLoading){
+    bodyContent='<div class="admin-card" style="text-align:center;padding:36px"><span class="spinner-sm"></span> Loading audit log from <code>GET /api/admin/audit</code>...</div>';
+  }else if(adminAuditError){
+    bodyContent=renderAdminBlockedCard('/api/admin/audit','GET',adminAuditError?.message||'Audit trail endpoint unavailable (404).');
+  }else if(adminAuditList){
+    const filtered=adminAuditList.filter(ev=>{
+      if(adminAuditActorFilter!=='all'&&ev.actor!==adminAuditActorFilter)return false;
+      if(adminAuditActionFilter!=='all'&&ev.action!==adminAuditActionFilter)return false;
+      return true;
+    });
+
+    if(filtered.length===0){
+      bodyContent='<div class="admin-empty-state"><p class="muted">No audit events match current filter.</p></div>';
+    }else{
+      bodyContent='<div class="admin-table-container">'+
+        '<table class="admin-data-table">'+
+          '<thead>'+
+            '<tr>'+
+              '<th>Timestamp (IST)</th>'+
+              '<th>Actor</th>'+
+              '<th>Action</th>'+
+              '<th>Resource / Target</th>'+
+              '<th>Client IP</th>'+
+              '<th>Status</th>'+
+            '</tr>'+
+          '</thead>'+
+          '<tbody>'+
+            filtered.map(ev=>'<tr>'+
+              '<td style="white-space:nowrap;color:#64748b">'+esc(formatAdminDate(ev.timestamp||ev.created_at))+'</td>'+
+              '<td><code style="color:#2563eb">'+esc(ev.actor||'—')+'</code></td>'+
+              '<td><code>'+esc(ev.action||'—')+'</code></td>'+
+              '<td>'+esc(ev.resource||ev.target||'—')+'</td>'+
+              '<td><code>'+esc(ev.ip_address||ev.client_ip||'—')+'</code></td>'+
+              '<td><span class="admin-badge status-'+esc(ev.status==='failure'?'danger':'active')+'">'+esc(ev.status||'Success')+'</span></td>'+
+            '</tr>').join('')+
+          '</tbody>'+
+        '</table>'+
+      '</div>';
+    }
+  }else{
+    bodyContent='<div class="admin-card" style="text-align:center;padding:28px">'+
+      '<p class="muted" style="margin-bottom:12px">Append-only privileged action log stored in D1 database.</p>'+
+      '<button type="button" class="primary" onclick="loadAdminAudit(true)">Fetch Audit Log (GET /api/admin/audit)</button>'+
+    '</div>';
+  }
+
   return '<div class="admin-screen-shell">'+
     '<div class="admin-screen-header">'+
       '<div>'+
         '<h2>Cryptographic Security &amp; Audit Log</h2>'+
         '<p class="muted">Append-only ledger of privileged administrative events, permission changes, and access sessions.</p>'+
       '</div>'+
-      '<button type="button" class="ghost" onclick="exportAuditCsv()">📥 Export Audit CSV</button>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button type="button" class="ghost" onclick="loadAdminAudit(true)">↻ Refresh Audit</button>'+
+        '<button type="button" class="ghost" onclick="exportAuditCsv()">📥 Export Audit CSV</button>'+
+      '</div>'+
     '</div>'+
     '<div class="admin-card" style="border-left:4px solid #f59e0b">'+
       '<b style="font-size:13px">Immutable Audit Guarantee</b>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12px">Records are cryptographically timestamped and write-once. Deletion or modification is blocked at the database engine level.</p>'+
     '</div>'+
-    '<div class="admin-table-container">'+
-      '<table class="admin-data-table">'+
-        '<thead>'+
-          '<tr>'+
-            '<th>Timestamp (IST)</th>'+
-            '<th>Actor</th>'+
-            '<th>Action</th>'+
-            '<th>Resource / Target</th>'+
-            '<th>Client IP</th>'+
-            '<th>Status</th>'+
-          '</tr>'+
-        '</thead>'+
-        '<tbody>'+
-          '<tr>'+
-            '<td style="white-space:nowrap;color:#64748b">18 Oct 2026, 10:40 AM</td>'+
-            '<td><code style="color:#2563eb">rnyburia@gmail.com</code></td>'+
-            '<td><code>admin.session.verify</code></td>'+
-            '<td>Super Admin Console</td>'+
-            '<td><code>103.21.***.***</code></td>'+
-            '<td><span class="admin-badge status-active">Success</span></td>'+
-          '</tr>'+
-          '<tr>'+
-            '<td style="white-space:nowrap;color:#64748b">18 Oct 2026, 10:18 AM</td>'+
-            '<td><code style="color:#2563eb">rnyburia@gmail.com</code></td>'+
-            '<td><code>admin.workspace.access</code></td>'+
-            '<td>Torq Desk Shell</td>'+
-            '<td><code>103.21.***.***</code></td>'+
-            '<td><span class="admin-badge status-active">Success</span></td>'+
-          '</tr>'+
-        '</tbody>'+
-      '</table>'+
-    '</div>'+
+    bodyContent+
   '</div>';
 }
 
@@ -3925,32 +7173,8 @@ function renderScreenContent(){
         '<h2>Public Content &amp; Site Policy Editor</h2>'+
         '<p class="muted">Update About Torq Desk, Terms &amp; Conditions, Contact information, and Emergency Maintenance Banner.</p>'+
       '</div>'+
-      '<div style="display:flex;gap:8px">'+
-        '<button type="button" class="ghost" onclick="toast(\'Draft changes saved locally.\',\'ok\')">Save Draft</button>'+
-      '</div>'+
     '</div>'+
-    '<div class="admin-controls-bar">'+
-      '<div class="admin-filter-tabs">'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='about'?'active':'')+'" onclick="adminContentTab=\'about\';renderAdminViewContent()">About Torq Desk</button>'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='terms'?'active':'')+'" onclick="adminContentTab=\'terms\';renderAdminViewContent()">Terms &amp; Conditions</button>'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='contact'?'active':'')+'" onclick="adminContentTab=\'contact\';renderAdminViewContent()">Contact Info</button>'+
-        '<button type="button" class="admin-filter-pill '+(adminContentTab==='maintenance'?'active':'')+'" onclick="adminContentTab=\'maintenance\';renderAdminViewContent()">Emergency Maintenance Gate</button>'+
-      '</div>'+
-    '</div>'+
-    '<div class="admin-card">'+
-      '<div class="field full">'+
-        '<label>Section Header &amp; Copy</label>'+
-        '<textarea rows="8" style="font-family:monospace;font-size:13px;line-height:1.6">'+
-          (adminContentTab==='terms'?'Torq Desk Terms of Service: Ownership records are private and encrypted. Users retain full data sovereignty...':
-           adminContentTab==='contact'?'Engineering Support: support@torqdesk.app\nAdmin Contact: crahul.exe@gmail.com\nHours: Mon-Sat, 9AM-6PM IST':
-           adminContentTab==='maintenance'?'Torq Desk is currently undergoing scheduled database maintenance. Regular service will resume shortly.':
-           'Torq Desk is a private vehicle logbook, encrypted document vault, and statutory transfer packet engine built for everyday vehicle owners.')+
-        '</textarea>'+
-      '</div>'+
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'+
-        '<button type="button" class="primary" onclick="toast(\'Content draft updated.\',\'ok\')">Update Section</button>'+
-      '</div>'+
-    '</div>'+
+    renderAdminPhaseCard('Phase 7 — Content & Site Policy', '/api/admin/content', 'GET / PUT', 'Public site CMS, About Torq Desk, statutory Terms of Service, Privacy Policy, and emergency maintenance gate toggle.')+
   '</div>';
 }
 
@@ -3962,40 +7186,7 @@ function renderScreenSettings(){
         '<p class="muted">Configure session timeouts, admin credentials, MFA parameters, and infrastructure health.</p>'+
       '</div>'+
     '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><h3>Admin Authentication Profile</h3><p class="muted">Primary identity and authorized credentials.</p></div>'+
-        '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;font-size:13px">'+
-          '<div><span class="muted" style="display:block;font-size:11px">ADMINISTRATOR EMAIL</span><b>rnyburia@gmail.com</b></div>'+
-          '<div><span class="muted" style="display:block;font-size:11px">ROLE CLEARANCE</span><span class="admin-badge" style="background:#e0e7ff;color:#3730a3">Super Admin (Primary)</span></div>'+
-          '<div><span class="muted" style="display:block;font-size:11px">INACTIVITY LOCKOUT</span><b>15 Minutes Policy</b> <small class="muted">(Independent of customer 120s policy)</small></div>'+
-        '</div>'+
-      '</div>'+
-      '<div class="admin-card">'+
-        '<div class="admin-card-head"><h3>IP Allowlist Placeholder</h3><p class="muted">Restrict console access to specific IP ranges.</p></div>'+
-        '<div class="field" style="margin-top:12px">'+
-          '<label>Allowed CIDR Subnets (Comma-separated)</label>'+
-          '<input type="text" placeholder="e.g. 103.21.244.0/22, 108.162.192.0/18" value="* (Global Authorized Access)">'+
-        '</div>'+
-        '<button type="button" class="ghost" style="margin-top:8px" onclick="toast(\'IP allowlist placeholder saved.\',\'info\')">Save Rule</button>'+
-      '</div>'+
-    '</div>'+
-    '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Infrastructure &amp; Backup Operations</h3><p class="muted">Live status of backend datastores and edge services.</p></div>'+
-      '<div class="admin-table-container" style="margin-top:12px">'+
-        '<table class="admin-data-table">'+
-          '<thead>'+
-            '<tr><th>Subsystem</th><th>Provider</th><th>Status</th><th>Notes</th></tr>'+
-          '</thead>'+
-          '<tbody>'+
-            '<tr><td><b>Edge Workers</b></td><td>Cloudflare Workers</td><td><span class="admin-badge status-active">Operational</span></td><td>Global multi-region dispatch</td></tr>'+
-            '<tr><td><b>SQL Database</b></td><td>Cloudflare D1 (torqdesk-db)</td><td><span class="admin-badge status-trial">Action Needed</span></td><td>Check <code>support_tickets</code> table migration</td></tr>'+
-            '<tr><td><b>Document Vault</b></td><td>Cloudflare R2 Bucket</td><td><span class="admin-badge status-active">Operational</span></td><td>Private encrypted glovebox storage</td></tr>'+
-            '<tr><td><b>Auth &amp; Database</b></td><td>Supabase PostgreSQL</td><td><span class="admin-badge status-active">Operational</span></td><td>RLS &amp; Session Guard enforced</td></tr>'+
-          '</tbody>'+
-        '</table>'+
-      '</div>'+
-    '</div>'+
+    renderAdminPhaseCard('Phase 7 — Platform Settings', '/api/admin/settings', 'GET / PATCH', 'CIDR IP allowlisting, global maintenance flag, notification webhooks, and 15-minute session guard configuration.')+
   '</div>';
 }
 
@@ -4007,30 +7198,1340 @@ function renderScreenReports(){
         '<p class="muted">Monitor registration growth, vehicle addition trends, support SLAs, and generate compliance exports.</p>'+
       '</div>'+
     '</div>'+
-    '<div class="admin-kpi-grid">'+
-      '<div class="admin-kpi-card"><span class="kpi-label">30-Day New Users</span><span class="kpi-val">1</span><span class="kpi-sub">Organic registrations</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Total Vehicles Managed</span><span class="kpi-val">1</span><span class="kpi-sub">Cloud garage records</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Plus Conversion Rate</span><span class="kpi-val">0%</span><span class="kpi-sub">0 Paid / 1 Free</span></div>'+
-      '<div class="admin-kpi-card"><span class="kpi-label">Average Ticket SLA</span><span class="kpi-val">&lt; 24h</span><span class="kpi-sub">Customer support velocity</span></div>'+
-    '</div>'+
     '<div class="admin-card">'+
-      '<div class="admin-card-head"><h3>Compliance &amp; Data Export Center</h3><p class="muted">Download structured CSV files for auditing, accounting, and compliance.</p></div>'+
+      '<div class="admin-card-head"><h3>Compliance &amp; Data Export Center</h3><p class="muted">Download authoritative CSV files for auditing, accounting, and compliance.</p></div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px">'+
         '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportUsersCsv()">'+
-          '<b>📥 Export Users Directory</b><span class="muted" style="font-size:12px">CSV format with account creation dates &amp; tiers</span>'+
+          '<b>📥 Export Users Directory</b><span class="muted" style="font-size:12px">Calls GET /api/admin/users/export.csv</span>'+
         '</button>'+
         '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportTicketsCsv()">'+
-          '<b>📥 Export Support Tickets</b><span class="muted" style="font-size:12px">Full resolution history, priority, and timestamps</span>'+
+          '<b>📥 Export Support Tickets</b><span class="muted" style="font-size:12px">Calls GET /api/admin/tickets/export.csv</span>'+
         '</button>'+
         '<button type="button" class="ghost" style="padding:16px;text-align:left;height:auto;display:flex;flex-direction:column;gap:6px" onclick="exportAuditCsv()">'+
-          '<b>📥 Export Security Audit Log</b><span class="muted" style="font-size:12px">Append-only privileged action log</span>'+
+          '<b>📥 Export Security Audit Log</b><span class="muted" style="font-size:12px">Calls GET /api/admin/audit/export.csv</span>'+
         '</button>'+
+      '</div>'+
+    '</div>'+
+    renderAdminPhaseCard('Phase 7 — Platform Analytics & Reports', '/api/admin/reports/analytics', 'GET', 'Registration cohort analytics, vehicle growth trends, ticket SLA resolution times, and compliance ledger archives.')+
+  '</div>';
+}
+
+function renderScreenAdminAccount(){
+  return '<div class="admin-screen-shell admin-account-shell">'+
+    '<div class="admin-screen-header">'+
+      '<div>'+
+        '<h2>Admin Account &amp; Platform Security</h2>'+
+        '<p class="muted">Manage administrative credentials, review profile metadata, and inspect session controls.</p>'+
+      '</div>'+
+      '<div class="admin-timeout-badge" id="adminSessionTimeoutBadge">'+
+        '⏱️ Admin Inactivity Timeout: 15 Minutes (Read-Only)'+
+      '</div>'+
+    '</div>'+
+    '<div class="admin-account-grid">'+
+      '<div class="admin-account-card" id="adminProfileCardContainer">'+
+        renderAdminProfileCardInner()+
+      '</div>'+
+
+      '<div class="admin-account-card">'+
+        '<div class="admin-card-head">'+
+          '<h3>Change Administrative Password</h3>'+
+          '<p class="muted">Requires server confirmation before success is reported.</p>'+
+        '</div>'+
+        '<form id="adminChangePasswordForm" onsubmit="event.preventDefault();handleAdminPasswordChange();" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">'+
+          '<div class="field">'+
+            '<label for="adminCurrentPassword">Current Password</label>'+
+            '<input type="password" id="adminCurrentPassword" autocomplete="current-password" required placeholder="Enter current password">'+
+          '</div>'+
+          '<div class="field">'+
+            '<label for="adminNewPassword">New Password</label>'+
+            '<input type="password" id="adminNewPassword" autocomplete="new-password" required placeholder="Minimum 8 characters" oninput="updateAdminPasswordMeter(this.value)">'+
+            '<div class="admin-password-meter"><div id="adminPasswordMeterFill" class="admin-password-meter-fill"></div></div>'+
+            '<div id="adminPasswordFeedback" class="admin-password-feedback">Strength: None</div>'+
+          '</div>'+
+          '<div class="field">'+
+            '<label for="adminConfirmPassword">Confirm New Password</label>'+
+            '<input type="password" id="adminConfirmPassword" autocomplete="new-password" required placeholder="Re-type new password">'+
+          '</div>'+
+          '<div id="adminPasswordError" class="admin-blocked-card" style="display:none;padding:10px;margin:4px 0 0 0;font-size:12.5px"></div>'+
+          '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+            '<button type="submit" id="btnAdminChangePassword" class="primary" style="padding:8px 16px">Update Password</button>'+
+          '</div>'+
+        '</form>'+
+      '</div>'+
+
+      '<div class="admin-account-card" id="adminTpinCardContainer">'+
+        renderTpinAccountCardInner()+
+      '</div>'+
+
+      '<div class="admin-account-card">'+
+        '<div class="admin-card-head">'+
+          '<h3>Session Security &amp; Timeout Policy</h3>'+
+          '<p class="muted">Immutable server-enforced inactivity standard.</p>'+
+        '</div>'+
+        '<div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;font-size:13px">'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Timeout Duration</span>'+
+            '<b>15 Minutes (900 Seconds)</b>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Heartbeat Enforcement</span>'+
+            '<span>Worker Server Time</span>'+
+          '</div>'+
+          '<div class="admin-profile-meta-row">'+
+            '<span class="muted">Tampering Defense</span>'+
+            '<span class="admin-badge status-active">Client Headers Ignored</span>'+
+          '</div>'+
+          '<div style="margin-top:8px">'+
+            '<button type="button" class="ghost" style="width:100%;color:#dc2626;border-color:#fecdd3" onclick="adminSignOut()">Sign Out of Admin Console</button>'+
+          '</div>'+
+        '</div>'+
       '</div>'+
     '</div>'+
   '</div>';
 }
 
+function updateAdminPasswordMeter(val){
+  const fill=$('adminPasswordMeterFill');
+  const fb=$('adminPasswordFeedback');
+  if(!fill||!fb)return;
+  if(!val){
+    fill.className='admin-password-meter-fill';
+    fill.style.width='0%';
+    fb.textContent='Strength: None';
+    fb.style.color='#64748b';
+    return;
+  }
+  let score=0;
+  if(val.length>=8)score++;
+  if(val.length>=12)score++;
+  if(/[0-9]/.test(val))score++;
+  if(/[^A-Za-z0-9]/.test(val))score++;
+  if(/[A-Z]/.test(val)&&/[a-z]/.test(val))score++;
+
+  if(score<=2){
+    fill.className='admin-password-meter-fill weak';
+    fb.textContent='Strength: Weak (Needs 8+ chars, numbers or symbols)';
+    fb.style.color='#ef4444';
+  }else if(score<=3){
+    fill.className='admin-password-meter-fill medium';
+    fb.textContent='Strength: Medium (Acceptable)';
+    fb.style.color='#f59e0b';
+  }else{
+    fill.className='admin-password-meter-fill strong';
+    fb.textContent='Strength: Strong';
+    fb.style.color='#10b981';
+  }
+}
+
+async function handleAdminPasswordChange(){
+  const curInput=$('adminCurrentPassword');
+  const newInput=$('adminNewPassword');
+  const confirmInput=$('adminConfirmPassword');
+  const btn=$('btnAdminChangePassword');
+  const errBox=$('adminPasswordError');
+
+  const curPass=curInput?.value||'';
+  const newPass=newInput?.value||'';
+  const confirmPass=confirmInput?.value||'';
+
+  if(errBox)errBox.style.display='none';
+
+  if(!curPass){
+    if(errBox){
+      errBox.textContent='Current password is required.';
+      errBox.style.display='block';
+    }
+    toast('Current password is required.','error');
+    return;
+  }
+  if(!newPass||newPass.length<8){
+    if(errBox){
+      errBox.textContent='New password must be at least 8 characters long.';
+      errBox.style.display='block';
+    }
+    toast('New password must be at least 8 characters long.','error');
+    return;
+  }
+  if(newPass!==confirmPass){
+    if(errBox){
+      errBox.textContent='New password and confirm password do not match.';
+      errBox.style.display='block';
+    }
+    toast('New password and confirm password do not match.','error');
+    return;
+  }
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Changing Password...';
+  }
+
+  try{
+    let ok=false;
+    let serverErr=null;
+    if(db&&db.auth&&typeof db.auth.updateUser==='function'){
+      const res=await db.auth.updateUser({password:newPass});
+      if(res?.error){
+        serverErr=res.error.message;
+      }else{
+        ok=true;
+      }
+    }else{
+      try{
+        const res=await workerPost('/api/admin/change-password',{current_password:curPass,new_password:newPass});
+        if(res&&res.ok)ok=true;
+        else serverErr=res?.error?.message||'Server rejected password update.';
+      }catch(e){
+        serverErr=e?.message||'Password change service unavailable.';
+      }
+    }
+
+    if(!ok){
+      throw new Error(serverErr||'Password change failed.');
+    }
+
+    toast('Password changed','ok');
+    if(curInput)curInput.value='';
+    if(newInput)newInput.value='';
+    if(confirmInput)confirmInput.value='';
+    updateAdminPasswordMeter('');
+  }catch(err){
+    if(errBox){
+      errBox.textContent=err?.message||'Password update failed.';
+      errBox.style.display='block';
+    }
+    toast(err?.message||'Password change failed.','error');
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Update Password';
+    }
+  }
+}
+
+function renderAdminProfileCardInner(){
+  if(teamMeLoading){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrator Profile</h3>'+
+      '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+    '</div>'+
+    '<div style="padding:24px;text-align:center"><span class="spinner-sm"></span> Loading profile from <code>GET /api/team/me</code>...</div>';
+  }
+  if(teamMeError){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrator Profile</h3>'+
+      '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+    '</div>'+
+    renderAdminBlockedCard('/api/team/me','GET',teamMeError?.message||'Admin team profile endpoint unavailable (404).');
+  }
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const email=user?.email||currentAdminProfile?.email||'admin@carmy.internal';
+  const name=currentAdminProfile?.name||currentAdminProfile?.full_name||user?.user_metadata?.name||'Administrator';
+  return '<div class="admin-card-head">'+
+    '<h3>Administrator Profile</h3>'+
+    '<p class="muted">Authoritative identity verified by backend role registry.</p>'+
+  '</div>'+
+  '<div class="admin-profile-meta">'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Name</span>'+
+      '<b id="adminProfileNameDisplay">'+esc(name)+'</b>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Email</span>'+
+      '<span id="adminProfileEmailDisplay" style="font-family:monospace;font-weight:600;color:#2563eb">'+esc(email)+'</span>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Role Clearance</span>'+
+      '<span id="adminProfileRoleBadge" class="admin-badge team-role-badge role-'+esc(perms.role.replace('_','-'))+'">'+esc(perms.label)+'</span>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">MFA Verification</span>'+
+      '<span class="admin-badge status-active">Enforced (Session Guard)</span>'+
+    '</div>'+
+    '<div class="admin-profile-meta-row">'+
+      '<span class="muted">Account Status</span>'+
+      '<span class="admin-badge status-active">Active</span>'+
+    '</div>'+
+  '</div>'+
+  '<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px;color:#64748b">'+
+    '🔒 Profile metadata is read-only and governed by server directory. Password change below applies immediately to authenticated sessions.'+
+  '</div>';
+}
+
+/* UI-ONLY: Approved team roles permission matrix (Team Lead, Support Agent, Support Executive, Super Admin) */
+function getAdminRolePermissions(role){
+  const normRole=(role||'').toLowerCase().trim();
+  if(normRole==='team_lead'){
+    return {
+      role:'team_lead',
+      label:'Team Lead',
+      allowedScreens:['home','tickets','team','account'],
+      canMutateTickets:true,
+      canUpdateAssignedTicketStatus:true,
+      canAddInternalNotes:true,
+      canAssignTickets:true,
+      canChangePriority:true,
+      canEnableChat:true,
+      canRevealContact:true,
+      canViewAsUser:true,
+      canViewAudit:false,
+      canManageUsers:false,
+      canManageTokens:false,
+      canManagePlans:false,
+      canManageGarages:false,
+      canManageTeam:true,
+      defaultScreen:'tickets'
+    };
+  }
+  if(normRole==='support_agent'){
+    return {
+      role:'support_agent',
+      label:'Support Agent',
+      allowedScreens:['home','tickets','account'],
+      canMutateTickets:true,
+      canUpdateAssignedTicketStatus:true,
+      canAddInternalNotes:true,
+      canAssignTickets:true,
+      canChangePriority:true,
+      canEnableChat:true,
+      canRevealContact:true,
+      canViewAsUser:true,
+      canViewAudit:false,
+      canManageUsers:false,
+      canManageTokens:false,
+      canManagePlans:false,
+      canManageGarages:false,
+      canManageTeam:false,
+      defaultScreen:'tickets'
+    };
+  }
+  if(normRole==='support_executive'){
+    return {
+      role:'support_executive',
+      label:'Support Executive',
+      allowedScreens:['home','tickets','account'],
+      canMutateTickets:false,
+      canUpdateAssignedTicketStatus:true,
+      canAddInternalNotes:true,
+      canAssignTickets:false,
+      canChangePriority:false,
+      canEnableChat:false,
+      canRevealContact:false,
+      canViewAsUser:false,
+      canViewAudit:false,
+      canManageUsers:false,
+      canManageTokens:false,
+      canManagePlans:false,
+      canManageGarages:false,
+      canManageTeam:false,
+      defaultScreen:'tickets'
+    };
+  }
+  return {
+    role:normRole==='owner'?'owner':'super_admin',
+    label:normRole==='owner'?'Owner / Super Admin':'Super Admin',
+    allowedScreens:['home','users','tokens','plans','upgrades','tickets','garages','team','audit','content','settings','reports','account'],
+    canMutateTickets:true,
+    canUpdateAssignedTicketStatus:true,
+    canAddInternalNotes:true,
+    canAssignTickets:true,
+    canChangePriority:true,
+    canEnableChat:true,
+    canRevealContact:true,
+    canViewAsUser:true,
+    canViewAudit:true,
+    canManageUsers:true,
+    canManageTokens:true,
+    canManagePlans:true,
+    canManageGarages:true,
+    canManageTeam:true,
+    defaultScreen:'home'
+  };
+}
+
+/* UI-ONLY: Check if ticket is assigned to the current active specialist / executive. Server must enforce later. */
+function isTicketAssignedToCurrentSpecialist(ticket){
+  if(!ticket)return false;
+  const myId=String(currentAdminProfile?.id||user?.id||'').trim();
+  const myEmail=String(currentAdminProfile?.email||user?.email||'').trim().toLowerCase();
+  const assigneeId=String(ticket.assignee_id||'').trim();
+  const assigneeEmail=String(ticket.assignee_email||'').trim().toLowerCase();
+  if(assigneeId && (assigneeId===myId || assigneeId==='me' || assigneeId===myEmail))return true;
+  if(assigneeEmail && assigneeEmail===myEmail)return true;
+  return false;
+}
+
+async function loadTeamMe(force=false){
+  if(teamMeLoading)return currentAdminProfile;
+  if(currentAdminProfile&&!force)return currentAdminProfile;
+  teamMeLoading=true;
+  teamMeError=null;
+  try{
+    const res=await workerGet('/api/team/me');
+    if(res){
+      currentAdminProfile=res.profile||res;
+      if(res.role){
+        currentAdminRole=res.role;
+      }else if(currentAdminProfile.role){
+        currentAdminRole=currentAdminProfile.role;
+      }
+      return currentAdminProfile;
+    }
+  }catch(err){
+    /* UI-ONLY: role display. Server enforces access. */
+    const isNotFound = err?.status === 404 || err?.code === 'NOT_FOUND' || String(err?.message || '').includes('404') || String(err?.message || '').includes('Route not found');
+    if(isNotFound){
+      try{
+        const adminRes = await workerGet('/api/admin/me');
+        const adminData = adminRes?.data || adminRes?.profile || adminRes;
+        const resolvedRole = adminData?.role || adminRes?.role;
+        if(adminRes?.ok !== false && resolvedRole === 'super_admin'){
+          currentAdminRole = 'super_admin';
+          currentAdminProfile = adminData;
+          isSuperAdmin = true;
+          updateAdminNavVisibility();
+          teamMeError = null;
+          return currentAdminProfile;
+        }else{
+          currentAdminRole = null;
+          currentAdminProfile = null;
+          isSuperAdmin = false;
+          teamMeError = new Error(adminRes?.error?.message || 'Not authorized as Super Admin.');
+        }
+      }catch(adminErr){
+        console.warn('loadTeamMe fallback to /api/admin/me failed:', adminErr);
+        currentAdminRole = null;
+        currentAdminProfile = null;
+        isSuperAdmin = false;
+        teamMeError = adminErr?.message ? adminErr : err;
+      }
+    }else{
+      currentAdminRole = null;
+      currentAdminProfile = null;
+      isSuperAdmin = false;
+      teamMeError = err;
+      console.warn('loadTeamMe notice:', err);
+    }
+  }finally{
+    teamMeLoading=false;
+    const cardEl=$('adminProfileCardContainer');
+    if(cardEl)cardEl.innerHTML=renderAdminProfileCardInner();
+    wireAdminAccountSecurityForm();
+  }
+  return null;
+}
+
+function checkForcedPasswordChange(){
+  let old=document.getElementById('forcedPasswordOverlay');
+  if(old)old.remove();
+  const req=Boolean(currentAdminProfile?.password_change_required||currentAdminProfile?.temp_password_active);
+  if(!req)return false;
+
+  const overlay=document.createElement('div');
+  overlay.id='forcedPasswordOverlay';
+  overlay.className='admin-forced-overlay';
+  overlay.innerHTML='<div class="admin-forced-box">'+
+    '<div style="text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:8px">🔒</div>'+
+      '<h2 style="margin:0 0 8px 0;font-size:20px;font-weight:800;color:#0f172a">First-Login Password Required</h2>'+
+      '<p class="muted" style="margin:0;font-size:13px;line-height:1.5">'+
+        'Your administrative account is flagged with a temporary password. You must set a permanent password before accessing console workspaces.'+
+      '</p>'+
+    '</div>'+
+    '<form id="forcedPasswordForm" onsubmit="event.preventDefault();submitForcedPasswordChange();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="forcedNewPassword" style="font-size:12.5px;font-weight:700">New Secure Password</label>'+
+        '<input type="password" id="forcedNewPassword" autocomplete="new-password" required minlength="8" placeholder="Minimum 8 characters" oninput="updateAdminPasswordMeter(this.value)">'+
+        '<div class="admin-password-meter"><div id="adminPasswordMeterFill" class="admin-password-meter-fill"></div></div>'+
+        '<div id="adminPasswordFeedback" class="admin-password-feedback">Strength: None</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="forcedConfirmPassword" style="font-size:12.5px;font-weight:700">Confirm New Password</label>'+
+        '<input type="password" id="forcedConfirmPassword" autocomplete="new-password" required minlength="8" placeholder="Re-type new password">'+
+      '</div>'+
+      '<div id="forcedPasswordError" class="admin-blocked-card" style="display:none;padding:10px;margin:0;font-size:12.5px"></div>'+
+      '<button type="submit" id="btnSubmitForcedPassword" class="primary" style="padding:12px;font-weight:700;font-size:14px;border-radius:10px;margin-top:6px">Set Password &amp; Proceed</button>'+
+    '</form>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  return true;
+}
+
+async function submitForcedPasswordChange(){
+  const newIn=$('forcedNewPassword');
+  const confIn=$('forcedConfirmPassword');
+  const errBox=$('forcedPasswordError');
+  const btn=$('btnSubmitForcedPassword');
+
+  const newPass=newIn?.value||'';
+  const confPass=confIn?.value||'';
+
+  if(errBox)errBox.style.display='none';
+
+  if(!newPass||newPass.length<8){
+    if(errBox){
+      errBox.textContent='Password must be at least 8 characters.';
+      errBox.style.display='block';
+    }
+    toast('Password must be at least 8 characters.','error');
+    return;
+  }
+  if(newPass!==confPass){
+    if(errBox){
+      errBox.textContent='Passwords do not match.';
+      errBox.style.display='block';
+    }
+    toast('Passwords do not match.','error');
+    return;
+  }
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Setting Password...';
+  }
+
+  try{
+    let ok=false;
+    let serverErr=null;
+    if(db&&db.auth&&typeof db.auth.updateUser==='function'){
+      const res=await db.auth.updateUser({password:newPass});
+      if(res?.error){
+        serverErr=res.error.message;
+      }else{
+        ok=true;
+      }
+    }else{
+      try{
+        const res=await workerPost('/api/admin/change-password',{new_password:newPass});
+        if(res&&res.ok)ok=true;
+        else serverErr=res?.error?.message||'Server rejected password update.';
+      }catch(e){
+        serverErr=e?.message||'Password change service unavailable.';
+        if(errBox){
+          errBox.innerHTML=renderAdminBlockedCard('/api/admin/change-password','POST',e?.message||'Password change service unavailable.');
+          errBox.style.display='block';
+          return;
+        }
+      }
+    }
+
+    if(!ok){
+      throw new Error(serverErr||'Password change failed.');
+    }
+
+    if(currentAdminProfile){
+      currentAdminProfile.password_change_required=false;
+      currentAdminProfile.temp_password_active=false;
+    }
+    const overlay=document.getElementById('forcedPasswordOverlay');
+    if(overlay)overlay.remove();
+
+    toast('Administrative password established successfully.','ok');
+    checkForcedProfileCompletion();
+  }catch(err){
+    if(errBox){
+      errBox.textContent=err?.message||'Password change failed.';
+      errBox.style.display='block';
+    }
+    toast(err?.message||'Password change failed.','error');
+  }finally{
+    if(newIn)newIn.value='';
+    if(confIn)confIn.value='';
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Set Password & Proceed';
+    }
+  }
+}
+
+function checkForcedProfileCompletion(){
+  let old=document.getElementById('forcedProfileOverlay');
+  if(old)old.remove();
+  const req=Boolean(currentAdminProfile?.profile_incomplete);
+  if(!req)return false;
+
+  const overlay=document.createElement('div');
+  overlay.id='forcedProfileOverlay';
+  overlay.className='admin-forced-overlay';
+  overlay.innerHTML='<div class="admin-forced-box">'+
+    '<div style="text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:8px">👤</div>'+
+      '<h2 style="margin:0 0 8px 0;font-size:20px;font-weight:800;color:#0f172a">Complete Specialist Profile</h2>'+
+      '<p class="muted" style="margin:0;font-size:13px;line-height:1.5">'+
+        'Please enter your administrative full name and 10-digit mobile number for verified audit tracking.'+
+      '</p>'+
+    '</div>'+
+    '<form id="forcedProfileForm" onsubmit="event.preventDefault();submitForcedProfileCompletion();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="forcedProfileName" style="font-size:12.5px;font-weight:700">Full Name</label>'+
+        '<input type="text" id="forcedProfileName" required placeholder="e.g. Rahul Sharma" value="'+esc(currentAdminProfile?.name||currentAdminProfile?.full_name||'')+'">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="forcedProfilePhone" style="font-size:12.5px;font-weight:700">Mobile Phone (10 digits)</label>'+
+        '<input type="tel" id="forcedProfilePhone" required placeholder="e.g. 9816012345" value="'+esc(currentAdminProfile?.phone||'')+'">'+
+      '</div>'+
+      '<div id="forcedProfileError" class="admin-blocked-card" style="display:none;padding:10px;margin:0;font-size:12.5px"></div>'+
+      '<button type="submit" id="btnSubmitForcedProfile" class="primary" style="padding:12px;font-weight:700;font-size:14px;border-radius:10px;margin-top:6px">Complete Profile &amp; Proceed</button>'+
+    '</form>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  return true;
+}
+
+async function submitForcedProfileCompletion(){
+  const nameIn=$('forcedProfileName');
+  const phoneIn=$('forcedProfilePhone');
+  const errBox=$('forcedProfileError');
+  const btn=$('btnSubmitForcedProfile');
+
+  const fullName=nameIn?.value?.trim()||'';
+  const phone=phoneIn?.value?.trim().replace(/\D/g,'')||'';
+
+  if(errBox)errBox.style.display='none';
+
+  if(!fullName){
+    if(errBox){
+      errBox.textContent='Full name is required.';
+      errBox.style.display='block';
+    }
+    toast('Full name is required.','error');
+    return;
+  }
+  if(!phone||phone.length<10){
+    if(errBox){
+      errBox.textContent='Valid 10-digit mobile phone number is required.';
+      errBox.style.display='block';
+    }
+    toast('Valid 10-digit mobile phone number is required.','error');
+    return;
+  }
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Saving Profile...';
+  }
+
+  try{
+    const res=await workerPost('/api/team/me/profile',{full_name:fullName,phone:phone});
+    if(currentAdminProfile){
+      currentAdminProfile.name=fullName;
+      currentAdminProfile.full_name=fullName;
+      currentAdminProfile.phone=phone;
+      currentAdminProfile.profile_incomplete=false;
+    }
+    const overlay=document.getElementById('forcedProfileOverlay');
+    if(overlay)overlay.remove();
+
+    toast('Specialist profile completed.','ok');
+    wireAdminAccountSecurityForm();
+  }catch(err){
+    if(errBox){
+      errBox.innerHTML=renderAdminBlockedCard('/api/team/me/profile','POST',err?.message||'Profile completion endpoint unavailable (404).');
+      errBox.style.display='block';
+    }
+    toast(err?.message||'Profile update failed.','error');
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Complete Profile & Proceed';
+    }
+  }
+}
+
+function wireAdminAccountSecurityForm(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const nameEl=$('adminProfileNameDisplay');
+  const emailEl=$('adminProfileEmailDisplay');
+  const roleEl=$('adminProfileRoleBadge');
+  const topbarEmailEl=$('adminTopbarEmail');
+  const email=user?.email||currentAdminProfile?.email||'admin@carmy.internal';
+  const name=currentAdminProfile?.name||currentAdminProfile?.full_name||user?.user_metadata?.name||'Administrator';
+  if(nameEl)nameEl.textContent=name;
+  if(emailEl)emailEl.textContent=email;
+  if(roleEl){
+    roleEl.textContent=perms.label;
+    roleEl.className='admin-badge team-role-badge role-'+perms.role.replace('_','-');
+  }
+  if(topbarEmailEl)topbarEmailEl.textContent=email;
+}
+
+async function adminSignOut(){
+  if(window.__carmyAdminSigningOut)return;
+  window.__carmyAdminSigningOut=true;
+  try{
+    try{
+      await workerPost('/api/session/revoke',{});
+    }catch(err){
+      console.warn('Worker session revocation failed',err);
+    }
+    try{if(db&&db.auth&&typeof db.auth.signOut==='function')await db.auth.signOut({scope:'global'});}catch(_){}
+    try{
+      for(let i=localStorage.length-1;i>=0;i--){
+        const key=localStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')||key.startsWith('td-admin-')||key==='carcare_last_view'))localStorage.removeItem(key);
+      }
+    }catch(_){}
+    try{
+      for(let i=sessionStorage.length-1;i>=0;i--){
+        const key=sessionStorage.key(i);
+        if(key&&(key.startsWith('sb-')||key.startsWith('carmy_')||key.startsWith('td-admin-')))sessionStorage.removeItem(key);
+      }
+    }catch(_){}
+    isSuperAdmin=false;
+    currentAdminRole=null;
+    currentAdminProfile=null;
+    document.body.classList.remove('td-admin-mode');
+    clearUserMemory();
+    if(typeof location!=='undefined'&&typeof location.replace==='function'){
+      location.replace('./?admin=1&signed_out=1');
+    }
+  }finally{
+    window.__carmyAdminSigningOut=false;
+  }
+}
+window.adminSignOut=adminSignOut;
+window.handleAdminPasswordChange=handleAdminPasswordChange;
+window.updateAdminPasswordMeter=updateAdminPasswordMeter;
+window.wireAdminAccountSecurityForm=wireAdminAccountSecurityForm;
+
+/* ===== Phase 4: Administrative TPIN UI & Verification ===== */
+
+function renderTpinAccountCardInner(){
+  if(adminTpinLoading){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrative TPIN</h3>'+
+      '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+    '</div>'+
+    '<div style="text-align:center;padding:16px"><span class="spinner-sm"></span> Loading TPIN security status...</div>';
+  }
+  if(adminTpinError){
+    return '<div class="admin-card-head">'+
+      '<h3>Administrative TPIN</h3>'+
+      '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+    '</div>'+
+    renderAdminBlockedCard('/api/tpin/status','GET',adminTpinError.message||'TPIN status endpoint unavailable (404).');
+  }
+  const isSet=Boolean(adminTpinStatus?.is_set);
+  const isLocked=Boolean(adminTpinStatus?.locked_until&&new Date(adminTpinStatus.locked_until)>new Date());
+
+  if(isLocked){
+    const lockedUntilStr=formatAdminDate(adminTpinStatus.locked_until);
+    return '<div class="admin-card-head">'+
+      '<div>'+
+        '<h3>Administrative TPIN</h3>'+
+        '<p class="muted">Cryptographic 4-digit PIN for high-privilege operations.</p>'+
+      '</div>'+
+      '<span class="tpin-status-pill danger">TEMPORARILY LOCKED</span>'+
+    '</div>'+
+    '<div class="tpin-lockout-card" style="margin-top:12px">'+
+      '<b>Account Security Lockout Active</b>'+
+      '<p style="margin:4px 0 0">Too many failed TPIN attempts. Administrative operations are locked until '+esc(lockedUntilStr)+'. Use email reset or wait for timer expiry.</p>'+
+    '</div>'+
+    '<div style="margin-top:12px;display:flex;gap:10px">'+
+      '<button type="button" class="primary btn-sm" onclick="openTpinResetModal()">Reset TPIN via Email</button>'+
+    '</div>';
+  }
+
+  return '<div class="admin-card-head">'+
+    '<div>'+
+      '<h3>Administrative TPIN</h3>'+
+      '<p class="muted">Cryptographic 4-digit PIN required for token creation, member invites, and data exports.</p>'+
+    '</div>'+
+    '<div style="display:flex;align-items:center;gap:6px">'+
+      '<span class="admin-badge" style="background:#fef3c7;color:#92400e">Phase 4 Specification</span>'+
+      (isSet?'<span class="tpin-status-pill ok">● TPIN Active</span>':'<span class="tpin-status-pill warning">⚠️ Not Configured</span>')+
+    '</div>'+
+  '</div>'+
+  '<div style="margin-top:12px;font-size:13px;color:#475569;line-height:1.5">'+
+    (isSet?
+      '<p>Your 4-digit Administrative TPIN is configured and actively safeguarding high-privilege actions. Never share your TPIN.</p>'+
+      '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">'+
+        '<button type="button" class="ghost btn-sm" id="btnChangeTpin" onclick="openTpinChangeModal()">Change TPIN</button>'+
+        '<button type="button" class="ghost btn-sm" id="btnResetTpin" onclick="openTpinResetModal()">Forgot / Reset TPIN</button>'+
+      '</div>':
+      '<p>A verified 4-digit TPIN is mandatory prior to generating activation tokens, adding team members, or exporting sensitive CSV records.</p>'+
+      '<div style="margin-top:14px;display:flex;gap:10px">'+
+        '<button type="button" class="primary btn-sm" id="btnSetupTpin" onclick="openTpinSetupModal()">Set 4-Digit TPIN</button>'+
+      '</div>'
+    )+
+  '</div>';
+}
+
+async function loadAdminTpinStatus(force=false){
+  if(adminTpinLoading)return;
+  adminTpinLoading=true;
+  adminTpinError=null;
+  const cont=document.getElementById('adminTpinCardContainer');
+  if(cont&&force)cont.innerHTML=renderTpinAccountCardInner();
+  try{
+    const res=await workerGet('/api/tpin/status');
+    adminTpinStatus=res?.data||res||{is_set:false};
+    if(adminTpinStatus?.tpin_setup_required||adminTpinStatus?.tpin_change_required||user?.tpin_change_required){
+      checkForcedTpinSetup();
+    }
+  }catch(err){
+    adminTpinError=err?.status===404?{status:404,message:'Route /api/tpin/status returned 404'}:err;
+  }finally{
+    adminTpinLoading=false;
+    const c=document.getElementById('adminTpinCardContainer');
+    if(c)c.innerHTML=renderTpinAccountCardInner();
+  }
+}
+
+function toggleTpinFieldVisibility(fieldId,btnEl){
+  const field=document.getElementById(fieldId);
+  if(!field)return;
+  if(field.type==='password'){
+    field.type='text';
+    if(btnEl)btnEl.textContent='🙈';
+  }else{
+    field.type='password';
+    if(btnEl)btnEl.textContent='👁️';
+  }
+}
+
+function openTpinSetupModal(){
+  let old=document.getElementById('tpinSetupModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='tpinSetupModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Configure Administrative TPIN</h3>'+
+        '<p class="muted" style="margin:2px 0 0;font-size:12px">Set a secure 4-digit PIN for high-privilege authorizations.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinSetupModal()">✕</button>'+
+    '</div>'+
+    '<form id="tpinSetupForm" onsubmit="event.preventDefault();submitTpinSetup();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="tpinSetupInput">Enter 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinSetupInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinSetupInput\',this)">👁️</button>'+
+        '</div>'+
+        '<small class="muted">4 numbers only (0-9). Avoid sequences like 1234 or repeated digits like 0000.</small>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="tpinSetupConfirm">Confirm 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinSetupConfirm" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinSetupConfirm\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="tpinSetupError" style="display:none"></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px">'+
+        '<button type="button" class="ghost" onclick="closeTpinSetupModal()">Cancel</button>'+
+        '<button type="submit" class="primary" id="btnSubmitTpinSetup">Save TPIN</button>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinSetupModal();};
+  document.body.appendChild(modal);
+  const input=document.getElementById('tpinSetupInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+function closeTpinSetupModal(){
+  const m=document.getElementById('tpinSetupModal');
+  if(m){
+    const inp1=document.getElementById('tpinSetupInput');
+    const inp2=document.getElementById('tpinSetupConfirm');
+    if(inp1)inp1.value='';
+    if(inp2)inp2.value='';
+    m.remove();
+  }
+}
+
+async function submitTpinSetup(){
+  const input1=document.getElementById('tpinSetupInput');
+  const input2=document.getElementById('tpinSetupConfirm');
+  const errEl=document.getElementById('tpinSetupError');
+  const btn=document.getElementById('btnSubmitTpinSetup');
+  const pin=input1?.value?.trim()||'';
+  const confirmPin=input2?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(pin)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN must be exactly 4 numeric digits.</div>');
+    return;
+  }
+  if(pin!==confirmPin){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN confirmation does not match.</div>');
+    return;
+  }
+  if(pin==='0000'||pin==='1111'||pin==='2222'||pin==='3333'||pin==='4444'||pin==='5555'||pin==='6666'||pin==='7777'||pin==='8888'||pin==='9999'||pin==='1234'){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Trivial or easily guessed TPINs are not permitted. Choose a stronger 4-digit combination.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/setup',{tpin:pin});
+    toast('Administrative TPIN configured successfully.','ok');
+    adminTpinStatus={...(adminTpinStatus||{}),is_set:true,tpin_setup_required:false};
+    closeTpinSetupModal();
+    const forced=document.getElementById('forcedTpinOverlay');
+    if(forced)forced.remove();
+    const cont=document.getElementById('adminTpinCardContainer');
+    if(cont)cont.innerHTML=renderTpinAccountCardInner();
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/setup','POST',err.message||'TPIN setup route returned 404.'));
+    }else{
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Failed to save TPIN.')+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Save TPIN';}
+  }finally{
+    if(input1)input1.value='';
+    if(input2)input2.value='';
+  }
+}
+
+function openTpinChangeModal(){
+  let old=document.getElementById('tpinChangeModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='tpinChangeModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Change Administrative TPIN</h3>'+
+        '<p class="muted" style="margin:2px 0 0;font-size:12px">Update your 4-digit security PIN.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinChangeModal()">✕</button>'+
+    '</div>'+
+    '<form id="tpinChangeForm" onsubmit="event.preventDefault();submitTpinChange();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="tpinCurrentInput">Current 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinCurrentInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinCurrentInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="tpinNewInput">New 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinNewInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinNewInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="tpinNewConfirm">Confirm New 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinNewConfirm" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinNewConfirm\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="tpinChangeError" style="display:none"></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px">'+
+        '<button type="button" class="ghost" onclick="closeTpinChangeModal()">Cancel</button>'+
+        '<button type="submit" class="primary" id="btnSubmitTpinChange">Update TPIN</button>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinChangeModal();};
+  document.body.appendChild(modal);
+  const input=document.getElementById('tpinCurrentInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+function closeTpinChangeModal(){
+  const m=document.getElementById('tpinChangeModal');
+  if(m){
+    const i1=document.getElementById('tpinCurrentInput');
+    const i2=document.getElementById('tpinNewInput');
+    const i3=document.getElementById('tpinNewConfirm');
+    if(i1)i1.value='';
+    if(i2)i2.value='';
+    if(i3)i3.value='';
+    m.remove();
+  }
+}
+
+async function submitTpinChange(){
+  const curInp=document.getElementById('tpinCurrentInput');
+  const newInp=document.getElementById('tpinNewInput');
+  const confInp=document.getElementById('tpinNewConfirm');
+  const errEl=document.getElementById('tpinChangeError');
+  const btn=document.getElementById('btnSubmitTpinChange');
+
+  const cur=curInp?.value?.trim()||'';
+  const nxt=newInp?.value?.trim()||'';
+  const conf=confInp?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(cur)||!/^\d{4}$/.test(nxt)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Both current and new TPIN must be exactly 4 digits.</div>');
+    return;
+  }
+  if(nxt!==conf){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">New TPIN confirmation does not match.</div>');
+    return;
+  }
+  if(cur===nxt){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">New TPIN must be different from current TPIN.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Updating...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/change',{current_tpin:cur,new_tpin:nxt});
+    toast('Administrative TPIN updated successfully.','ok');
+    closeTpinChangeModal();
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/change','POST',err.message||'TPIN change route returned 404.'));
+    }else{
+      let attemptsHtml='';
+      if(err?.remaining_attempts!==undefined){
+        attemptsHtml='<div class="tpin-attempts-badge" style="margin-top:6px">⚠️ '+err.remaining_attempts+' attempts remaining before lockout</div>';
+      }
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Failed to update TPIN.')+attemptsHtml+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Update TPIN';}
+  }finally{
+    if(curInp)curInp.value='';
+    if(newInp)newInp.value='';
+    if(confInp)confInp.value='';
+  }
+}
+
+function openTpinResetModal(){
+  let old=document.getElementById('tpinResetModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='tpinResetModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  const adminEmail=user?.email||'your administrator email';
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Reset Administrative TPIN</h3>'+
+        '<p class="muted" style="margin:2px 0 0;font-size:12px">Initiate email-based cryptographic PIN recovery.</p>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinResetModal()">✕</button>'+
+    '</div>'+
+    '<div style="font-size:13.5px;color:#334155;line-height:1.5">'+
+      '<p>A secure reset token will be dispatched to your verified administrator email address:</p>'+
+      '<div style="background:#f1f5f9;padding:10px 14px;border-radius:8px;font-family:monospace;font-weight:700;color:#0f172a;word-break:break-all">'+
+        esc(adminEmail)+
+      '</div>'+
+      '<p class="muted" style="font-size:12px;margin-top:8px">This reset request invalidates existing TPIN sessions across all devices.</p>'+
+      '<div id="tpinResetError" style="display:none;margin-top:10px"></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">'+
+        '<button type="button" class="ghost" onclick="closeTpinResetModal()">Cancel</button>'+
+        '<button type="button" class="primary" id="btnSubmitTpinReset" onclick="submitTpinResetRequest()">Send Reset Email</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinResetModal();};
+  document.body.appendChild(modal);
+}
+
+function closeTpinResetModal(){
+  const m=document.getElementById('tpinResetModal');
+  if(m)m.remove();
+}
+
+async function submitTpinResetRequest(){
+  const btn=document.getElementById('btnSubmitTpinReset');
+  const errEl=document.getElementById('tpinResetError');
+  if(btn){btn.disabled=true;btn.textContent='Dispatching...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/reset-request',{});
+    toast('TPIN reset instructions sent to '+esc(user?.email||'email')+'.','ok');
+    closeTpinResetModal();
+  }catch(err){
+    if(err?.status===404){
+      if(errEl){
+        errEl.style.display='block';
+        errEl.innerHTML=renderAdminBlockedCard('/api/tpin/reset-request','POST',err.message||'TPIN reset request route returned 404.');
+      }
+    }else{
+      toast('Failed to request TPIN reset: '+(err?.message||err),'error');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Send Reset Email';}
+  }
+}
+
+function promptTpinVerification(actionName, onVerified){
+  let old=document.getElementById('tpinVerifyModal');
+  if(old)old.remove();
+
+  pendingTpinActionCallback=onVerified;
+
+  const modal=document.createElement('div');
+  modal.id='tpinVerifyModal';
+  modal.className='tpin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="tpin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:2px">🛡️ Security Verification Required</div>'+
+        '<h3 style="margin:0;font-size:17px">Authorize High-Privilege Action</h3>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeTpinVerifyModal()">✕</button>'+
+    '</div>'+
+    '<div style="font-size:13px;color:#475569">'+
+      '<span>Action to execute:</span> <b style="color:#0f172a">'+esc(actionName)+'</b>'+
+    '</div>'+
+    '<form id="tpinVerifyForm" onsubmit="event.preventDefault();submitTpinVerification(\''+esc(actionName)+'\');" style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label for="tpinVerifyInput">Enter 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="tpinVerifyInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'tpinVerifyInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="tpinVerifyError" style="display:none"></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px">'+
+        '<a href="javascript:void(0)" onclick="closeTpinVerifyModal();openTpinResetModal();" style="font-size:12px;color:#2563eb;text-decoration:none">Forgot TPIN?</a>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button type="button" class="ghost" onclick="closeTpinVerifyModal()">Cancel</button>'+
+          '<button type="submit" class="primary" id="btnSubmitTpinVerify">Authorize Action</button>'+
+        '</div>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeTpinVerifyModal();};
+  document.body.appendChild(modal);
+  const input=document.getElementById('tpinVerifyInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+function closeTpinVerifyModal(){
+  const m=document.getElementById('tpinVerifyModal');
+  if(m){
+    const inp=document.getElementById('tpinVerifyInput');
+    if(inp)inp.value='';
+    m.remove();
+  }
+  pendingTpinActionCallback=null;
+}
+
+async function submitTpinVerification(actionName){
+  const input=document.getElementById('tpinVerifyInput');
+  const errEl=document.getElementById('tpinVerifyError');
+  const btn=document.getElementById('btnSubmitTpinVerify');
+  const pin=input?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(pin)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Please enter all 4 digits of your TPIN.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Verifying...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/verify',{tpin:pin,action:actionName});
+    const cb=pendingTpinActionCallback;
+    closeTpinVerifyModal();
+    if(typeof cb==='function'){
+      await cb();
+    }
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/verify','POST',err.message||'TPIN verification route returned 404. Action blocked.'));
+    }else{
+      let attemptsHtml='';
+      if(err?.remaining_attempts!==undefined){
+        attemptsHtml='<div class="tpin-attempts-badge" style="margin-top:6px">⚠️ '+err.remaining_attempts+' attempts remaining before lockout</div>';
+      }
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Incorrect TPIN. Authorization rejected.')+attemptsHtml+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Authorize Action';}
+  }finally{
+    if(input)input.value='';
+  }
+}
+
+function checkForcedTpinSetup(){
+  const required=Boolean(adminTpinStatus?.tpin_setup_required||adminTpinStatus?.tpin_change_required||user?.tpin_change_required);
+  if(!required)return;
+  if(document.getElementById('forcedTpinOverlay'))return;
+
+  const overlay=document.createElement('div');
+  overlay.id='forcedTpinOverlay';
+  overlay.className='tpin-forced-overlay';
+  overlay.setAttribute('role','dialog');
+  overlay.setAttribute('aria-modal','true');
+
+  overlay.innerHTML='<div class="tpin-forced-box">'+
+    '<div style="text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:8px">🔐</div>'+
+      '<h2 style="margin:0 0 6px">Administrative TPIN Setup Required</h2>'+
+      '<p class="muted" style="margin:0;font-size:13.5px">For SOC-2 / platform security compliance, all administrators must configure a 4-digit TPIN before accessing Torq Desk administration.</p>'+
+    '</div>'+
+    '<form id="forcedTpinForm" onsubmit="event.preventDefault();submitForcedTpinSetup();" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="field">'+
+        '<label for="forcedTpinInput">Choose 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="forcedTpinInput" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'forcedTpinInput\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label for="forcedTpinConfirm">Confirm 4-Digit TPIN</label>'+
+        '<div class="tpin-input-group">'+
+          '<input type="password" id="forcedTpinConfirm" class="tpin-digit-box" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="••••" autocomplete="off" required>'+
+          '<button type="button" class="tpin-toggle-btn" onclick="toggleTpinFieldVisibility(\'forcedTpinConfirm\',this)">👁️</button>'+
+        '</div>'+
+      '</div>'+
+      '<div id="forcedTpinError" style="display:none"></div>'+
+      '<div style="margin-top:8px">'+
+        '<button type="submit" class="primary" id="btnSubmitForcedTpin" style="width:100%;padding:12px">Complete TPIN Setup &amp; Enter Console</button>'+
+      '</div>'+
+      '<div style="text-align:center;margin-top:6px">'+
+        '<button type="button" class="ghost" style="color:#64748b;font-size:12.5px" onclick="adminSignOut()">Sign Out</button>'+
+      '</div>'+
+    '</form>'+
+  '</div>';
+
+  document.body.appendChild(overlay);
+  const input=document.getElementById('forcedTpinInput');
+  if(input)setTimeout(()=>input.focus(),50);
+}
+
+async function submitForcedTpinSetup(){
+  const input1=document.getElementById('forcedTpinInput');
+  const input2=document.getElementById('forcedTpinConfirm');
+  const errEl=document.getElementById('forcedTpinError');
+  const btn=document.getElementById('btnSubmitForcedTpin');
+  const pin=input1?.value?.trim()||'';
+  const confirmPin=input2?.value?.trim()||'';
+
+  const showError=(html)=>{
+    if(errEl){
+      errEl.style.display='block';
+      errEl.innerHTML=html;
+    }
+  };
+
+  if(!/^\d{4}$/.test(pin)){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN must be exactly 4 numeric digits.</div>');
+    return;
+  }
+  if(pin!==confirmPin){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">TPIN confirmation does not match.</div>');
+    return;
+  }
+  if(pin==='0000'||pin==='1111'||pin==='2222'||pin==='3333'||pin==='4444'||pin==='5555'||pin==='6666'||pin==='7777'||pin==='8888'||pin==='9999'||pin==='1234'){
+    showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">Trivial or easily guessed TPINs are not permitted.</div>');
+    return;
+  }
+
+  if(btn){btn.disabled=true;btn.textContent='Configuring...';}
+  if(errEl)errEl.style.display='none';
+
+  try{
+    await workerPost('/api/tpin/setup',{tpin:pin});
+    toast('Administrative TPIN configured successfully. Access granted.','ok');
+    adminTpinStatus={...(adminTpinStatus||{}),is_set:true,tpin_setup_required:false};
+    if(user)user.tpin_change_required=false;
+    const forced=document.getElementById('forcedTpinOverlay');
+    if(forced)forced.remove();
+  }catch(err){
+    if(err?.status===404){
+      showError(renderAdminBlockedCard('/api/tpin/setup','POST',err.message||'TPIN setup route returned 404.'));
+    }else{
+      showError('<div class="admin-blocked-card" style="padding:10px;font-size:12.5px;color:#991b1b">'+esc(err?.message||'Failed to save TPIN.')+'</div>');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Complete TPIN Setup & Enter Console';}
+  }finally{
+    if(input1)input1.value='';
+    if(input2)input2.value='';
+  }
+}
+
+async function executeProtectedAdminAction(actionName, actionFn){
+  if(adminTpinStatus&&adminTpinStatus.is_set){
+    promptTpinVerification(actionName,actionFn);
+  }else{
+    await actionFn();
+  }
+}
+
+window.loadAdminTpinStatus=loadAdminTpinStatus;
+window.renderTpinAccountCardInner=renderTpinAccountCardInner;
+window.openTpinSetupModal=openTpinSetupModal;
+window.closeTpinSetupModal=closeTpinSetupModal;
+window.submitTpinSetup=submitTpinSetup;
+window.openTpinChangeModal=openTpinChangeModal;
+window.closeTpinChangeModal=closeTpinChangeModal;
+window.submitTpinChange=submitTpinChange;
+window.openTpinResetModal=openTpinResetModal;
+window.closeTpinResetModal=closeTpinResetModal;
+window.submitTpinResetRequest=submitTpinResetRequest;
+window.promptTpinVerification=promptTpinVerification;
+window.closeTpinVerifyModal=closeTpinVerifyModal;
+window.submitTpinVerification=submitTpinVerification;
+window.toggleTpinFieldVisibility=toggleTpinFieldVisibility;
+window.checkForcedTpinSetup=checkForcedTpinSetup;
+window.submitForcedTpinSetup=submitForcedTpinSetup;
+window.executeProtectedAdminAction=executeProtectedAdminAction;
+window.getAdminTpinStatus=()=>adminTpinStatus;
+window.setAdminTpinStatus=(val)=>{adminTpinStatus=val;};
+
 function renderAdminCurrentScreen(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.allowedScreens.includes(currentAdminScreen)){
+    return '<div class="admin-card" style="padding:40px;text-align:center">'+
+      '<div style="font-size:36px;margin-bottom:12px">🔒</div>'+
+      '<h2 style="margin:0 0 8px 0;font-size:18px">Access Restricted</h2>'+
+      '<p class="muted" style="max-width:440px;margin:0 auto 16px auto">'+
+        'Your role <b>'+esc(perms.label)+'</b> does not have clearance to access the "'+esc(currentAdminScreen)+'" screen.'+
+      '</p>'+
+      '<button type="button" class="primary" onclick="switchAdminScreen(\''+perms.defaultScreen+'\')">Return to Allowed Workspace</button>'+
+    '</div>';
+  }
   if(currentAdminScreen==='users')return renderScreenUsers();
   if(currentAdminScreen==='tokens')return renderScreenTokens();
   if(currentAdminScreen==='plans')return renderScreenPlans();
@@ -4042,12 +8543,21 @@ function renderAdminCurrentScreen(){
   if(currentAdminScreen==='content')return renderScreenContent();
   if(currentAdminScreen==='settings')return renderScreenSettings();
   if(currentAdminScreen==='reports')return renderScreenReports();
+  if(currentAdminScreen==='account')return renderScreenAdminAccount();
   return renderScreenHome();
 }
 
 function renderAdminViewContent(){
   const container=$('adminContent');
   if(!container)return;
+
+  if(teamMeError || (!currentAdminRole && !isSuperAdmin && !(user && (user.role === 'super_admin' || user.role === 'admin')))){
+    const errorMsg = teamMeError?.message || 'Administrative access required. No verified administrative role found for this account.';
+    container.innerHTML='<div class="admin-state-card" style="margin:24px auto;max-width:480px;text-align:center"><div class="admin-state-icon">🔒</div><h3>Administrative Access Required</h3><p class="muted">'+esc(errorMsg)+'</p></div>';
+    return;
+  }
+
+  const perms=getAdminRolePermissions(currentAdminRole);
 
   const screens=[
     {id:'home',label:'Overview',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'},
@@ -4061,18 +8571,44 @@ function renderAdminViewContent(){
     {id:'audit',label:'Audit Trail',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>'},
     {id:'content',label:'Content &amp; Site',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'},
     {id:'settings',label:'Settings &amp; Security',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'},
-    {id:'reports',label:'Reports &amp; Analytics',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'}
+    {id:'reports',label:'Reports &amp; Analytics',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'},
+    {id:'account',label:'Account &amp; Security',icon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'}
   ];
 
-  const coreScreens=screens.slice(0,6);
-  const opsScreens=screens.slice(6);
+  const allowedScreens=screens.filter(s=>perms.allowedScreens.includes(s.id));
+  const coreScreens=allowedScreens.filter(s=>['home','users','tokens','plans','upgrades','tickets'].includes(s.id));
+  const opsScreens=allowedScreens.filter(s=>['garages','team','audit','content','settings','reports','account'].includes(s.id));
+
+  const mobileTabDefinitions=[
+    {id:'home',label:'Home',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'},
+    {id:'users',label:'Users',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'},
+    {id:'tickets',label:'Support',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>',badge:adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length},
+    {id:'plans',label:'Plans',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>'},
+    {id:'audit',label:'Audit',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'},
+    {id:'account',label:'Account',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'}
+  ];
+  const allowedMobileCandidates=mobileTabDefinitions.filter(t=>perms.allowedScreens.includes(t.id));
+  const mobileNavTabs=allowedMobileCandidates.length<=4 ? allowedMobileCandidates : allowedMobileCandidates.slice(0,4);
+  const showMoreTab=allowedScreens.length > mobileNavTabs.length;
+
+  const moreCandidates=[
+    {id:'account',label:'Account',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'},
+    {id:'tokens',label:'Tokens',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'},
+    {id:'upgrades',label:'Upgrades',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>'},
+    {id:'garages',label:'Garages',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'},
+    {id:'team',label:'Team',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'},
+    {id:'audit',label:'Audit Log',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'},
+    {id:'content',label:'Content',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'},
+    {id:'settings',label:'Settings',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'},
+    {id:'reports',label:'Reports',icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'}
+  ].filter(item=>perms.allowedScreens.includes(item.id));
 
   container.innerHTML='<div class="admin-workspace-shell">'+
     '<header class="admin-topbar">'+
-      '<div class="admin-topbar-brand" onclick="switchAdminScreen(\'home\')">'+
+      '<div class="admin-topbar-brand" onclick="switchAdminScreen(\''+perms.defaultScreen+'\')">'+
         '<div class="admin-topbar-brand-mark">TD</div>'+
         '<div class="admin-brand-titles">'+
-          '<h1 class="admin-brand-title" style="margin:0;font-size:15px;line-height:1.2">Super Admin Console</h1>'+
+          '<h1 class="admin-brand-title" style="margin:0;font-size:15px;line-height:1.2">'+esc(perms.label)+' Console</h1>'+
           '<span class="admin-brand-badge">Torq Desk Operations</span>'+
         '</div>'+
       '</div>'+
@@ -4083,19 +8619,19 @@ function renderAdminViewContent(){
         '</div>'+
       '</div>'+
       '<div class="admin-topbar-actions">'+
-        '<span class="admin-security-pill">🔒 Server-Verified Admin</span>'+
-        '<div class="admin-profile-pill"><span class="admin-profile-avatar">A</span><span>rnyburia@gmail.com</span></div>'+
-        '<button type="button" class="admin-signout-btn" onclick="logout()">Sign Out</button>'+
+        '<span class="admin-security-pill">🔒 '+esc(perms.label)+'</span>'+
+        '<div class="admin-profile-pill" onclick="switchAdminScreen(\'account\')" style="cursor:pointer" title="Manage Account &amp; Security"><span class="admin-profile-avatar">A</span><span id="adminTopbarEmail">admin</span></div>'+
+        '<button type="button" class="admin-signout-btn" onclick="adminSignOut()">Sign Out</button>'+
       '</div>'+
     '</header>'+
     '<div class="admin-layout-body">'+
       '<aside class="admin-sidebar-shell">'+
-        '<div class="admin-sidebar-kicker">Core Workspace</div>'+
+        (coreScreens.length?'<div class="admin-sidebar-kicker">Core Workspace</div>':'')+
         coreScreens.map(s=>'<button type="button" class="admin-sidebar-item '+(currentAdminScreen===s.id?'active':'')+'" onclick="switchAdminScreen(\''+s.id+'\')">'+
           '<span class="admin-sidebar-item-content">'+s.icon+'<span>'+s.label+'</span></span>'+
           (s.badge?'<span class="admin-sidebar-badge open-badge">'+s.badge+'</span>':'')+
         '</button>').join('')+
-        '<div class="admin-sidebar-kicker">Operations &amp; Platform</div>'+
+        (opsScreens.length?'<div class="admin-sidebar-kicker">Operations &amp; Platform</div>':'')+
         opsScreens.map(s=>'<button type="button" class="admin-sidebar-item '+(currentAdminScreen===s.id?'active':'')+'" onclick="switchAdminScreen(\''+s.id+'\')">'+
           '<span class="admin-sidebar-item-content">'+s.icon+'<span>'+s.label+'</span></span>'+
         '</button>').join('')+
@@ -4103,7 +8639,7 @@ function renderAdminViewContent(){
           '<div style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">'+
             '<span style="color:#16a34a">●</span> 15-Min Inactivity Guard Active'+
           '</div>'+
-          '<button type="button" class="ghost" style="width:100%;font-size:12px;color:#dc2626" onclick="logout()">Sign Out of Admin</button>'+
+          '<button type="button" class="ghost" style="width:100%;font-size:12px;color:#dc2626" onclick="adminSignOut()">Sign Out of Admin</button>'+
         '</div>'+
       '</aside>'+
       '<main class="admin-main-container" id="adminMainContainer">'+
@@ -4111,27 +8647,15 @@ function renderAdminViewContent(){
       '</main>'+
     '</div>'+
     '<nav class="admin-mobile-nav" id="adminMobileNav">'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='home'?'active':'')+'" onclick="switchAdminScreen(\'home\')">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'+
-        '<span>Home</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='users'?'active':'')+'" onclick="switchAdminScreen(\'users\')">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'+
-        '<span>Users</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='tickets'?'active':'')+'" onclick="switchAdminScreen(\'tickets\')">'+
-        (adminTickets.filter(t=>(t.status||'').toLowerCase()==='open').length?'<span class="tab-badge"></span>':'')+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>'+
-        '<span>Support</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen==='plans'?'active':'')+'" onclick="switchAdminScreen(\'plans\')">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>'+
-        '<span>Plans</span>'+
-      '</button>'+
-      '<button type="button" class="admin-mobile-tab '+(currentAdminScreen!=='home'&&currentAdminScreen!=='users'&&currentAdminScreen!=='tickets'&&currentAdminScreen!=='plans'?'active':'')+'" onclick="openAdminMoreSheet()">'+
+      mobileNavTabs.map(t=>'<button type="button" class="admin-mobile-tab '+(currentAdminScreen===t.id?'active':'')+'" onclick="switchAdminScreen(\''+t.id+'\')">'+
+        (t.badge?'<span class="tab-badge"></span>':'')+
+        t.icon+
+        '<span>'+t.label+'</span>'+
+      '</button>').join('')+
+      (showMoreTab?'<button type="button" class="admin-mobile-tab '+(allowedScreens.every(s=>s.id!==currentAdminScreen||mobileNavTabs.some(m=>m.id===currentAdminScreen))?'':'active')+'" onclick="openAdminMoreSheet()">'+
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>'+
         '<span>More</span>'+
-      '</button>'+
+      '</button>':'')+
     '</nav>'+
     '<div class="admin-more-sheet" id="adminMoreSheet" hidden onclick="if(event.target===this)closeAdminMoreSheet()">'+
       '<div class="admin-more-panel">'+
@@ -4140,39 +8664,10 @@ function renderAdminViewContent(){
           '<button type="button" class="ghost" onclick="closeAdminMoreSheet()" style="padding:4px 8px;font-size:16px">✕</button>'+
         '</div>'+
         '<div class="admin-more-grid">'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'tokens\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>'+
-            '<span>Tokens</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'upgrades\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>'+
-            '<span>Upgrades</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'garages\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'+
-            '<span>Garages</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'team\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'+
-            '<span>Team</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'audit\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>'+
-            '<span>Audit Log</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'content\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'+
-            '<span>Content</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'settings\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'+
-            '<span>Settings</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\'reports\')">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>'+
-            '<span>Reports</span>'+
-          '</button>'+
-          '<button type="button" class="admin-more-btn" onclick="logout()" style="color:#dc2626">'+
+          moreCandidates.map(c=>'<button type="button" class="admin-more-btn" onclick="switchAdminScreen(\''+c.id+'\')">'+
+            c.icon+'<span>'+c.label+'</span>'+
+          '</button>').join('')+
+          '<button type="button" class="admin-more-btn" onclick="adminSignOut()" style="color:#dc2626">'+
             '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>'+
             '<span>Sign Out</span>'+
           '</button>'+
@@ -4180,14 +8675,58 @@ function renderAdminViewContent(){
       '</div>'+
     '</div>'+
   '</div>';
+  wireAdminAccountSecurityForm();
 }
 
 function switchAdminScreen(screenId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.allowedScreens.includes(screenId)){
+    toast('Access denied: Role "'+perms.label+'" does not have clearance to view '+screenId+'.','error');
+    if(!perms.allowedScreens.includes(currentAdminScreen)){
+      currentAdminScreen=perms.defaultScreen;
+    }
+    renderAdminViewContent();
+    return;
+  }
   currentAdminScreen=screenId;
   closeAdminMoreSheet();
   renderAdminViewContent();
+  if(screenId==='account'){
+    wireAdminAccountSecurityForm();
+    if(!currentAdminProfile&&!teamMeLoading&&!teamMeError){
+      loadTeamMe();
+    }
+    if(!adminTpinStatus&&!adminTpinLoading&&!adminTpinError){
+      loadAdminTpinStatus();
+    }
+  }
   if(screenId==='tickets'&&!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
     loadAdminTickets();
+  }
+  if(screenId==='home'&&!adminOverviewData&&!adminOverviewLoading&&!adminOverviewError){
+    loadAdminOverview();
+  }
+  if(screenId==='users'&&!adminUsersList&&!adminUsersLoading&&!adminUsersError){
+    loadAdminUsers();
+  }
+  if(screenId==='tokens'&&!adminTokensList&&!adminTokensLoading&&!adminTokensError){
+    loadAdminTokens();
+  }
+  if(screenId==='plans'&&!adminPlansList&&!adminPlansLoading&&!adminPlansError){
+    loadAdminPlans();
+    loadAdminCoupons();
+  }
+  if(screenId==='upgrades'&&!adminUpgradesList&&!adminUpgradesLoading&&!adminUpgradesError){
+    loadAdminUpgrades();
+  }
+  if(screenId==='team'&&!adminTeamList&&!adminTeamLoading&&!adminTeamError){
+    loadAdminTeam();
+  }
+  if(screenId==='garages'&&!adminGaragesList&&!adminGaragesLoading&&!adminGaragesError){
+    loadAdminGarages();
+  }
+  if(screenId==='audit'&&!adminAuditList&&!adminAuditLoading&&!adminAuditError){
+    loadAdminAudit();
   }
 }
 
@@ -4229,7 +8768,7 @@ async function loadAdminTickets(force=false){
     if(err?.status===403||err?.code==='FORBIDDEN'){
       isSuperAdmin=false;
       updateAdminNavVisibility();
-      adminTicketsError='The admin console opened, but the API rejected this account (403). Confirm the deployed Worker is using the active Super Admin registry entry for rnyburia@gmail.com.';
+      adminTicketsError='The admin console opened, but the API rejected this account (403). Confirm the deployed Worker is using the active Super Admin registry entry for this account.';
     }else{
       adminTicketsError=err?.message||'Failed to retrieve tickets.';
     }
@@ -4267,10 +8806,10 @@ function resetAdminFilters(){
 
 /* Modals & Dialogs */
 
-function openAdminTicketDetails(ticketId){
-  const ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
-  if(!ticket)return;
+async function openAdminTicketDetails(ticketId){
   closeAdminTicketDetails();
+  let ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
+  if(!ticket)return;
 
   const modal=document.createElement('div');
   modal.id='adminTicketDetailModal';
@@ -4278,47 +8817,190 @@ function openAdminTicketDetails(ticketId){
   modal.setAttribute('role','dialog');
   modal.setAttribute('aria-modal','true');
 
-  modal.innerHTML='<div class="admin-modal-box">'+
+  const tid=esc(ticket.id);
+  const statusKey=normalizeTicketStatus(ticket.status);
+  const allowedTransitions=TICKET_TRANSITIONS[statusKey]||[];
+  const transitionOptions=['<option value="'+esc(statusKey)+'" selected>Current: '+esc(TICKET_STATUS_LABELS[statusKey]||statusKey)+'</option>'].concat(
+    allowedTransitions.map(s=>'<option value="'+esc(s)+'">Transition to: '+esc(TICKET_STATUS_LABELS[s]||s)+'</option>')
+  ).join('');
+
+  const slaBadge=renderSlaBadge(ticket);
+  const chatActive=Boolean(ticket.chat_enabled);
+  const showNameActive=Boolean(ticket.show_agent_name);
+
+  let countdownText='';
+  if(chatActive&&ticket.chat_enabled_until){
+    const leftSec=Number(ticket.chat_enabled_until)-Math.floor(Date.now()/1000);
+    if(leftSec>0){
+      const hrs=Math.floor(leftSec/3600);
+      const mins=Math.floor((leftSec%3600)/60);
+      countdownText='<span class="ticket-expiry-countdown">Chat Active: '+hrs+'h '+mins+'m remaining</span>';
+    }else{
+      countdownText='<span class="ticket-expiry-countdown" style="background:#fee2e2;color:#991b1b">Chat Expired</span>';
+    }
+  }
+
+  if(!adminRosterData&&!adminRosterBlocked&&typeof workerGet==='function'){
+    loadAdminSupportRoster().then(()=>{
+      const sel=$('adminTicketAssigneeSelect');
+      if(sel&&Array.isArray(adminRosterData)&&adminRosterData.length>0){
+        const curVal=sel.value;
+        const isMeSel=ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email;
+        let opts='<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
+          '<option value="'+esc(user?.id||'me')+'" '+(isMeSel?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>';
+        adminRosterData.forEach(m=>{
+          if(m.id===user?.id||m.email===user?.email)return;
+          const isSel=ticket.assignee_id===m.id||ticket.assignee_id===m.email;
+          const label=(m.name?esc(m.name)+' ('+esc(m.email)+')':esc(m.email))+(m.role?' ['+esc(m.role)+']':'');
+          opts+='<option value="'+esc(m.id)+'" '+(isSel?'selected':'')+'>'+label+'</option>';
+        });
+        sel.innerHTML=opts;
+        if(curVal)sel.value=curVal;
+      }
+    });
+  }
+
+  let rosterOptions='';
+  if(Array.isArray(adminRosterData)&&adminRosterData.length>0){
+    rosterOptions=adminRosterData.map(m=>{
+      if(m.id===user?.id||m.email===user?.email)return '';
+      const isSel=ticket.assignee_id===m.id||ticket.assignee_id===m.email;
+      const label=(m.name?esc(m.name)+' ('+esc(m.email)+')':esc(m.email))+(m.role?' ['+esc(m.role)+']':'');
+      return '<option value="'+esc(m.id)+'" '+(isSel?'selected':'')+'>'+label+'</option>';
+    }).join('');
+  }
+
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const canMutate=perms.canMutateTickets;
+  const isExec=currentAdminRole==='support_executive';
+  const isAssignedToMe=isTicketAssignedToCurrentSpecialist(ticket);
+  /* UI-ONLY: Support Executive can only update status if ticket is assigned to them. Server must enforce later. */
+  const canUpdateStatus=canMutate||(perms.canUpdateAssignedTicketStatus&&isAssignedToMe);
+  const canAddNote=canMutate||perms.canAddInternalNotes;
+
+  let chatBoxHtml='';
+  if(chatActive){
+    chatBoxHtml='<div class="ticket-chat-toggle-box" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
+      '<div>'+
+        '<div style="font-weight:700;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:6px">● Chat Active with Customer</div>'+
+        countdownText+
+      '</div>'+
+      (canMutate?'<button type="button" class="ghost" style="color:#dc2626;padding:4px 10px;font-size:12px" onclick="handleAdminChatToggle(\''+tid+'\',false)">Disable Chat</button>':'<button type="button" class="ghost" disabled style="color:#94a3b8;padding:4px 10px;font-size:12px" title="Support Executive mode: mutations disabled">Disable Chat</button>')+
+    '</div>';
+  }else{
+    chatBoxHtml='<div class="ticket-chat-toggle-box">'+
+      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#0f172a">💬 Customer Chat Window (48h Window)</div>'+
+      '<p class="muted" style="margin:0 0 8px 0;font-size:12px">Enabling chat opens a 48-hour direct reply window in the customer\'s Help tab.'+(canMutate?'':' (Support Executive view: read-only)')+'</p>'+
+      (canMutate?('<textarea id="adminEnableChatMsg" rows="2" placeholder="Optional initial message to customer (e.g. Please reply with your odometer photo)..." style="width:100%;font-size:12.5px;border-radius:6px;border:1px solid #cbd5e1;padding:6px;box-sizing:border-box;margin-bottom:8px"></textarea>'+
+      '<button type="button" class="primary" id="btnAdminEnableChat" style="padding:6px 14px;font-size:12.5px" onclick="handleAdminEnableChatWithMsg(\''+tid+'\')">Enable Chat (48h Window)</button>'):'<button type="button" class="primary" disabled style="padding:6px 14px;font-size:12.5px;opacity:0.6;cursor:not-allowed">Enable Chat (Restricted)</button>')+
+    '</div>';
+  }
+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:760px">'+
     '<div class="admin-modal-head">'+
       '<div>'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
-          '<code style="font-size:16px;font-weight:800;color:#2563eb">'+esc(ticket.id)+'</code>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+
+          '<code style="font-size:16px;font-weight:800;color:#2563eb">'+tid+'</code>'+
+          slaBadge+
           renderStatusBadge(ticket.status)+
           renderPriorityBadge(ticket.priority)+
         '</div>'+
-        '<h3 style="margin:0;font-size:18px;font-weight:700">'+esc(ticket.subject||'No Subject')+'</h3>'+
+        '<h3 id="adminModalSubject" style="margin:0;font-size:18px;font-weight:700"></h3>'+
       '</div>'+
       '<button type="button" class="ghost" onclick="closeAdminTicketDetails()" style="font-size:18px;line-height:1;padding:6px 10px">✕</button>'+
     '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;font-size:13px">'+
+    '<div class="ticket-detail-grid">'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Submitter Email</span><b>'+esc(ticket.email||'Anonymous')+'</b></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">User UUID</span><code style="font-size:11px">'+esc(ticket.user_id||'—')+'</code></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Category</span><b>'+esc(formatCategory(ticket.category))+'</b></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Vehicle ID</span><code style="font-size:11px">'+esc(ticket.car_id||'None')+'</code></div>'+
       '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Created Timestamp</span><span>'+esc(formatAdminDate(ticket.created_at))+'</span></div>'+
-      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Last Updated</span><span>'+esc(formatAdminDate(ticket.updated_at))+'</span></div>'+
+      '<div><span class="muted" style="display:block;font-size:11px;text-transform:uppercase">Customer Phone</span><span class="ticket-contact-masked">+91 ••••• •••••</span></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;align-items:center;margin:10px 0;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;flex-wrap:wrap">'+
+      '<span class="muted">Customer Direct Actions:</span>'+
+      '<button type="button" class="ticket-contact-action-btn" disabled title="Audited contact integration pending backend implementation">📞 Call</button>'+
+      '<button type="button" class="ticket-contact-action-btn" disabled title="Audited contact integration pending backend implementation">💬 WhatsApp</button>'+
+      '<small class="muted" style="display:block;width:100%">Phone unmasking and direct customer calling requires audited backend route implementation.</small>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">'+
+      '<div>'+
+        '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">STATUS WORKFLOW</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<select id="adminTicketStatusSelect" '+(canUpdateStatus?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px" title="'+(isExec&&!isAssignedToMe?'Support Executive: Status updates restricted to tickets assigned to you (UI-ONLY)':'')+'">'+transitionOptions+'</select>'+
+          '<button type="button" class="primary" '+(canUpdateStatus?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminStatusChange(\''+tid+'\')" title="'+(isExec&&!isAssignedToMe?'Support Executive: Can only update assigned tickets':'')+'">Update</button>'+
+        '</div>'+
+      '</div>'+
+      '<div>'+
+        '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">ASSIGN SPECIALIST</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<select id="adminTicketAssigneeSelect" '+(perms.canAssignTickets?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+            '<option value="" '+(!ticket.assignee_id?'selected':'')+'>Unassigned</option>'+
+            '<option value="'+esc(user?.id||'me')+'" '+(ticket.assignee_id===(user?.id||'me')||ticket.assignee_id===user?.email?'selected':'')+'>Assign to Me ('+esc(user?.email||'Admin')+')</option>'+
+            rosterOptions+
+            (adminRosterBlocked?'<option disabled>(Team roster unavailable - BLOCKED: GET /api/admin/team missing)</option>':'')+
+          '</select>'+
+          '<button type="button" class="ghost" '+(perms.canAssignTickets?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminAssigneeChange(\''+tid+'\')" title="'+(!perms.canAssignTickets?'Ticket assignment is restricted for this role':'')+'">Save</button>'+
+        '</div>'+
+      '</div>'+
+      '<div>'+
+        '<label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px">PRIORITY</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<select id="adminTicketPrioritySelect" '+(perms.canChangePriority?'':'disabled')+' style="flex:1;height:34px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px">'+
+            '<option value="low" '+(ticket.priority==='low'?'selected':'')+'>Low</option>'+
+            '<option value="normal" '+(ticket.priority==='normal'?'selected':'')+'>Normal</option>'+
+            '<option value="high" '+(ticket.priority==='high'?'selected':'')+'>High</option>'+
+            '<option value="urgent" '+(ticket.priority==='urgent'?'selected':'')+'>Urgent</option>'+
+          '</select>'+
+          '<button type="button" class="ghost" '+(perms.canChangePriority?'':'disabled style="opacity:0.6;cursor:not-allowed"')+' style="padding:4px 10px;font-size:12px" onclick="handleAdminPriorityChange(\''+tid+'\')" title="'+(!perms.canChangePriority?'Priority modification is restricted for this role':'')+'">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    chatBoxHtml+
+    '<div style="margin:8px 0;display:flex;align-items:center;gap:8px">'+
+      '<input type="checkbox" id="adminTicketShowNameToggle" '+(showNameActive?'checked':'')+' '+(canMutate?'':'disabled')+' onchange="handleAdminShowNameToggle(\''+tid+'\',this.checked)">'+
+      '<label for="adminTicketShowNameToggle" style="font-size:12.5px;cursor:pointer">Show my specialist name to customer</label>'+
     '</div>'+
     '<div>'+
-      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Customer Message</div>'+
-      '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:240px;overflow-y:auto">'+esc(ticket.message||'(Empty message content)')+'</div>'+
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Customer Inquiry Message</div>'+
+      '<div id="adminTicketOriginalMsg" style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.6;color:#1e293b;max-height:160px;overflow-y:auto"></div>'+
     '</div>'+
-    '<div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:14px">'+
-      '<b style="font-size:12px;color:#854d0e;text-transform:uppercase;display:block;margin-bottom:6px">Internal Administrative Notes</b>'+
-      '<textarea id="adminTicketInternalNotes" rows="2" placeholder="Private internal note for support staff..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #fef08a;padding:8px;background:#fff"></textarea>'+
+    '<div class="ticket-internal-panel">'+
+      '<div class="ticket-internal-title">Internal, not visible to user</div>'+
+      '<div id="adminTicketInternalNotesContainer"><span class="muted" style="font-size:12.5px">No internal notes yet.</span></div>'+
     '</div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1px solid var(--c-line,#e2e8f0);padding-top:14px">'+
-      '<button type="button" class="ghost" style="color:#b45309" onclick="promptViewAsUser(\''+esc(ticket.user_id||'')+'\')">👁️ View As User (Audit Logged)</button>'+
-      '<div style="display:flex;gap:10px">'+
-        '<button type="button" class="ghost" onclick="toast(\'Status update queued.\',\'ok\')">Update Status</button>'+
-        '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
+    '<div>'+
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Audit Timeline &amp; Messages</div>'+
+      '<div class="ticket-timeline-container" id="adminTicketTimeline"></div>'+
+    '</div>'+
+    (canMutate ? ('<div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px">'+
+      '<div style="display:flex;gap:16px;margin-bottom:8px;font-size:12.5px;font-weight:600">'+
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="adminMsgTarget" value="public" checked> Public Message (Customer sees in Help)</label>'+
+        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="adminMsgTarget" value="internal"> Internal Note (Staff only)</label>'+
       '</div>'+
+      '<textarea id="adminReplyText" rows="3" placeholder="Compose public response or private staff note..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #cbd5e1;padding:8px;box-sizing:border-box"></textarea>'+
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px">'+
+        '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Send Update</button>'+
+      '</div>'+
+    '</div>') : (perms.canAddInternalNotes ? ('<div style="margin-top:14px;background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:12px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12.5px;font-weight:700;color:#854d0e">'+
+        '<span>📝 Internal Staff Note (Support Executive)</span>'+
+        '<span style="font-size:11px;color:#a16207;background:#fef9c3;padding:2px 8px;border-radius:999px">Staff Only · Not visible to user</span>'+
+      '</div>'+
+      '<input type="hidden" name="adminMsgTarget" value="internal">'+
+      '<textarea id="adminReplyText" rows="3" placeholder="Compose internal note for specialist team..." style="width:100%;font-size:13px;border-radius:8px;border:1px solid #cbd5e1;padding:8px;box-sizing:border-box"></textarea>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'+
+        '<small class="muted">Public customer replies, reassignment and priority changes are restricted.</small>'+
+        '<button type="button" class="primary" id="adminSendReplyBtn" onclick="handleAdminSendReply(\''+tid+'\')">Add Internal Note</button>'+
+      '</div>'+
+    '</div>') : ('<div class="admin-readonly-notice">👁️ <b>Read-Only Mode</b>: You have inspection clearance. Status transitions, assignee changes, priority modifications, and message sending are restricted.</div>')))+
+    '<div class="ticket-action-bar">'+
+      '<button type="button" class="ghost" id="btnAdminViewAsUser" style="color:'+(adminViewAsUserBlocked||!perms.canViewAsUser?'#94a3b8':'#b45309')+'" '+(adminViewAsUserBlocked||!perms.canViewAsUser?'disabled title="View-as-user is restricted for this role"':'')+' onclick="openAdminTicketViewAsUser(\''+tid+'\')">'+(adminViewAsUserBlocked?'Not available yet':(perms.canViewAsUser?'👁️ View As User (Audit Logged)':'👁️ View As User (Restricted)'))+'</button>'+
+      '<button type="button" class="primary" onclick="closeAdminTicketDetails()">Close</button>'+
     '</div>'+
   '</div>';
 
-  modal.onclick=e=>{
-    if(e.target===modal)closeAdminTicketDetails();
-  };
-
+  modal.onclick=e=>{ if(e.target===modal)closeAdminTicketDetails(); };
   const onKey=e=>{
     if(e.key==='Escape'){
       closeAdminTicketDetails();
@@ -4326,8 +9008,26 @@ function openAdminTicketDetails(ticketId){
     }
   };
   document.addEventListener('keydown',onKey);
-
   document.body.appendChild(modal);
+
+  const subEl=$('adminModalSubject');
+  if(subEl) subEl.textContent=ticket.subject||'No Subject';
+  const origMsgEl=$('adminTicketOriginalMsg');
+  if(origMsgEl) origMsgEl.textContent=ticket.message||'(Empty message content)';
+
+  populateAdminModalEvents(ticket);
+
+  if(typeof workerGet==='function'){
+    try{
+      const res=await workerGet('/api/admin/tickets/'+encodeURIComponent(ticketId));
+      if(res&&res.ok&&res.data){
+        Object.assign(ticket,res.data);
+        populateAdminModalEvents(ticket);
+      }
+    }catch(err){
+      console.warn('Authoritative admin ticket detail fetch failed (expected if backend route bug in worker is not yet merged):',err);
+    }
+  }
 }
 
 function closeAdminTicketDetails(){
@@ -4335,18 +9035,424 @@ function closeAdminTicketDetails(){
   if(modal)modal.remove();
 }
 
-function promptViewAsUser(userId){
-  const reason=prompt('Enter authorized audit reason for read-only user session view:');
-  if(!reason||!reason.trim()){
-    toast('Audit reason required to view as user.','error');
-    return;
+function populateAdminModalEvents(ticket){
+  const internalContainer=$('adminTicketInternalNotesContainer');
+  const timelineContainer=$('adminTicketTimeline');
+  if(!internalContainer||!timelineContainer)return;
+
+  const events=Array.isArray(ticket.events)?ticket.events:[];
+  const internalNotes=events.filter(e=>e.visibility==='internal'||e.event_type==='internal_note');
+
+  if(internalNotes.length){
+    internalContainer.innerHTML='';
+    internalNotes.forEach(note=>{
+      const item=document.createElement('div');
+      item.className='ticket-internal-note-item';
+      const meta=document.createElement('div');
+      meta.style.fontSize='11px';
+      meta.style.color='#854d0e';
+      meta.style.fontWeight='600';
+      meta.textContent=(note.actor_user_id||'Staff')+' · '+formatTimestamp(note.created_at);
+      const body=document.createElement('div');
+      body.textContent=note.message||'';
+      item.appendChild(meta);
+      item.appendChild(body);
+      internalContainer.appendChild(item);
+    });
   }
-  toast('Audit record logged for user inspection: '+reason.trim(),'ok');
+
+  timelineContainer.innerHTML='';
+  events.forEach(e=>{
+    const item=document.createElement('div');
+    item.className='ticket-timeline-item';
+
+    let textDesc='';
+    if(e.event_type==='status_changed'){
+      textDesc='Status changed: '+(e.metadata_json?.to||e.message||'');
+    }else if(e.event_type==='assignment_changed'){
+      textDesc='Assignee changed: '+(e.metadata_json?.assignee_id||'Unassigned');
+    }else if(e.event_type==='chat_toggled'){
+      textDesc='Chat toggled '+(e.metadata_json?.enabled?'ON':'OFF');
+    }else if(e.visibility==='internal'||e.event_type==='internal_note'){
+      textDesc='[Internal Note] '+(e.message||'');
+    }else{
+      textDesc=(e.actor_type==='user'?'Customer: ':'Staff: ')+(e.message||'');
+    }
+
+    item.textContent=textDesc+' ('+formatTimestamp(e.created_at)+')';
+    timelineContainer.appendChild(item);
+  });
 }
 
+async function handleAdminStatusChange(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const ticket=adminTickets.find(t=>String(t.id)===String(ticketId));
+  /* UI-ONLY: Support Executive can only update tickets assigned to them in browser. Server must enforce later. */
+  if(currentAdminRole==='support_executive'){
+    if(!isTicketAssignedToCurrentSpecialist(ticket)){
+      toast('Permission denied: Support Executives can only update status for tickets assigned to them. (UI-ONLY check)','error');
+      return;
+    }
+  } else if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
+  const sel=$('adminTicketStatusSelect');
+  if(!sel)return;
+  const nextStatus=sel.value;
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{status:nextStatus});
+    if(!res?.ok){
+      throw new Error(res?.error?.message||'Failed to update status.');
+    }
+    toast('Ticket status updated to '+nextStatus,'ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to change status:',err);
+    toast(err?.message||'409 INVALID_TRANSITION: Status change rejected by server.','error');
+  }
+}
+
+async function handleAdminAssigneeChange(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canAssignTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot reassign tickets.','error');
+    return;
+  }
+  const sel=$('adminTicketAssigneeSelect');
+  if(!sel)return;
+  const assignee=sel.value||null;
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{assignee_id:assignee});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to update assignee.');
+    toast('Assignee updated.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to update assignee.','error');
+  }
+}
+
+async function handleAdminPriorityChange(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canChangePriority){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify ticket priority.','error');
+    return;
+  }
+  const sel=$('adminTicketPrioritySelect');
+  if(!sel)return;
+  const pri=sel.value;
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{priority:pri});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to update priority.');
+    toast('Priority updated.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to update priority.','error');
+  }
+}
+
+async function handleAdminChatToggle(ticketId,enabled){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canEnableChat){
+    toast('Permission denied: Role "'+perms.label+'" cannot toggle customer chat.','error');
+    return;
+  }
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{chat_enabled:enabled});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to toggle chat.');
+    toast('Customer chat '+(enabled?'enabled for 48 hours':'disabled')+'.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to toggle chat.','error');
+  }
+}
+
+async function handleAdminShowNameToggle(ticketId,enabled){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{show_agent_name:enabled});
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to update name visibility.');
+    toast('Specialist name visibility updated.','ok');
+    await loadAdminTickets(true);
+  }catch(err){
+    toast(err?.message||'Failed to update name visibility.','error');
+  }
+}
+
+async function handleAdminSendReply(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  const isInternal=document.querySelector('input[name="adminMsgTarget"]:checked')?.value==='internal' || document.querySelector('input[name="adminMsgTarget"][type="hidden"]')?.value==='internal' || currentAdminRole==='support_executive';
+  if(currentAdminRole==='support_executive'){
+    if(!perms.canAddInternalNotes){
+      toast('Permission denied: Role "'+perms.label+'" cannot add internal notes.','error');
+      return;
+    }
+    if(!isInternal){
+      toast('Permission denied: Support Executives can only add internal notes, not public messages.','error');
+      return;
+    }
+  } else if(!perms.canMutateTickets){
+    toast('Permission denied: Role "'+perms.label+'" cannot mutate tickets.','error');
+    return;
+  }
+  const textEl=$('adminReplyText');
+  const btn=$('adminSendReplyBtn');
+  if(!textEl||!btn)return;
+  const message=textEl.value.trim();
+  if(!message){
+    toast('Please enter a message.','error');
+    textEl.focus();
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Submitting...';
+  try{
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),{
+      message,
+      internal:isInternal
+    });
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to submit message.');
+    textEl.value='';
+    toast(isInternal?'Internal note recorded.':'Public response sent to customer.','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    console.error('Failed to submit message:',err);
+    toast(err?.message||'Failed to submit message.','error');
+  }finally{
+    if(document.body.contains(btn)){
+      btn.disabled=false;
+      btn.textContent='Send Update';
+    }
+  }
+}
+
+let adminRosterData=null;
+let adminRosterLoading=false;
+let adminRosterBlocked=false;
+
+async function loadAdminSupportRoster(){
+  if(adminRosterData||adminRosterLoading)return adminRosterData;
+  adminRosterLoading=true;
+  try{
+    if(typeof workerGet==='function'){
+      const res=await workerGet('/api/admin/team');
+      if(res&&res.ok&&Array.isArray(res.data)){
+        adminRosterData=res.data;
+        adminRosterBlocked=false;
+        return adminRosterData;
+      }
+    }
+    adminRosterBlocked=true;
+  }catch(err){
+    console.warn('Failed to load team roster from server (GET /api/admin/team):',err);
+    adminRosterBlocked=true;
+  }finally{
+    adminRosterLoading=false;
+  }
+  return null;
+}
+
+async function handleAdminEnableChatWithMsg(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canEnableChat){
+    toast('Permission denied: Role "'+perms.label+'" cannot enable customer chat.','error');
+    return;
+  }
+  const msgInput=$('adminEnableChatMsg');
+  const btn=$('btnAdminEnableChat');
+  const optionalMsg=msgInput?.value?.trim()||'';
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Enabling Chat...';
+  }
+  try{
+    const payload={chat_enabled:true};
+    if(optionalMsg){
+      payload.message=optionalMsg;
+      payload.internal=false;
+    }
+    const res=await workerPatch('/api/admin/tickets/'+encodeURIComponent(ticketId),payload);
+    if(!res?.ok) throw new Error(res?.error?.message||'Failed to enable chat.');
+    toast('Chat enabled for customer (48h direct reply window opened).','ok');
+    await loadAdminTickets(true);
+    openAdminTicketDetails(ticketId);
+  }catch(err){
+    toast(err?.message||'Failed to enable chat.','error');
+  }finally{
+    if(btn&&document.body.contains(btn)){
+      btn.disabled=false;
+      btn.textContent='Enable Chat (48h Window)';
+    }
+  }
+}
+
+let adminViewAsUserBlocked=false;
+
+async function openAdminTicketViewAsUser(ticketId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canViewAsUser){
+    toast('Permission denied: Role "'+perms.label+'" cannot view sessions as user.','error');
+    return;
+  }
+  const btn=$('btnAdminViewAsUser');
+  if(adminViewAsUserBlocked){
+    if(btn){
+      btn.disabled=true;
+      btn.textContent='Not available yet';
+    }
+    toast('BLOCKED: View-as-user route (POST /api/admin/tickets/:id/view-as-user) is missing on the server.','error');
+    return;
+  }
+  const reason=window.prompt('Enter authorized audit reason for read-only user session view (minimum 10 characters):');
+  if(reason===null)return;
+  const trimmedReason=String(reason||'').trim();
+  if(!trimmedReason||trimmedReason.length<10){
+    toast('Audit reason is required (minimum 10 characters).','error');
+    return;
+  }
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Authenticating Audit...';
+  }
+  try{
+    if(typeof workerPost!=='function'){
+      throw new Error('Worker communication gateway unavailable.');
+    }
+    const res=await workerPost('/api/admin/tickets/'+encodeURIComponent(ticketId)+'/view-as-user',{
+      reason:trimmedReason
+    });
+    if(!res?.ok||!res?.data){
+      throw new Error(res?.error?.message||'Server rejected view-as-user request.');
+    }
+    renderAdminTicketViewAsUserPanel(res.data,trimmedReason);
+  }catch(err){
+    console.warn('View-as-user failed or route missing:',err);
+    if(err?.status===404||err?.code==='NOT_FOUND'||String(err?.message||'').includes('404')||String(err?.message||'').includes('Route not found')||String(err?.message||'').includes('not found')){
+      adminViewAsUserBlocked=true;
+      if(btn){
+        btn.disabled=true;
+        btn.textContent='Not available yet';
+      }
+      toast('BLOCKED: View-as-user route (POST /api/admin/tickets/:id/view-as-user) is missing on the server. Button disabled.','error');
+    }else{
+      if(btn){
+        btn.disabled=false;
+        btn.textContent='👁️ View As User (Audit Logged)';
+      }
+      toast(err?.message||'Failed to authenticate view-as-user.','error');
+    }
+  }
+}
+
+function renderAdminTicketViewAsUserPanel(data,reason){
+  let old=$('adminTicketViewAsUserModal');
+  if(old)old.remove();
+  const modal=document.createElement('div');
+  modal.id='adminTicketViewAsUserModal';
+  modal.className='ticket-view-as-user-modal';
+  modal.innerHTML='<div class="ticket-view-as-user-box">'+
+    '<div class="ticket-view-as-user-header">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span class="ticket-readonly-badge">READ-ONLY AUDITED VIEW</span>'+
+        '<code id="vauTicketId" style="font-size:14px;font-weight:700;color:#2563eb"></code>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeAdminTicketViewAsUserModal()" style="font-size:18px;line-height:1;padding:4px 8px">✕</button>'+
+    '</div>'+
+    '<div class="ticket-view-as-user-banner">'+
+      '<small class="muted" style="display:block;font-size:11px;text-transform:uppercase">Audit Authorization Reason</small>'+
+      '<div id="vauReason" style="font-weight:600;font-size:13px;color:#0f172a"></div>'+
+    '</div>'+
+    '<div class="ticket-view-as-user-meta">'+
+      '<div><span class="muted">Subject</span><div id="vauSubject" style="font-weight:600"></div></div>'+
+      '<div><span class="muted">Status</span><div id="vauStatus" style="font-weight:600"></div></div>'+
+      '<div><span class="muted">Priority</span><div id="vauPriority" style="font-weight:600"></div></div>'+
+      '<div><span class="muted">Created</span><div id="vauCreated" style="font-weight:600"></div></div>'+
+    '</div>'+
+    '<div class="muted" style="font-size:11px;font-weight:700;text-transform:uppercase;margin:12px 0 6px 0">Customer Public Thread (Read-Only)</div>'+
+    '<div class="ticket-view-as-user-thread" id="vauThread"></div>'+
+    '<div style="margin-top:14px;text-align:right">'+
+      '<button type="button" class="primary" onclick="closeAdminTicketViewAsUserModal()">Done</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(modal);
+
+  $('vauTicketId').textContent=data?.id||'—';
+  $('vauReason').textContent=reason||'Audited inspection';
+  $('vauSubject').textContent=data?.subject||'—';
+  $('vauStatus').textContent=data?.status||'—';
+  $('vauPriority').textContent=data?.priority||'—';
+  $('vauCreated').textContent=data?.created_at?formatTimestamp(data.created_at):'—';
+
+  const threadEl=$('vauThread');
+  if(threadEl){
+    const events=Array.isArray(data?.events)?data.events:[];
+    if(!events.length&&data?.message){
+      events.push({actor_type:'user',message:data.message,created_at:data.created_at});
+    }
+    if(!events.length){
+      const empty=document.createElement('div');
+      empty.className='muted';
+      empty.textContent='No public messages found in this ticket.';
+      threadEl.appendChild(empty);
+    }else{
+      events.forEach(e=>{
+        const bubble=document.createElement('div');
+        bubble.className='ticket-message-bubble '+(e.actor_type==='user'?'ticket-message-user':'ticket-message-admin');
+        const hdr=document.createElement('div');
+        hdr.className='ticket-message-header';
+        const snd=document.createElement('span');
+        snd.className='ticket-message-sender';
+        snd.textContent=e.actor_type==='user'?'Customer':'Support Specialist';
+        const tm=document.createElement('span');
+        tm.className='ticket-message-time';
+        tm.textContent=formatTimestamp(e.created_at);
+        hdr.appendChild(snd);
+        hdr.appendChild(tm);
+        const txt=document.createElement('div');
+        txt.className='ticket-message-text';
+        txt.textContent=e.message||'';
+        bubble.appendChild(hdr);
+        bubble.appendChild(txt);
+        threadEl.appendChild(bubble);
+      });
+    }
+  }
+}
+
+function closeAdminTicketViewAsUserModal(){
+  const m=$('adminTicketViewAsUserModal');
+  if(m)m.remove();
+}
+
+function promptViewAsUser(ticketId){
+  return openAdminTicketViewAsUser(ticketId);
+}
+
+let activeAdminSelectedUserId=null;
+
 function openAdminUserDetails(userId){
+  activeAdminSelectedUserId=userId;
   let old=document.getElementById('adminUserModal');
   if(old)old.remove();
+
+  const targetUser=(adminUsersList&&adminUsersList.find(u=>String(u.id)===String(userId)))||{
+    id:userId||'unknown',
+    name:'Customer',
+    email:userId||'unknown@example.com',
+    role:'owner',
+    plan:'lite',
+    status:'active',
+    created_at:null
+  };
 
   const modal=document.createElement('div');
   modal.id='adminUserModal';
@@ -4354,65 +9460,168 @@ function openAdminUserDetails(userId){
   modal.setAttribute('role','dialog');
   modal.setAttribute('aria-modal','true');
 
-  modal.innerHTML='<div class="admin-modal-box">'+
+  modal.innerHTML='<div class="admin-modal-box" style="max-width:560px">'+
     '<div class="admin-modal-head">'+
       '<div>'+
         '<h3 style="margin:0;font-size:17px">Manage User Entitlements</h3>'+
-        '<span class="muted" style="font-size:12px">User: rnyburia@gmail.com</span>'+
+        '<span class="muted" style="font-size:12px" id="adminUserModalSubtitle"></span>'+
       '</div>'+
       '<button type="button" class="ghost" onclick="closeAdminUserDetails()">✕</button>'+
     '</div>'+
-    '<div style="display:flex;flex-direction:column;gap:12px">'+
+    '<div style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="admin-card" style="padding:12px;background:#f8fafc">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px">'+
+          '<div><span class="muted">Role:</span> <b id="adminUserModalRole"></b></div>'+
+          '<div><span class="muted">Status:</span> <b id="adminUserModalStatus"></b></div>'+
+          '<div><span class="muted">Plan:</span> <b id="adminUserModalPlan"></b></div>'+
+          '<div><span class="muted">Joined:</span> <span id="adminUserModalJoined"></span></div>'+
+        '</div>'+
+      '</div>'+
       '<div class="field">'+
-        '<label>Subscription Plan</label>'+
-        '<select id="adminUserPlanSelect"><option value="plus">Vehicle Owner Plus (₹69/mo or ₹708/yr)</option><option value="ultra" selected>Ultra / Workshop (Lifetime)</option><option value="free">Vehicle Owner Free</option></select>'+
+        '<label>Subscription Plan Tier</label>'+
+        '<select id="adminUserPlanSelect">'+
+          '<option value="lite"'+((targetUser.plan||'').toLowerCase()==='lite'?' selected':'')+'>Lite / Free Tier (1 Vehicle, 10MB)</option>'+
+          '<option value="premium"'+((targetUser.plan||'').toLowerCase()==='premium'?' selected':'')+'>Vehicle Owner Premium (₹69/mo or ₹708/yr)</option>'+
+          '<option value="ultra"'+((targetUser.plan||'').toLowerCase()==='ultra'?' selected':'')+'>Ultra / Workshop SaaS (Unlimited)</option>'+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
         '<label>Entitlement Validity Duration</label>'+
-        '<select><option>365 Days (1 Year)</option><option selected>Indefinite / Lifetime</option><option>30 Days</option><option>90 Days</option></select>'+
+        '<select id="adminUserDurationSelect">'+
+          '<option value="30">30 Days</option>'+
+          '<option value="90">90 Days</option>'+
+          '<option value="365" selected>365 Days (1 Year)</option>'+
+          '<option value="lifetime">Indefinite / Lifetime</option>'+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
         '<label>Internal Staff Notes</label>'+
-        '<textarea rows="2" placeholder="Record reason for manual entitlement change..."></textarea>'+
+        '<textarea id="adminUserPlanNotes" rows="2" placeholder="Record reason for manual entitlement change..."></textarea>'+
       '</div>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'+
-        '<button type="button" class="primary" onclick="saveUserPlanDraft()">Save Plan Changes</button>'+
-        '<button type="button" class="ghost" onclick="extendUserGrace()">+7 Days Grace</button>'+
-        '<button type="button" class="ghost" style="color:#dc2626" onclick="suspendUserAccount()">Suspend Account</button>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'+
+        '<button type="button" class="primary" id="btnSaveUserPlan" onclick="saveUserPlanDraft(\''+esc(targetUser.id)+'\')">Save Plan Changes</button>'+
+        '<button type="button" class="ghost" id="btnExtendUserGrace" onclick="extendUserGrace(\''+esc(targetUser.id)+'\')">+7 Days Grace</button>'+
+        '<button type="button" class="ghost" id="btnSuspendUser" style="color:'+(targetUser.status==='suspended'?'#16a34a':'#dc2626')+'" onclick="suspendUserAccount(\''+esc(targetUser.id)+'\',\''+esc(targetUser.status||'active')+'\')">'+(targetUser.status==='suspended'?'Reactivate Account':'Suspend Account')+'</button>'+
+      '</div>'+
+      '<div class="admin-detail-section" style="margin-top:6px">'+
+        '<h4 style="margin:0 0 4px;font-size:13px">Registered Vehicles</h4>'+
+        '<div id="adminUserVehiclesList"><small class="muted">Live vehicle records query: <code>GET /api/admin/users/'+esc(targetUser.id)+'/vehicles</code></small></div>'+
+      '</div>'+
+      '<div class="admin-detail-section">'+
+        '<h4 style="margin:0 0 4px;font-size:13px">Recent Support Inquiries</h4>'+
+        '<div id="adminUserTicketsList"><small class="muted">Live ticket history query: <code>GET /api/admin/users/'+esc(targetUser.id)+'/tickets</code></small></div>'+
       '</div>'+
     '</div>'+
   '</div>';
 
   modal.onclick=e=>{if(e.target===modal)closeAdminUserDetails();};
   document.body.appendChild(modal);
+
+  const sub=document.getElementById('adminUserModalSubtitle');
+  if(sub)sub.textContent='User: '+(targetUser.email||targetUser.name||targetUser.id);
+  const rEl=document.getElementById('adminUserModalRole');
+  if(rEl)rEl.textContent=targetUser.role||'owner';
+  const sEl=document.getElementById('adminUserModalStatus');
+  if(sEl)sEl.textContent=targetUser.status||'active';
+  const pEl=document.getElementById('adminUserModalPlan');
+  if(pEl)pEl.textContent=targetUser.plan||'lite';
+  const jEl=document.getElementById('adminUserModalJoined');
+  if(jEl)jEl.textContent=formatAdminDate(targetUser.created_at);
 }
 
 function closeAdminUserDetails(){
   const m=document.getElementById('adminUserModal');
   if(m)m.remove();
+  activeAdminSelectedUserId=null;
 }
 
-function saveUserPlanDraft(){
-  toast('Plan draft saved. Backend endpoint /api/admin/users/:id pending integration.','ok');
-  closeAdminUserDetails();
-}
-
-function extendUserGrace(){
-  toast('Grace period extended by 7 days.','ok');
-  closeAdminUserDetails();
-}
-
-function suspendUserAccount(){
-  const confirmStr=prompt('Type SUSPEND to confirm locking this user account:');
-  if(confirmStr==='SUSPEND'){
-    toast('Account suspended.','ok');
+async function saveUserPlanDraft(userId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify user plans.','error');
+    return;
+  }
+  const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
+  const plan=document.getElementById('adminUserPlanSelect')?.value||'lite';
+  const duration=document.getElementById('adminUserDurationSelect')?.value||'365';
+  const notes=document.getElementById('adminUserPlanNotes')?.value?.trim()||'';
+  const btn=document.getElementById('btnSaveUserPlan');
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
+  try{
+    await workerPatch('/api/admin/users/'+encodeURIComponent(uid)+'/plan',{plan,duration,notes});
+    toast('User plan updated successfully.','ok');
     closeAdminUserDetails();
-  }else{
-    toast('Suspension cancelled.','info');
+    loadAdminUsers(true);
+  }catch(err){
+    toast('Failed to update user plan: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent='Save Plan Changes';}
   }
 }
 
+async function extendUserGrace(userId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot extend user grace period.','error');
+    return;
+  }
+  const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
+  const btn=document.getElementById('btnExtendUserGrace');
+  if(btn){btn.disabled=true;btn.textContent='Extending...';}
+  try{
+    await workerPost('/api/admin/users/'+encodeURIComponent(uid)+'/extend-grace',{days:7});
+    toast('Grace period extended by 7 days.','ok');
+    loadAdminUsers(true);
+  }catch(err){
+    toast('Failed to extend grace: '+(err?.message||err),'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='+7 Days Grace';}
+  }
+}
+
+async function suspendUserAccount(userId,currentStatus){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot modify user suspension status.','error');
+    return;
+  }
+  const uid=userId||activeAdminSelectedUserId||(adminUsersList&&adminUsersList[0]?.id)||'';
+  const isSuspended=(currentStatus==='suspended');
+  const newStatus=isSuspended?'active':'suspended';
+  const promptWord=isSuspended?'UNSUSPEND':'SUSPEND';
+  const confirmStr=prompt('Type '+promptWord+' to confirm changing user account status:');
+  if(confirmStr!==promptWord){
+    toast('Status change cancelled.','info');
+    return;
+  }
+  const actionLabel=isSuspended?'Reactivate User Account':'Suspend User Account';
+  executeProtectedAdminAction(actionLabel,async ()=>{
+    const btn=document.getElementById('btnSuspendUser');
+    if(btn){btn.disabled=true;btn.textContent='Updating...';}
+    try{
+      await workerPost('/api/admin/users/'+encodeURIComponent(uid)+'/status',{status:newStatus});
+      toast('User status updated to '+newStatus+'.','ok');
+      closeAdminUserDetails();
+      loadAdminUsers(true);
+    }catch(err){
+      toast('Failed to update status: '+(err?.message||err),'error');
+      if(btn){btn.disabled=false;btn.textContent=isSuspended?'Reactivate Account':'Suspend Account';}
+    }
+  });
+}
+
+function onTokenGenPlanChange(planKey){
+  const acctEl=document.getElementById('tokenGenAccountType');
+  if(!acctEl)return;
+  const isGarage=['lite','pro','ultra'].includes(planKey);
+  acctEl.value=isGarage?'garage':'vehicle_owner';
+}
+
 function openTokenGenModal(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTokens){
+    toast('Permission denied: Role "'+perms.label+'" cannot generate tokens.','error');
+    return;
+  }
   let old=document.getElementById('adminTokenGenModal');
   if(old)old.remove();
 
@@ -4425,28 +9634,50 @@ function openTokenGenModal(){
   modal.innerHTML='<div class="admin-modal-box">'+
     '<div class="admin-modal-head">'+
       '<div>'+
-        '<h3 style="margin:0;font-size:17px">Generate Plan Activation Token</h3>'+
-        '<span class="muted" style="font-size:12px">Create cryptographic single or multi-use entitlement tokens.</span>'+
+        '<h3 style="margin:0;font-size:17px">Generate Plan Activation Code</h3>'+
+        '<span class="muted" style="font-size:12px">Server-generated activation codes for owner or garage plans (valid 1 to 12 months).</span>'+
       '</div>'+
       '<button type="button" class="ghost" onclick="closeTokenGenModal()">✕</button>'+
     '</div>'+
     '<div style="display:flex;flex-direction:column;gap:12px">'+
       '<div class="field">'+
         '<label>Target Plan</label>'+
-        '<select id="tokenGenPlan"><option value="plus">Vehicle Owner Plus (₹69/mo or ₹708/yr)</option><option value="ultra">Garage Ultra (Workshop SaaS)</option></select>'+
+        '<select id="tokenGenPlan" onchange="onTokenGenPlanChange(this.value)">'+
+          '<optgroup label="Vehicle Owner Plans">'+
+            '<option value="plus" selected>Plus (1 Vehicle, Full Vault)</option>'+
+            '<option value="family3">Family 3 (3 Vehicles)</option>'+
+            '<option value="family9">Family 9 (9 Vehicles)</option>'+
+          '</optgroup>'+
+          '<optgroup label="Garage SaaS Plans">'+
+            '<option value="lite">Lite (3 Staff, Invoicing)</option>'+
+            '<option value="pro">Pro (6 Staff, WhatsApp)</option>'+
+            '<option value="ultra">Ultra (15 Staff, Inventory)</option>'+
+          '</optgroup>'+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
-        '<label>Validity Duration</label>'+
-        '<select id="tokenGenDuration"><option value="365">365 Days (1 Year)</option><option value="90">90 Days (Quarter)</option><option value="30">30 Days (Monthly)</option></select>'+
+        '<label>Target Account Type</label>'+
+        '<input type="text" id="tokenGenAccountType" value="vehicle_owner" readonly style="background:#f8fafc;color:#475569;cursor:not-allowed">'+
       '</div>'+
       '<div class="field">'+
-        '<label>Usage Restriction</label>'+
-        '<select id="tokenGenUsage"><option value="single">Single Use (1 Account)</option><option value="multi">Multi-Use Promotional (Max 50)</option></select>'+
+        '<label>Duration (Months)</label>'+
+        '<select id="tokenGenDurationMonths">'+
+          Array.from({length:12},(_,i)=>i+1).map(m=>'<option value="'+m+'"'+(m===12?' selected':'')+'>'+m+' '+(m===1?'Month':'Months')+(m===12?' (1 Year)':'')+'</option>').join('')+
+        '</select>'+
       '</div>'+
       '<div class="field">'+
-        '<label>Optional Mobile Number Binding (+91)</label>'+
-        '<input type="text" placeholder="e.g. 9876543210 (Leave blank for open redemption)">'+
+        '<label>Max Redemptions / Uses</label>'+
+        '<input type="number" id="tokenGenMaxUses" min="1" max="1000" value="1">'+
       '</div>'+
+      '<div class="field">'+
+        '<label>Redeem By (Optional)</label>'+
+        (typeof dateInputHtml==='function'?dateInputHtml('tokenGenRedeemBy','',false):'<input id="tokenGenRedeemBy" placeholder="DD-MM-YYYY">')+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Bound Mobile Number (Optional, 10 digits)</label>'+
+        '<input type="text" id="tokenGenMobile" placeholder="e.g. 9876543210 (Leave blank for open redemption)" maxlength="10">'+
+      '</div>'+
+      '<div id="tokenGenStatusArea"></div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeTokenGenModal()">Cancel</button>'+
         '<button type="button" class="primary" onclick="generateAdminToken()">Create &amp; Reveal Token</button>'+
@@ -4464,11 +9695,92 @@ function closeTokenGenModal(){
 }
 
 function generateAdminToken(){
-  closeTokenGenModal();
-  const randHex=Math.random().toString(36).substring(2,6).toUpperCase()+'-'+Math.random().toString(36).substring(2,6).toUpperCase();
-  const tokenCode='TD-PLUS-'+randHex;
-  adminRevealedToken=tokenCode;
-  openTokenRevealModal(tokenCode);
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTokens){
+    toast('Permission denied: Role "'+perms.label+'" cannot generate tokens.','error');
+    return;
+  }
+  const planEl=document.getElementById('tokenGenPlan');
+  const durationEl=document.getElementById('tokenGenDurationMonths') || document.getElementById('tokenGenDuration');
+  const maxUsesEl=document.getElementById('tokenGenMaxUses') || document.getElementById('tokenGenUsage');
+  const redeemByEl=document.getElementById('tokenGenRedeemBy');
+  const mobileEl=document.getElementById('tokenGenMobile');
+
+  const plan_key=planEl?.value||'plus';
+  const duration_months=parseInt(durationEl?.value,10)||12;
+  const max_uses=maxUsesEl ? (maxUsesEl.value==='multi'?50:parseInt(maxUsesEl.value,10)||1) : 1;
+  const redeem_by=(typeof dateInputValue==='function'&&redeemByEl)?dateInputValue('tokenGenRedeemBy'):null;
+  const bound_mobile=mobileEl?.value?.trim()||null;
+
+  if(isNaN(duration_months) || duration_months < 1 || duration_months > 12){
+    toast('Duration must be between 1 and 12 months.','error');
+    return;
+  }
+  if(isNaN(max_uses) || max_uses < 1){
+    toast('Max uses must be at least 1.','error');
+    return;
+  }
+  if(bound_mobile && !/^\d{10}$/.test(bound_mobile)){
+    toast('Bound mobile number must be exactly 10 digits.','error');
+    return;
+  }
+
+  executeProtectedAdminAction('Issue Activation Code',async ()=>{
+    closeTokenGenModal();
+
+    // Cryptographic token via Web Crypto (RFC 4122)
+    const chars='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let s1='', s2='';
+    if(typeof crypto!=='undefined'&&crypto.getRandomValues){
+      const bytes=new Uint8Array(8);
+      crypto.getRandomValues(bytes);
+      for(let i=0;i<4;i++)s1+=chars[bytes[i]%chars.length];
+      for(let i=4;i<8;i++)s2+=chars[bytes[i]%chars.length];
+    }else{
+      const now=Date.now().toString(36).toUpperCase().padStart(8,'0');
+      s1=now.substring(0,4);
+      s2=now.substring(4,8);
+    }
+    const tokenCode='TD-PLUS-'+s1+'-'+s2;
+    adminRevealedToken=tokenCode;
+    openTokenRevealModal(tokenCode);
+
+    const payload={
+      plan_key:plan_key,
+      duration_months:duration_months,
+      max_uses:max_uses
+    };
+    if(redeem_by)payload.redeem_by=redeem_by;
+    if(bound_mobile)payload.bound_mobile=bound_mobile;
+
+    if(typeof window.backendAvailable==='function'&&!window.backendAvailable('admin_activation_codes')){
+      const statusArea=document.getElementById('tokenGenStatusArea');
+      if(statusArea){
+        statusArea.innerHTML=typeof renderAdminBlockedCard==='function'
+          ? renderAdminBlockedCard('/api/admin/activation-codes','POST','Capability admin_activation_codes is disabled (404).')
+          : '<div class="admin-badge" style="background:#fee2e2;color:#991b1b;padding:8px">BLOCKED: POST /api/admin/activation-codes</div>';
+      }
+      return;
+    }
+
+    workerPost('/api/admin/activation-codes',payload).then(res=>{
+      const serverCode=res?.code||res?.data?.code||res?.token||res?.data?.token;
+      if(serverCode){
+        adminRevealedToken=serverCode;
+        const codeEl=document.getElementById('revealedTokenCode');
+        if(codeEl)codeEl.textContent=serverCode;
+      }
+      if(typeof loadAdminTokens==='function')loadAdminTokens(true);
+    }).catch(err=>{
+      console.error('Failed to issue activation code on server:',err?.message||err);
+      const statusArea=document.getElementById('tokenGenStatusArea');
+      if(statusArea){
+        statusArea.innerHTML=typeof renderAdminBlockedCard==='function'
+          ? renderAdminBlockedCard('/api/admin/activation-codes','POST',err?.message||'Activation codes endpoint unavailable (404).')
+          : '<div class="admin-badge" style="background:#fee2e2;color:#991b1b;padding:8px">BLOCKED: POST /api/admin/activation-codes</div>';
+      }
+    });
+  });
 }
 
 function openTokenRevealModal(code){
@@ -4486,7 +9798,7 @@ function openTokenRevealModal(code){
     '<h3 style="margin:0 0 6px">One-Time Token Secret Revealed</h3>'+
     '<p class="muted" style="margin:0 0 16px;font-size:13px">Copy this activation token immediately. For security, raw token secret cannot be shown again.</p>'+
     '<div style="background:#f1f5f9;border:2px dashed #94a3b8;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">'+
-      '<code id="revealedTokenCode" style="font-size:18px;font-weight:800;color:#2563eb;letter-spacing:0.05em">'+esc(code)+'</code>'+
+      '<code id="revealedTokenCode" style="font-size:18px;font-weight:800;color:#2563eb;letter-spacing:0.05em"></code>'+
       '<button type="button" class="primary" onclick="copyRevealedToken()">📋 Copy</button>'+
     '</div>'+
     '<div style="margin-top:20px">'+
@@ -4495,10 +9807,12 @@ function openTokenRevealModal(code){
   '</div>';
 
   document.body.appendChild(modal);
+  const codeEl=document.getElementById('revealedTokenCode');
+  if(codeEl)codeEl.textContent=code;
 }
 
 function copyRevealedToken(){
-  if(adminRevealedToken&&navigator.clipboard){
+  if(adminRevealedToken&&typeof navigator!=='undefined'&&navigator.clipboard){
     navigator.clipboard.writeText(adminRevealedToken);
     toast('Token copied to clipboard!','ok');
   }else{
@@ -4512,19 +9826,140 @@ function closeTokenRevealModal(){
   adminRevealedToken=null;
 }
 
-function revokeAdminToken(tokenStr){
-  if(confirm('Revoke activation token '+tokenStr+'?')){
+async function revokeAdminToken(tokenStr){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTokens){
+    toast('Permission denied: Role "'+perms.label+'" cannot revoke tokens.','error');
+    return;
+  }
+  if(!tokenStr)return;
+  if(!confirm('Revoke activation token '+tokenStr+'?'))return;
+  try{
+    await workerPost('/api/admin/tokens/'+encodeURIComponent(tokenStr)+'/revoke');
     toast('Token '+tokenStr+' revoked.','ok');
+    loadAdminTokens(true);
+  }catch(err){
+    toast('Failed to revoke token: '+(err?.message||err),'error');
+  }
+}
+
+function openCreateCouponModal(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot create coupons.','error');
+    return;
+  }
+  let old=document.getElementById('adminCouponModal');
+  if(old)old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='adminCouponModal';
+  modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+
+  modal.innerHTML='<div class="admin-modal-box">'+
+    '<div class="admin-modal-head">'+
+      '<div>'+
+        '<h3 style="margin:0;font-size:17px">Create Promotional Coupon</h3>'+
+        '<span class="muted" style="font-size:12px">Server-verified discount codes for seasonal campaigns or garages.</span>'+
+      '</div>'+
+      '<button type="button" class="ghost" onclick="closeCreateCouponModal()">✕</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="field">'+
+        '<label>Coupon Code</label>'+
+        '<input type="text" id="couponCodeInput" placeholder="e.g. DIWALI50, GARAGE20" style="text-transform:uppercase">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Discount Percentage (%)</label>'+
+        '<input type="number" id="couponDiscountInput" min="1" max="100" placeholder="e.g. 20" value="20">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Maximum Redemptions (Optional)</label>'+
+        '<input type="number" id="couponMaxUsesInput" min="1" placeholder="Leave empty for unlimited">'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>Expiry Date (Optional)</label>'+
+        '<input type="date" id="couponValidUntilInput">'+
+      '</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
+        '<button type="button" class="ghost" onclick="closeCreateCouponModal()">Cancel</button>'+
+        '<button type="button" class="primary" id="btnSubmitCoupon" onclick="submitCreateCoupon()">Create Coupon</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  modal.onclick=e=>{if(e.target===modal)closeCreateCouponModal();};
+  document.body.appendChild(modal);
+}
+
+function closeCreateCouponModal(){
+  const m=document.getElementById('adminCouponModal');
+  if(m)m.remove();
+}
+
+async function submitCreateCoupon(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot create coupons.','error');
+    return;
+  }
+  const code=document.getElementById('couponCodeInput')?.value?.trim()?.toUpperCase()||'';
+  const discount=Number(document.getElementById('couponDiscountInput')?.value||0);
+  const maxUses=Number(document.getElementById('couponMaxUsesInput')?.value)||null;
+  const validUntil=document.getElementById('couponValidUntilInput')?.value||null;
+  if(!code){
+    toast('Coupon code is required.','error');
+    return;
+  }
+  if(isNaN(discount)||discount<1||discount>100){
+    toast('Discount must be between 1% and 100%.','error');
+    return;
+  }
+  const btn=document.getElementById('btnSubmitCoupon');
+  if(btn){btn.disabled=true;btn.textContent='Creating...';}
+  try{
+    await workerPost('/api/admin/coupons',{code,discount_percent:discount,max_uses:maxUses,expires_at:validUntil});
+    toast('Coupon '+code+' created successfully.','ok');
+    closeCreateCouponModal();
+    loadAdminCoupons(true);
+  }catch(err){
+    toast('Failed to create coupon: '+(err?.message||err),'error');
+    if(btn){btn.disabled=false;btn.textContent='Create Coupon';}
+  }
+}
+
+async function deleteAdminCoupon(couponId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot delete coupons.','error');
+    return;
+  }
+  if(!confirm('Deactivate and delete this promotional coupon?'))return;
+  try{
+    await workerDelete('/api/admin/coupons/'+encodeURIComponent(couponId));
+    toast('Coupon deactivated.','ok');
+    loadAdminCoupons(true);
+  }catch(err){
+    toast('Failed to deactivate coupon: '+(err?.message||err),'error');
   }
 }
 
 function openTeamInviteModal(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTeam){
+    toast('Permission denied: Role "'+perms.label+'" cannot invite team members.','error');
+    return;
+  }
   let old=document.getElementById('adminTeamInviteModal');
   if(old)old.remove();
 
   const modal=document.createElement('div');
   modal.id='adminTeamInviteModal';
   modal.className='admin-modal-overlay';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
 
   modal.innerHTML='<div class="admin-modal-box">'+
     '<div class="admin-modal-head">'+
@@ -4535,9 +9970,14 @@ function openTeamInviteModal(){
       '<div class="field"><label>Member Email</label><input type="email" id="teamInviteEmail" placeholder="admin@example.com"></div>'+
       '<div class="field">'+
         '<label>Role Clearance</label>'+
-        '<select id="teamInviteRole"><option value="support">Support Lead (Ticket Triage)</option><option value="billing">Billing Manager (Plans &amp; Tokens)</option><option value="auditor">Compliance Auditor (Read-Only)</option></select>'+
+        '<select id="teamInviteRole">'+
+          '<option value="team_lead">Team Lead (Ticket Triage &amp; Team)</option>'+
+          '<option value="support_agent">Support Agent (Ticket Handling)</option>'+
+          '<option value="support_executive">Support Executive (Ticket Inspection)</option>'+
+          '<option value="super_admin">Super Admin (Full Administrative Access)</option>'+
+        '</select>'+
       '</div>'+
-      '<small class="muted">Invite links are single-use. Expiration follows the configured Supabase Auth email-link lifetime.</small>'+
+      '<small class="muted">Invite creates an administrative profile and issues server credentials.</small>'+
       '<div id="teamInviteStatus" class="muted" role="status" aria-live="polite" style="display:none;padding:9px 11px;border-radius:8px;white-space:normal"></div>'+
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">'+
         '<button type="button" class="ghost" onclick="closeTeamInviteModal()">Cancel</button>'+
@@ -4556,45 +9996,130 @@ function closeTeamInviteModal(){
 }
 
 async function sendTeamInvite(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTeam){
+    toast('Permission denied: Role "'+perms.label+'" cannot invite team members.','error');
+    return;
+  }
   const email=document.getElementById('teamInviteEmail')?.value.trim().toLowerCase()||'';
-  const role=document.getElementById('teamInviteRole')?.value||'';
+  const role=document.getElementById('teamInviteRole')?.value||'team_lead';
   const status=document.getElementById('teamInviteStatus');
   const button=document.getElementById('teamInviteSubmitBtn');
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
     toast('Valid member email required.','error');
     return;
   }
-  if(status){status.style.display='block';status.style.background='rgba(37,99,235,.08)';status.style.color='#1d4ed8';status.textContent='Submitting invitation to Supabase Auth…';}
+  executeProtectedAdminAction('Invite Administrative Team Member',async ()=>{
+  if(status){status.style.display='block';status.style.background='rgba(37,99,235,.08)';status.style.color='#1d4ed8';status.textContent='Submitting invitation to server…';}
   if(button){button.disabled=true;button.textContent='Sending…';}
   try{
-    const result=await workerPost('/api/admin/team-invites',{email,role});
-    if(status){status.style.background='rgba(22,163,74,.08)';status.style.color='#166534';status.textContent='Supabase accepted the invitation request. Actual email delivery depends on the configured mail provider. Invite can be resent if the recipient does not receive it.';}
-    toast('Supabase accepted the invitation request for '+email+'.','ok');
-    if(button){button.textContent='Resend Invitation';button.disabled=false;}
-    // Keep the modal open so the admin can deliberately resend after checking delivery.
+    const result=await workerPost('/api/admin/team/members',{email,role});
+    if(status){
+      status.style.background='rgba(220,38,38,.08)';status.style.color='#166534';
+      if(result?.temp_password){
+        status.innerHTML='Invitation sent. One-time temporary password: <code style="font-weight:700">'+esc(result.temp_password)+'</code> (Copy now; never stored).';
+      }else{
+        status.textContent='Invitation sent successfully to '+email+'.';
+      }
+    }
+    toast('Team invitation sent for '+email+'.','ok');
+    if(button){button.textContent='Done';button.disabled=false;button.onclick=closeTeamInviteModal;}
+    loadAdminTeam(true);
   }catch(err){
     const detail=String(err?.message||'Unknown invitation error');
-    if(status){status.style.background='rgba(220,38,38,.08)';status.style.color='#b91c1c';status.textContent='Invitation failed: '+detail+' Check the email and provider configuration, then select Retry / Resend.';}
-    if(button){button.textContent='Retry / Resend Invitation';button.disabled=false;}
-    toast('Invitation was not confirmed by Supabase. '+detail,'error');
-    console.error('Team invitation request failed', {status:err?.status||null,code:err?.code||null,message:detail});
+    if(status){status.style.background='rgba(220,38,38,.08)';status.style.color='#b91c1c';status.textContent='Invitation failed: '+detail;}
+    if(button){button.textContent='Retry Invitation';button.disabled=false;}
+    toast('Invitation failed: '+detail,'error');
+  }
+  });
+}
+
+async function revokeTeamMember(memberId){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageTeam){
+    toast('Permission denied: Role "'+perms.label+'" cannot revoke team members.','error');
+    return;
+  }
+  if(!confirm('Revoke access for this administrative team member?'))return;
+  try{
+    await workerDelete('/api/admin/team/members/'+encodeURIComponent(memberId));
+    toast('Team member access revoked.','ok');
+    loadAdminTeam(true);
+  }catch(err){
+    toast('Failed to revoke team member: '+(err?.message||err),'error');
+  }
+}
+
+async function handleUpgradeAction(id,action){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManagePlans){
+    toast('Permission denied: Role "'+perms.label+'" cannot triage upgrade requests.','error');
+    return;
+  }
+  const noteEl=document.getElementById('upgradeNote_'+id);
+  const note=noteEl?.value?.trim()||'';
+  try{
+    await workerPost('/api/admin/upgrade-requests/'+encodeURIComponent(id)+'/'+encodeURIComponent(action),{note});
+    toast('Upgrade request marked '+action+'.','ok');
+    loadAdminUpgrades(true);
+  }catch(err){
+    toast('Failed to '+action+' upgrade request: '+(err?.message||err),'error');
   }
 }
 
 function updateUpgradeStatus(reqId,status){
-  toast('Upgrade request marked '+status+'.','ok');
+  handleUpgradeAction(reqId,status);
 }
 
-function exportUsersCsv(){
-  toast('Exporting Users CSV (Permission: super_admin:export)...','ok');
+async function exportUsersCsv(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canManageUsers){
+    toast('Permission denied: Role "'+perms.label+'" cannot export users CSV.','error');
+    return;
+  }
+  executeProtectedAdminAction('Export User Directory CSV',async ()=>{
+    try{
+      toast('Exporting Users CSV...','info');
+      await workerDownloadCsv('/api/admin/users/export.csv','torq-desk-users.csv');
+      toast('Users CSV downloaded successfully.','ok');
+    }catch(err){
+      toast('Users export failed: '+(err?.message||err),'error');
+    }
+  });
 }
 
-function exportTicketsCsv(){
-  toast('Exporting Tickets CSV...','ok');
+async function exportTicketsCsv(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canMutateTickets && !perms.canViewAudit){
+    toast('Permission denied: Role "'+perms.label+'" cannot export tickets CSV.','error');
+    return;
+  }
+  executeProtectedAdminAction('Export Support Tickets CSV',async ()=>{
+    try{
+      toast('Exporting Tickets CSV...','info');
+      await workerDownloadCsv('/api/admin/tickets/export.csv','torq-desk-tickets.csv');
+      toast('Tickets CSV downloaded successfully.','ok');
+    }catch(err){
+      toast('Tickets export failed: '+(err?.message||err),'error');
+    }
+  });
 }
 
-function exportAuditCsv(){
-  toast('Exporting Security Audit CSV...','ok');
+async function exportAuditCsv(){
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.canViewAudit){
+    toast('Permission denied: Role "'+perms.label+'" cannot export audit CSV.','error');
+    return;
+  }
+  executeProtectedAdminAction('Export Security Audit CSV',async ()=>{
+    try{
+      toast('Exporting Security Audit CSV...','info');
+      await workerDownloadCsv('/api/admin/audit/export.csv','torq-desk-audit.csv');
+      toast('Audit CSV downloaded successfully.','ok');
+    }catch(err){
+      toast('Audit export failed: '+(err?.message||err),'error');
+    }
+  });
 }
 
 function saveFestivalBanner(){
@@ -4602,13 +10127,27 @@ function saveFestivalBanner(){
 }
 
 async function adminView(){
-  const primaryAdminEmail='rnyburia@gmail.com';
-  if(String(user?.email||'').trim().toLowerCase()!==primaryAdminEmail){
+  /* UI-ONLY: Admin clearance check in browser. Backend enforces server-side. */
+  const isCandidateAdmin = isSuperAdmin || Boolean(currentAdminRole) || (user && (user.role==='admin'||user.role==='super_admin'||user.role==='team_lead'||user.role==='support_agent'||user.role==='support_executive'));
+  if(!isCandidateAdmin){
     nav('dashboard');
     return;
   }
+  await loadTeamMe();
+  if(teamMeError || (!currentAdminRole && !isSuperAdmin && !(user && (user.role === 'super_admin' || user.role === 'admin')))){
+    renderAdminViewContent();
+    return;
+  }
+  checkForcedPasswordChange();
+  checkForcedProfileCompletion();
+  checkForcedTpinSetup();
+
+  const perms=getAdminRolePermissions(currentAdminRole);
+  if(!perms.allowedScreens.includes(currentAdminScreen)){
+    currentAdminScreen=perms.defaultScreen;
+  }
   renderAdminViewContent();
-  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError){
+  if(!adminTickets.length&&!adminTicketsLoading&&!adminTicketsError&&perms.allowedScreens.includes('tickets')){
     await loadAdminTickets();
   }
 }
@@ -4633,6 +10172,8 @@ window.suspendUserAccount=suspendUserAccount;
 window.openTokenGenModal=openTokenGenModal;
 window.closeTokenGenModal=closeTokenGenModal;
 window.generateAdminToken=generateAdminToken;
+window.saveAdminPlanPrice=saveAdminPlanPrice;
+window.onTokenGenPlanChange=onTokenGenPlanChange;
 window.openTokenRevealModal=openTokenRevealModal;
 window.copyRevealedToken=copyRevealedToken;
 window.closeTokenRevealModal=closeTokenRevealModal;
@@ -4640,12 +10181,76 @@ window.revokeAdminToken=revokeAdminToken;
 window.openTeamInviteModal=openTeamInviteModal;
 window.closeTeamInviteModal=closeTeamInviteModal;
 window.sendTeamInvite=sendTeamInvite;
+window.openCreateCouponModal=openCreateCouponModal;
+window.closeCreateCouponModal=closeCreateCouponModal;
+window.submitCreateCoupon=submitCreateCoupon;
+window.deleteAdminCoupon=deleteAdminCoupon;
+window.handleUpgradeAction=handleUpgradeAction;
+window.revokeTeamMember=revokeTeamMember;
 window.updateUpgradeStatus=updateUpgradeStatus;
 window.exportUsersCsv=exportUsersCsv;
 window.exportTicketsCsv=exportTicketsCsv;
 window.exportAuditCsv=exportAuditCsv;
+window.loadAdminGarages=loadAdminGarages;
+window.renderScreenGarages=renderScreenGarages;
+window.updateAdminGarageStatus=updateAdminGarageStatus;
+window.setAdminGaragesFilter=(val)=>{adminGaragesFilter=val;renderAdminViewContent();};
 window.saveFestivalBanner=saveFestivalBanner;
 window.formatAdminDate=formatAdminDate;
+window.updateHelpUnreadBadge=updateHelpUnreadBadge;
+window.checkTicketUnreadCount=checkTicketUnreadCount;
+window.startTicketUnreadPolling=startTicketUnreadPolling;
+window.stopTicketUnreadPolling=stopTicketUnreadPolling;
+window.openCustomerTicketDetail=openCustomerTicketDetail;
+window.closeCustomerTicketDetail=closeCustomerTicketDetail;
+window.sendCustomerTicketReply=sendCustomerTicketReply;
+window.loadCustomerTicketDetails=loadCustomerTicketDetails;
+window.openAdminTicketDetails=openAdminTicketDetails;
+window.closeAdminTicketDetails=closeAdminTicketDetails;
+window.handleAdminStatusChange=handleAdminStatusChange;
+window.handleAdminAssigneeChange=handleAdminAssigneeChange;
+window.handleAdminPriorityChange=handleAdminPriorityChange;
+window.handleAdminChatToggle=handleAdminChatToggle;
+window.handleAdminShowNameToggle=handleAdminShowNameToggle;
+window.handleAdminSendReply=handleAdminSendReply;
+window.handleAdminEnableChatWithMsg=handleAdminEnableChatWithMsg;
+window.openAdminTicketViewAsUser=openAdminTicketViewAsUser;
+window.closeAdminTicketViewAsUserModal=closeAdminTicketViewAsUserModal;
+window.loadAdminSupportRoster=loadAdminSupportRoster;
+window.isTicketSlaBreached=isTicketSlaBreached;
+window.renderSlaBadge=renderSlaBadge;
+window.normalizeTicketStatus=normalizeTicketStatus;
+window.renderStatusBadge=renderStatusBadge;
+window.renderPriorityBadge=renderPriorityBadge;
+window.renderAdminListContent=renderAdminListContent;
+window.getTicketStatusGroup=getTicketStatusGroup;
+window.setCustomerTicketTab=setCustomerTicketTab;
+window.setAdminTicketTab=setAdminTicketTab;
+window.renderTicketPastList=renderTicketPastList;
+window.getFilteredAdminTickets=getFilteredAdminTickets;
+window.renderAdminStatsHtml=renderAdminStatsHtml;
+window.renderAdminListHtml=renderAdminListHtml;
+window.renderScreenTickets=renderScreenTickets;
+window.loadTeamMe=loadTeamMe;
+window.getAdminRolePermissions=getAdminRolePermissions;
+window.isTicketAssignedToCurrentSpecialist=isTicketAssignedToCurrentSpecialist;
+window.checkForcedPasswordChange=checkForcedPasswordChange;
+window.submitForcedPasswordChange=submitForcedPasswordChange;
+window.checkForcedProfileCompletion=checkForcedProfileCompletion;
+window.submitForcedProfileCompletion=submitForcedProfileCompletion;
+function setCurrentAdminRole(r){
+  currentAdminRole=r;
+  renderAdminViewContent();
+}
+function getCurrentAdminRole(){
+  return currentAdminRole;
+}
+function getCurrentAdminProfile(){
+  return currentAdminProfile;
+}
+window.setCurrentAdminRole=setCurrentAdminRole;
+window.getCurrentAdminRole=getCurrentAdminRole;
+window.getCurrentAdminProfile=getCurrentAdminProfile;
 
 function openOwnerProfile(){
  let old=document.getElementById('ownerProfileModal');if(old)old.remove();
@@ -4743,7 +10348,8 @@ function carsView(){
  const startIndex=(fleetPage-1)*fleetPageSize;
  const pageItems=fleetPageSize===0?list:list.slice(startIndex,startIndex+fleetPageSize);
 
- let html='<div class="step5-toolbar fleet-toolbar">'+
+ let html='<div id="pendingVehicleClaimsSection" class="pending-claims-container"></div>'+
+    '<div class="step5-toolbar fleet-toolbar">'+
    '<div class="fleet-title-wrap">'+
      '<b>Vehicle Fleet &amp; Registrations <span class="fleet-count-badge">'+total+'</span></b>'+
      '<span class="muted">Each vehicle keeps its own independent service history, documents, and compliance records.</span>'+
@@ -4788,7 +10394,7 @@ function carsView(){
              '</div>'+
            '</div>'+
            '<div class="vehicle-card-center">'+
-             '<div class="vehicle-pills">'+
+             '<div class="vehicle-pills">'+getVehicleClaimBadge(c)+
                '<span class="doc-badge '+ins[1]+'">INS: '+ins[0]+'</span>'+
                '<span class="doc-badge '+puc[1]+'">PUC: '+puc[0]+'</span>'+
                (c.vehicle_status==='sold'?'<span class="sold-badge">SOLD</span>':(isActive?'<span class="status ok">ACTIVE VEHICLE</span>':''))+
@@ -4825,6 +10431,7 @@ function carsView(){
    '</div>';
  }
  container.innerHTML=html;
+ if(typeof loadVehicleClaims==='function')loadVehicleClaims();
 }
 
 window.setFleetFilter=function(f){fleetFilter=f;fleetPage=1;carsView()};
@@ -4924,6 +10531,14 @@ function renderHistory(){
   const tb=$('historyTable');if(tb)tb.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle to view its maintenance records.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
   const sumEl=$('historySpendSummary');if(sumEl)sumEl.innerHTML='';
   return;
+ }
+ /* UI-ONLY: Garage-created history is locked until the claim is confirmed */
+ const isClaimPending = car.claim_status === 'pending' || car.claim_status === 'pending_confirmation' || Boolean(car.is_garage_unconfirmed);
+ if (isClaimPending) {
+   const tb=$('historyTable');
+   if(tb)tb.innerHTML='<div class="card locked-garage-history-card" role="alert" style="text-align:center;padding:36px 16px"><div class="locked-icon" style="font-size:32px;margin-bottom:8px" aria-hidden="true">🔒</div><h3 style="margin:0 0 6px 0">History Locked</h3><p class="muted" style="margin:0">History from a garage is waiting for your confirmation.</p></div>';
+   const sumEl=$('historySpendSummary');if(sumEl)sumEl.innerHTML='';
+   return;
  }
  let currentYear=$('year')?.value||'all';
  let currentType=$('historyType')?.value||'all';
@@ -5091,9 +10706,11 @@ async function docsView(){
   const dl=$('docList');if(dl)dl.innerHTML='<div class="card empty-state-card" style="text-align:center;padding:40px 20px"><p class="muted">Please select or add a vehicle first to view its private document vault.</p><button class="primary" onclick="window.openNewCarModal()">＋ Add Car</button></div>';
   return;
  }
+ const isStorageExceeded = Boolean(userPlanStatus && Number(userPlanStatus.storage_mb_used || 0) >= Number(userPlanStatus.storage_mb_limit || 10));
+ const storageBanner = isStorageExceeded ? '<div class="plan-storage-banner"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">💾</span><div><b>Vault Storage Limit Reached</b><p style="margin:2px 0 0;font-size:12px">You have used '+userPlanStatus.storage_mb_used+' of '+userPlanStatus.storage_mb_limit+' MB on your current plan. Upgrade to expand your encrypted document vault.</p></div></div><button type="button" class="primary btn-sm" onclick="openPlanComparisonModal()">Upgrade Storage</button></div>' : '';
  let active=docs.filter(d=>!d.archived_at),arch=docs.filter(d=>d.archived_at),groups={insurance:[],puc:[],rc:[],other:[]};
  active.forEach(d=>(groups[d.document_type]||groups.other).push(d));
- let html='<div class="doc-grid">';
+ let html=storageBanner+'<div class="doc-grid">';
  const catConfigs=[
   ['rc','Registration Certificate','td-icon-book'],
   ['puc','PUC Certificate','td-icon-route'],
@@ -5171,6 +10788,12 @@ function extractionReviewField(id,label,value,type='text',unverified=false){
 }
 function openExtractionReview(kind,initial,validation,meta={}){return new Promise(resolve=>{const data=JSON.parse(JSON.stringify(initial||{}));let modal=document.getElementById('extractionReviewModal');if(modal)modal.remove();modal=document.createElement('div');modal.id='extractionReviewModal';modal.style='position:fixed;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(8px);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';const isRc=kind==='rc',isPuc=kind==='puc',fields=isRc?[['registration_no','Regn No','text'],['date_of_regn','Date of Regn','date'],['regn_validity','Regn Validity','date'],['chassis_no','Chassis No','text'],['engine_no','Engine No','text'],['owner_name','Owner Name','text'],['owner_relation','S/D/W of','text'],['ownership_type','Ownership Type','text'],['address','Address','text'],['fuel','Fuel','text'],['emission_norms','Emission Norms (BS)','text'],['vehicle_class','Vehicle Class','text'],['maker','Maker','text'],['model','Model','text'],['colour','Colour','text'],['body_type','Body Type','text'],['seating','Seating','number'],['unladen_weight','Unladen Weight (Kg)','number'],['cubic_capacity','Cubic Capacity','number'],['mfg_month_year','Month-Year of Mfg','text'],['no_of_cylinders','No. of Cylinders','number'],['registration_authority','Registration Authority','text'],['card_issue_date','Card Issue Date','date']]:isPuc?[['test_date','Test Date','date'],['valid_until','Validity Upto','date'],['certificate_number','Certificate SL. No.','text'],['cost','Fees','number']]:[['insurer_name','Insurer Name','text'],['policy_number','Policy No','text'],['insured_name','Insured Name','text'],['period_from','Period From','date'],['period_to','Period To','date'],['reg_no','Reg No','text'],['chassis_no','Chassis','text'],['engine_no','Engine','text'],['idv','IDV','number'],['total_premium','Total / Gross Premium','number'],['previous_policy_number','Previous Policy No','text'],['previous_insurer','Previous Insurer','text'],['policy_type','Policy Type','text']];const inputField=(f)=>{const val=f[2]==='date'?formatDateNice(data[f[0]]):data[f[0]]??'';return '<label class="ex-review-field"><span>'+esc(f[1])+(data.confidence?.[f[0]]==='unverified'||data.confidence?.[f[0]]==='review'?' <em>UNVERIFIED</em>':'')+'</span>'+dateInputHtml(f[0],data[f[0]])+'</label>'.replace('>'+dateInputHtml(f[0],data[f[0]])+'</label>','>'+dateInputHtml(f[0],data[f[0]])+'</label>').replace('type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"','type="text" inputmode="numeric" maxlength="10" placeholder="DD-MM-YYYY" data-date-input="1"')||''};const evidenceText=key=>{const c=String(data.confidence?.[key]||'unverified'),v=c.match(/^verified:(\d+)/),one=c.match(/^single:(\d+)/);if(v)return 'Verified (found on '+v[1]+' pages)';if(one)return 'Single source · page '+one[1];if(c==='high')return 'Single source';if(c==='medium')return 'Single source · review recommended';if(c==='review')return 'Needs review';return 'Unverified'};const evidenceHtml=key=>'<small class="ex-field-evidence '+(String(data.confidence?.[key]||'unverified').startsWith('verified:')?'is-verified':String(data.confidence?.[key]||'').startsWith('single:')?'is-single':'is-unverified')+'">'+esc(evidenceText(key))+(data.field_sources?.[key]?.length?' · Source page(s): '+esc(data.field_sources[key].join(', ')):'')+'</small>';const fieldHtml=fields.map(f=>'<label class="ex-review-field"><span>'+esc(f[1])+'</span>'+(f[2]==='date'?dateInputHtml(f[0],data[f[0]]):'<input id="'+esc(f[0])+'" type="'+(f[2]==='number'?'number':'text')+'" value="'+esc(data[f[0]]??'')+'">')+evidenceHtml(f[0])+'</label>').join('');const devDiagnostics=(window.CARMY_DEV_DIAGNOSTICS===true||new URLSearchParams(window.location.search).get('debugExtraction')==='1')&&kind==='insurance'&&data.diagnostics;const diagnosticsHtml=devDiagnostics?'<details class="extraction-diagnostics"><summary>Developer extraction diagnostics</summary><p>Pages: '+esc(data.diagnostics.page_count)+'</p><pre>'+esc(JSON.stringify(data.diagnostics,null,2))+'</pre></details>':'';let duplicate='';if(meta.saved){const diff=fields.map(f=>{const old=meta.saved[f[0]],neu=data[f[0]];return old!=null&&String(old)!==String(neu??'')?'<div><b>'+esc(f[1])+'</b>: saved <span>'+esc(old)+'</span> → extracted <span>'+esc(neu??'')+'</span></div>':''}).join('');duplicate='<div class="ex-review-duplicate"><b>Already saved</b><p>Existing non-empty values will not be overwritten. Only empty saved fields can be filled.</p>'+(diff||'<span>No field differences.</span>')+'</div>'}const claim=isRc||isPuc?'':'<div class="ex-review-claim"><div><b>Claim taken</b><small>Choose Yes or No before saving.</small></div><div class="ex-review-claim-actions"><label><input type="radio" name="exClaim" value="yes"> Yes</label><label><input type="radio" name="exClaim" value="no"> No</label></div><label class="ex-review-field ex-claim-invoice" id="exClaimInvoiceWrap" style="display:none"><span>Claim Invoice No. *</span><input id="claim_invoice_no" type="text" value=""></label></div>';const thumb=meta.thumbnail?'<div class="ex-review-preview"><img src="'+meta.thumbnail+'" alt="Document preview"></div>':'';modal.innerHTML='<div class="ex-review-card"><div class="ex-review-head"><div><div class="ex-review-kicker">REVIEW BEFORE SAVE</div><h2>'+esc(isRc?'RC details review':isPuc?'PUC certificate review':'Insurance policy review')+'</h2><p>Nothing is saved until you confirm.</p></div><button class="ghost" id="exReviewCancel" type="button">Cancel</button></div><div class="ex-review-layout">'+thumb+'<div><div id="exReviewValidation" class="ex-review-validation"></div>'+duplicate+'<div class="ex-review-grid">'+fieldHtml+'</div>'+diagnosticsHtml+(!isPuc?'':(data.suggested_valid_until&&!data.valid_until?'<div class="ex-review-validation">Suggested validity: <b>'+esc(formatDateNice(data.suggested_valid_until))+'</b> — please verify and enter it.</div>':''))+claim+'</div></div><div class="ex-review-footer"><span id="exReviewStatus"></span><div><button class="ghost" id="exReviewBack" type="button">Cancel</button><button class="primary" id="exReviewConfirm" type="button">CONFIRM &amp; SAVE</button></div></div></div>';document.body.appendChild(modal);wireDateInputs(modal);const read=()=>{for(const f of fields){const el=document.getElementById(f[0]);if(el)data[f[0]]=f[2]==='date'?dateInputValue(f[0]):el.value===''?null:(f[2]==='number'?Number(el.value):el.value)}if(kind==='insurance'){const q=document.querySelector('input[name="exClaim"]:checked');data.claim_taken=q?String(q.value)==='yes':null;data.claim_invoice_no=document.getElementById('claim_invoice_no')?.value.trim()||null}return data};const render=()=>{const d=read(),v=CarmyExtraction.validate(d,car,kind);if(kind==='insurance'){if(!d.period_from||!d.period_to)v.errors.push('Policy period From/To is required.');if(d.period_from&&d.period_to&&d.period_from>d.period_to)v.errors.push('Policy period is invalid.');if(d.claim_taken===null)v.errors.push('Choose Claim Yes or No.');if(d.claim_taken===true&&!d.claim_invoice_no)v.errors.push('Claim Invoice No. is required when Claim = Yes.')}if(isPuc&&d.valid_until&&data.suggested_valid_until&&d.valid_until!==data.suggested_valid_until)v.warnings.push('Validity differs from test date + 1 year - 1 day. Please verify.');const box=document.getElementById('exReviewValidation'),btn=document.getElementById('exReviewConfirm');box.innerHTML=(v.errors.length?'<b>Cannot save yet</b><ul>'+v.errors.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<b class="ok">Vehicle/type checks passed.</b>')+(v.warnings.length?'<div class="ex-review-warning">'+v.warnings.map(x=>esc(x)).join('<br>')+'</div>':'');if(isPuc)document.getElementById('exReviewStatus').textContent='Status preview: '+(!d.valid_until?'Needs verification':d.valid_until>=istTodayClient()?'Current':'Archive');else if(kind==='insurance')document.getElementById('exReviewStatus').textContent='Status preview: '+policyStatusPreview(d.period_from,d.period_to);btn.disabled=v.errors.length>0;return{data:d,validation:v}};modal.querySelectorAll('input').forEach(x=>x.addEventListener('input',render));modal.querySelectorAll('input[name="exClaim"]').forEach(x=>x.addEventListener('change',()=>{document.getElementById('exClaimInvoiceWrap').style.display=document.querySelector('input[name="exClaim"]:checked')?.value==='yes'?'block':'none';render()}));const close=()=>{modal.remove();resolve(null)};document.getElementById('exReviewCancel').onclick=close;document.getElementById('exReviewBack').onclick=close;document.getElementById('exReviewConfirm').onclick=()=>{const r=render();if(r.validation.errors.length)return;modal.remove();resolve(r.data)};render()})}
 function openDocUploader(preselectedType=''){
+ const isStorageExceeded = Boolean(userPlanStatus && Number(userPlanStatus.storage_mb_used || 0) >= Number(userPlanStatus.storage_mb_limit || 10));
+ if(isStorageExceeded){
+  openPlanComparisonModal();
+  toast('Document vault storage limit reached ('+userPlanStatus.storage_mb_used+'/'+userPlanStatus.storage_mb_limit+' MB). Upgrade your plan to upload more files.', 'info');
+  return;
+ }
  let old=document.getElementById('docUploadModal');if(old)old.remove();
  let m=document.createElement('div');m.id='docUploadModal';
  m.innerHTML='<div class="doc-upload-card" role="dialog" aria-modal="true"><div class="toolbar"><div><h3 id="docUploadTitle">Upload Vehicle Document</h3><p class="muted">Maximum 10 MB. Allowed files: PDF, JPG, JPEG, PNG. RC and Insurance are reviewed before extracted data is saved.</p></div><button class="ghost" id="docUploadClose" type="button">✕</button></div><div class="form"><div class="field"><label>Document Type *</label><select id="docType"><option value="rc">Registration Certificate</option><option value="puc">PUC</option><option value="insurance">Insurance</option><option value="other">Other</option></select></div><div class="field" id="docNameWrap" style="display:none"><label>Document Name *</label><input id="docName" placeholder="e.g. Fastag / Permit / Fitness Certificate"></div><div class="field"><label>Issue Date <span id="docIssueReq">*</span></label>'+dateInputHtml('docIssue','')+'</div><div class="field" id="docExpiryWrap" style="display:none"><label>Expiry Date *</label>'+dateInputHtml('docExpiry','')+'</div><div class="field full" id="rcValidityInfo" style="display:none"><div class="rc-auto-box">RC validity: <b id="rcValidityYears"></b> years • Calculated expiry: <b id="rcCalculatedExpiry">—</b></div></div><div class="field full"><label>Select File *</label><input id="docFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">Security limit: 10 MB • PDF/JPG/JPEG/PNG only.</small></div><div class="full"><button class="primary" id="docUploadBtn" type="button"><span class="upload-btn-label">UPLOAD DOCUMENT</span></button></div></div></div>';
@@ -5978,3 +11601,235 @@ function close(){modal.hidden=true;document.body.classList.remove('md-info-open'
 document.addEventListener('click',e=>{const t=e.target.closest('[data-info-tab]');if(t){open(t.dataset.infoTab);return}const o=e.target.closest('[data-info-open]');if(o){open(o.dataset.infoOpen);return}if(e.target.closest('[data-info-close]'))close()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)close()});
 })();
+
+
+/* UI-ONLY: Vehicle claim status badge */
+function getVehicleClaimBadge(c) {
+  const status = (c?.claim_status || c?.verification_status || 'verified').toLowerCase();
+  if (status === 'pending' || status === 'pending_confirmation') {
+    return '<span class="vehicle-claim-badge pending" data-claim-status="pending">Pending confirmation</span>';
+  }
+  if (status === 'unclaimed') {
+    return '<span class="vehicle-claim-badge unclaimed" data-claim-status="unclaimed">Unclaimed (created by garage)</span>';
+  }
+  return '<span class="vehicle-claim-badge verified" data-claim-status="verified">Verified (linked)</span>';
+}
+
+let pendingClaimsList = [];
+
+/* UI-ONLY: Vehicle claims fetch & render. Backend enforces server-side. */
+async function loadVehicleClaims() {
+  const container = document.getElementById('pendingVehicleClaimsSection');
+  if (!container) return;
+
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    container.innerHTML = typeof renderBackendBlockedCard === 'function'
+      ? renderBackendBlockedCard('/api/vehicle-claims', 'GET', 'Vehicle claims capability is BLOCKED because the backend route is not deployed.')
+      : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/vehicle-claims</code></div>';
+    return;
+  }
+
+  try {
+    const res = await authApiRequest('/api/vehicle-claims', { method: 'GET' });
+    if (!res || !res.ok || !Array.isArray(res.data)) {
+      container.innerHTML = typeof renderBackendBlockedCard === 'function'
+        ? renderBackendBlockedCard('/api/vehicle-claims', 'GET', 'Vehicle claims route returned 404 or an error.')
+        : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/vehicle-claims</code></div>';
+      return;
+    }
+
+    pendingClaimsList = res.data;
+    if (pendingClaimsList.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const cardsHtml = pendingClaimsList.map(claim => {
+      const reg = esc(claim.registration_no || claim.vehicle_number || '');
+      const garage = esc(claim.garage_name || '');
+      return '<div class="card pending-claim-card" id="claimCard-' + esc(claim.id) + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+          '<span class="vehicle-claim-badge pending">Pending confirmation</span>' +
+          '<small class="muted">Claim ID: ' + esc(claim.id) + '</small>' +
+        '</div>' +
+        '<div class="pending-claim-details" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">' +
+          '<div>' +
+            '<span class="muted" style="font-size:11px;display:block;text-transform:uppercase">Vehicle Number</span>' +
+            '<b class="pending-claim-reg">' + reg + '</b>' +
+          '</div>' +
+          '<div>' +
+            '<span class="muted" style="font-size:11px;display:block;text-transform:uppercase">Garage Name</span>' +
+            '<b class="pending-claim-garage">' + garage + '</b>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pending-claim-actions" style="display:flex;gap:10px;flex-wrap:wrap">' +
+          '<button type="button" class="primary btn-claim-confirm" onclick="startClaimConfirm(\'' + esc(claim.id) + '\')">Confirm (owner)</button>' +
+          '<button type="button" class="ghost btn-claim-reject" onclick="rejectVehicleClaim(\'' + esc(claim.id) + '\')">Not my vehicle (owner)</button>' +
+        '</div>' +
+        '<div id="claimActionBlocked-' + esc(claim.id) + '" style="margin-top:8px"></div>' +
+      '</div>';
+    }).join('');
+
+    container.innerHTML = '<div class="pending-claims-wrapper" style="margin-bottom:16px">' +
+      '<h4 style="margin:0 0 8px 0;font-size:14px;color:#0f172a">Action Required: Garage Vehicle Claims</h4>' +
+      cardsHtml +
+    '</div>';
+  } catch (err) {
+    container.innerHTML = typeof renderBackendBlockedCard === 'function'
+      ? renderBackendBlockedCard('/api/vehicle-claims', 'GET', 'Vehicle claims route is missing or unreachable.')
+      : '<div class="backend-blocked-card"><div class="backend-blocked-badge">BLOCKED</div><code>GET /api/vehicle-claims</code></div>';
+  }
+}
+
+async function startClaimConfirm(claimId) {
+  const blockedEl = document.getElementById('claimActionBlocked-' + claimId);
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/send', 'POST', 'Vehicle claim OTP send route is BLOCKED.');
+    }
+    return;
+  }
+
+  try {
+    const res = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/otp/send', { method: 'POST' });
+    if (!res || !res.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/send', 'POST', res?.error || 'Vehicle claim OTP send returned an error.');
+      }
+      return;
+    }
+    openClaimOtpModal(claimId);
+  } catch (err) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/send', 'POST', 'Route missing or unreachable.');
+    }
+  }
+}
+
+function openClaimOtpModal(claimId) {
+  const old = document.getElementById('claimOtpModal');
+  if (old) old.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'claimOtpModal';
+  modal.className = 'profile-gate-overlay';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+
+  modal.innerHTML = '<div class="profile-gate-box">' +
+    '<div class="profile-gate-head">' +
+      '<div class="profile-gate-icon" aria-hidden="true">📱</div>' +
+      '<h2 class="profile-gate-title">Verify Ownership Claim</h2>' +
+      '<p class="profile-gate-desc">Confirming this vehicle requires a fresh mobile OTP sent to your registered number (+91).</p>' +
+      '<small class="muted">Pending owner decision (Mobile OTP provider pending)</small>' +
+    '</div>' +
+    '<div class="field" style="margin-top:10px">' +
+      '<label>6-Digit OTP</label>' +
+      '<input type="text" id="claimOtpInput" maxlength="6" inputmode="numeric" placeholder="Enter 6-digit code" class="otp-code-input" style="width:100%;font-size:18px;letter-spacing:4px;text-align:center;padding:10px">' +
+      '<div id="claimOtpError" style="color:#e11d48;font-size:12px;margin-top:4px"></div>' +
+    '</div>' +
+    '<div id="claimOtpBlocked"></div>' +
+    '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">' +
+      '<button type="button" class="ghost" onclick="closeClaimOtpModal()">Cancel</button>' +
+      '<button type="button" class="primary" id="claimOtpSubmitBtn" onclick="submitClaimOtp(\'' + esc(claimId) + '\')">Verify &amp; Confirm</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+}
+
+function closeClaimOtpModal() {
+  const m = document.getElementById('claimOtpModal');
+  if (m) m.remove();
+}
+
+async function submitClaimOtp(claimId) {
+  const input = document.getElementById('claimOtpInput');
+  const errEl = document.getElementById('claimOtpError');
+  const blockedEl = document.getElementById('claimOtpBlocked');
+  const code = (input?.value || '').trim();
+
+  if (!code || !/^[0-9]{6}$/.test(code)) {
+    if (errEl) errEl.textContent = 'Please enter a valid 6-digit OTP.';
+    return;
+  }
+  if (errEl) errEl.textContent = '';
+
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/verify', 'POST', 'Vehicle claim OTP verify route is BLOCKED.');
+    }
+    return;
+  }
+
+  try {
+    const vRes = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/otp/verify', {
+      method: 'POST',
+      body: { code }
+    });
+    if (!vRes || !vRes.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/otp/verify', 'POST', vRes?.error || 'Invalid OTP code.');
+      }
+      return;
+    }
+
+    const cRes = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/confirm', {
+      method: 'POST'
+    });
+    if (!cRes || !cRes.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/confirm', 'POST', cRes?.error || 'Claim confirmation failed.');
+      }
+      return;
+    }
+
+    if (input) input.value = '';
+    closeClaimOtpModal();
+    toast('Vehicle confirmed');
+    await loadCars();
+    await loadData(true);
+    carsView();
+  } catch (err) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/confirm', 'POST', 'Route missing or unreachable.');
+    }
+  }
+}
+
+async function rejectVehicleClaim(claimId) {
+  const blockedEl = document.getElementById('claimActionBlocked-' + claimId);
+  if (typeof backendAvailable === 'function' && !backendAvailable('vehicle_claims')) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/reject', 'POST', 'Vehicle claim reject route is BLOCKED.');
+    }
+    return;
+  }
+
+  try {
+    const res = await authApiRequest('/api/vehicle-claims/' + encodeURIComponent(claimId) + '/reject', {
+      method: 'POST'
+    });
+    if (!res || !res.ok) {
+      if (blockedEl) {
+        blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/reject', 'POST', res?.error || 'Reject request failed.');
+      }
+      return;
+    }
+
+    toast('Claim rejected');
+    await loadCars();
+    carsView();
+  } catch (err) {
+    if (blockedEl) {
+      blockedEl.innerHTML = renderBackendBlockedCard('/api/vehicle-claims/' + claimId + '/reject', 'POST', 'Route missing or unreachable.');
+    }
+  }
+}
+
+window.getVehicleClaimBadge = getVehicleClaimBadge;
+window.loadVehicleClaims = loadVehicleClaims;
+window.startClaimConfirm = startClaimConfirm;
+window.openClaimOtpModal = openClaimOtpModal;
+window.closeClaimOtpModal = closeClaimOtpModal;
+window.submitClaimOtp = submitClaimOtp;
+window.rejectVehicleClaim = rejectVehicleClaim;

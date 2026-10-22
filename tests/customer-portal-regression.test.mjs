@@ -82,6 +82,8 @@ function createMockEnv(initialLastSeen = Math.floor(Date.now() / 1000) - 10) {
 
 function createAppHarness(overrides = {}) {
   const store = new Map();
+  store.set('carmy_last_activity', String(Date.now()));
+  store.set('carmy_last_activity_force', String(Date.now()));
   const elements = new Map();
   const removedSet = new Set();
   function makeStyle() {
@@ -114,6 +116,11 @@ function createAppHarness(overrides = {}) {
           },
           contains(c) { return this._classes.has(c); }
         },
+        get className() { return [...this.classList._classes].join(' '); },
+        set className(v) {
+          this.classList._classes.clear();
+          if (v) String(v).split(/\s+/).filter(Boolean).forEach(c => this.classList._classes.add(c));
+        },
         style: makeStyle(),
         dataset: {},
         get innerHTML() { return this._innerHTML || ''; },
@@ -129,14 +136,22 @@ function createAppHarness(overrides = {}) {
         },
         value: '',
         disabled: false,
-        setAttribute: () => {},
-        getAttribute: () => null,
-        removeAttribute: () => {},
+        checked: false,
+        _attrs: {},
+        setAttribute(k, v) { if (!this._attrs) this._attrs = {}; this[k] = v; this._attrs[k] = String(v); },
+        getAttribute(k) { return (this._attrs && this._attrs[k] !== undefined) ? this._attrs[k] : (this[k] ? String(this[k]) : null); },
+        removeAttribute(k) { delete this[k]; if (this._attrs) delete this._attrs[k]; },
         addEventListener: () => {},
         removeEventListener: () => {},
         focus: () => {},
         blur: () => {},
-        appendChild: (child) => child,
+        _children: [],
+        appendChild(child) {
+          if (!this._children) this._children = [];
+          if (child) child._parent = this;
+          this._children.push(child);
+          return child;
+        },
         insertAdjacentHTML: () => {},
         click() {
           if (typeof this.onclick === 'function') return this.onclick();
@@ -144,11 +159,27 @@ function createAppHarness(overrides = {}) {
         remove() {
           elements.delete(currentId);
           removedSet.add(currentId);
+          if (this._parent && this._parent._children) {
+            this._parent._children = this._parent._children.filter(c => c !== this);
+          }
         },
         closest: () => null,
         contains: () => true,
-        querySelector: (sel) => sel?.startsWith('#') ? (removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1))) : null,
-        querySelectorAll: () => []
+        querySelector(sel) {
+          if (sel?.startsWith('#')) return removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1));
+          if (sel?.startsWith('.')) {
+            const cls = sel.slice(1);
+            return (this._children || []).find(c => c.classList?.contains(cls)) || null;
+          }
+          return null;
+        },
+        querySelectorAll(sel) {
+          if (sel?.startsWith('.')) {
+            const cls = sel.slice(1);
+            return (this._children || []).filter(c => c.classList?.contains(cls));
+          }
+          return [];
+        }
       };
       elements.set(id, el);
     }
@@ -225,9 +256,20 @@ function createAppHarness(overrides = {}) {
     },
     getElementById: (id) => removedSet.has(id) ? null : makeEl(id),
     querySelector: (sel) => sel?.startsWith('#') ? (removedSet.has(sel.slice(1)) ? null : makeEl(sel.slice(1))) : null,
-    querySelectorAll: () => [],
+    querySelectorAll: (sel) => {
+      const results = [];
+      for (const [key, el] of elements.entries()) {
+        if (removedSet.has(key)) continue;
+        if (sel?.includes?.('[data-view="help"]') && el.dataset?.view === 'help') {
+          results.push(el);
+        } else if (sel?.startsWith?.('.') && el.classList?.contains(sel.slice(1))) {
+          results.push(el);
+        }
+      }
+      return results;
+    },
     head: { ...makeEl('head'), appendChild: () => {} },
-    body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, contains: () => true }
+    body: { ...makeEl('body'), dataset: {}, insertAdjacentHTML: () => {}, appendChild: () => {}, prepend: () => {}, contains: () => true }
   };
 
   const activeTimers = new Set();
@@ -335,18 +377,134 @@ function createAppHarness(overrides = {}) {
     performance: { now: () => Date.now() },
     atob: globalThis.atob || ((s) => Buffer.from(s, 'base64').toString('binary')),
     btoa: globalThis.btoa || ((s) => Buffer.from(s, 'binary').toString('base64')),
-    Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console,
+    Date, Math, Number, String, Boolean, Array, Object, Promise, Error, RegExp, console, Response: globalThis.Response,
     confirm: overrides.confirm || (() => true),
     prompt: overrides.prompt || ((msg, def) => def !== undefined ? def : ''),
-    fetch: overrides.fetch || (async () => new Response(JSON.stringify({ ok: true, data: [] }))),
+    fetch: overrides.fetch || (async (url) => {
+      const u = String(url || '');
+      if (u.includes('/api/meta/capabilities')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: {
+            auth_signup: true,
+            auth_email_otp: true,
+            auth_mobile_otp: true,
+            profile: true,
+            profile_status: true,
+            profile_mobile_change: true,
+            garage_types: true
+          }
+        }), { status: 200 });
+      }
+      if (u.includes('/api/profile/status')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          data: {
+            email_verified: true,
+            mobile_verified: true,
+            profile_complete: true,
+            missing: []
+          }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }),
     ...overrides
   };
 
   vm.createContext(context);
+  const rawBackendCode = fs.readFileSync(path.join(root, 'js/backend-config.js'), 'utf8');
+  const defaultCaps = overrides.defaultCapabilities !== false;
+  // Test harness provides test-only capability setter without exposing it in production js/
+  const backendConfigCode = rawBackendCode.replace('t.getBackendCapabilities = getBackendCapabilities;', `t.getBackendCapabilities = getBackendCapabilities;
+    t.setBackendCapabilities = function(caps) {
+      if (!caps || typeof caps !== 'object') return;
+      Object.keys(DEFAULT_CAPABILITIES).forEach(function(key) {
+        if (key in caps) {
+          backendCapabilities[key] = Boolean(caps[key]);
+        }
+      });
+      capabilitiesLoaded = true;
+    };
+    if (${defaultCaps}) {
+      Object.keys(DEFAULT_CAPABILITIES).forEach(function(key) {
+        backendCapabilities[key] = true;
+      });
+    }`);
+  vm.runInContext(backendConfigCode, context);
+  if (context.window) {
+    context.backendAvailable = context.window.backendAvailable;
+    context.fetchBackendCapabilities = context.window.fetchBackendCapabilities;
+    context.setBackendCapabilities = context.window.setBackendCapabilities;
+    context.getBackendCapabilities = context.window.getBackendCapabilities;
+    context.renderBackendBlockedCard = context.window.renderBackendBlockedCard;
+  }
+  const planCatalogCode = fs.readFileSync(path.join(root, 'js/plan-catalog.js'), 'utf8');
+  vm.runInContext(planCatalogCode, context);
+  if (context.window) {
+    context.PLAN_CATALOG = context.window.PLAN_CATALOG;
+  }
   const code = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
   vm.runInContext(code, context);
+  if (context.window) {
+    context.authApiRequest = context.window.authApiRequest;
+    context.signupState = context.window.signupState;
+    context.renderSignupFlow = context.window.renderSignupFlow;
+    context.resetSignupState = context.window.resetSignupState;
+    context.cancelSignupFlow = context.window.cancelSignupFlow;
+    context.selectSignupAccountType = context.window.selectSignupAccountType;
+    context.selectSignupGarageType = context.window.selectSignupGarageType;
+    context.nextSignupStep = context.window.nextSignupStep;
+    context.prevSignupStep = context.window.prevSignupStep;
+    context.toggleSignupPasswordVisibility = context.window.toggleSignupPasswordVisibility;
+    context.evaluatePasswordStrength = context.window.evaluatePasswordStrength;
+    context.updateSignupPasswordMeter = context.window.updateSignupPasswordMeter;
+    context.submitSignupCreds = context.window.submitSignupCreds;
+    context.startEmailOtpCooldown = context.window.startEmailOtpCooldown;
+    context.sendEmailOtp = context.window.sendEmailOtp;
+    context.resendEmailOtp = context.window.resendEmailOtp;
+    context.submitEmailOtp = context.window.submitEmailOtp;
+    context.startMobileOtpCooldown = context.window.startMobileOtpCooldown;
+    context.sendMobileOtp = context.window.sendMobileOtp;
+    context.resendMobileOtp = context.window.resendMobileOtp;
+    context.submitMobileOtp = context.window.submitMobileOtp;
+    context.submitSignupProfile = context.window.submitSignupProfile;
+    context.finishSignup = context.window.finishSignup;
+    context.checkProfileGate = context.window.checkProfileGate;
+    context.isLocalhostProfileGateBypass = context.window.isLocalhostProfileGateBypass;
+    context.showDevProfileGateBypassBanner = context.window.showDevProfileGateBypassBanner;
+    context.removeDevProfileGateBypassBanner = context.window.removeDevProfileGateBypassBanner;
+    context.removeProfileGateOverlay = context.window.removeProfileGateOverlay;
+    context.renderProfileGateBlocked = context.window.renderProfileGateBlocked;
+    context.renderProfileGateMissing = context.window.renderProfileGateMissing;
+    context.profileGateSignOut = context.window.profileGateSignOut;
+    context.profileGateResumeVerification = context.window.profileGateResumeVerification;
+    context.renderMobileChangeBlocked = context.window.renderMobileChangeBlocked;
+    context.openMobileChangeOtpModal = context.window.openMobileChangeOtpModal;
+    context.submitMobileChangeOtp = context.window.submitMobileChangeOtp;
+    context.getVehicleClaimBadge = context.window.getVehicleClaimBadge;
+    context.loadVehicleClaims = context.window.loadVehicleClaims;
+    context.startClaimConfirm = context.window.startClaimConfirm;
+    context.openClaimOtpModal = context.window.openClaimOtpModal;
+    context.closeClaimOtpModal = context.window.closeClaimOtpModal;
+    context.submitClaimOtp = context.window.submitClaimOtp;
+    context.rejectVehicleClaim = context.window.rejectVehicleClaim;
+  }
+  store.set('td-garage-auth-v2', '1');
+  try {
+    const garageCode = fs.readFileSync(path.join(root, 'js/garage-workspace.js'), 'utf8');
+    vm.runInContext(garageCode, context);
+    if (context.window) {
+      context.checkGarageVehicleMatch = context.window.checkGarageVehicleMatch;
+      context.onBillChannelChange = context.window.onBillChannelChange;
+      context.sendBillNotification = context.window.sendBillNotification;
+      context.openPrintableInvoice = context.window.openPrintableInvoice;
+    }
+  } catch (e) {}
   return { context, store, elements, makeEl, mockDb, teardown, eval: (expr) => vm.runInContext(expr, context) };
 }
+
+export { createAppHarness };
 
 // -------------------------------------------------------------
 // 1. Worker API & D1 Cache Tests (Executing Production Worker)
@@ -821,6 +979,9 @@ test("Client Production: worker heartbeat failure falls back gracefully and perm
   let touchRpcCalled = false;
   const h = createAppHarness({
     fetch: async (url) => {
+      if (String(url).includes("/api/profile/status")) {
+        return new Response(JSON.stringify({ ok: true, data: { email_verified: true, mobile_verified: true, profile_complete: true } }));
+      }
       if (String(url).includes("/api/session/heartbeat")) {
         return new Response(JSON.stringify({ ok: false, error: { code: "INTERNAL_ERROR", message: "Internal server error." } }), { status: 500 });
       }
@@ -892,10 +1053,15 @@ test("Client Production: successful vehicle loading populates memory, selections
 
 test("Client Production: loading-state completion keeps shell hidden until target view is rendered", async (t) => {
   const h = createAppHarness({
-    fetch: async () => new Response(JSON.stringify({
-      ok: true,
-      data: [{ id: "car-order-test", registration_no: "CH01BT6268" }]
-    }))
+    fetch: async (url) => {
+      if (String(url).includes("/api/profile/status")) {
+        return new Response(JSON.stringify({ ok: true, data: { email_verified: true, mobile_verified: true, profile_complete: true } }));
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        data: [{ id: "car-order-test", registration_no: "CH01BT6268" }]
+      }));
+    }
   });
   if (t?.after) t.after(() => h.teardown());
 
@@ -1266,7 +1432,7 @@ test("Client Production: Support ticket failure preserves user entered inputs an
 
 test("Client Production: Service Worker v12 retirement purges older torq-desk-shell caches", () => {
   const swCode = fs.readFileSync(path.join(root, "sw.js"), "utf8");
-  assert.match(swCode, /CACHE_NAME\s*=\s*[\'"]torq-desk-shell-v(14|13)[\'"]/, "Must use current torq-desk-shell cache");
+  assert.match(swCode, /CACHE_NAME\s*=\s*[\'"]torq-desk-shell-v(16|15|14|13)[\'"]/, "Must use current torq-desk-shell cache");
   assert.match(swCode, /k\.startsWith\(['"]torq-desk-shell-['"]\)\s*&&\s*k!==CACHE_NAME/, "Must delete all older torq-desk-shell caches");
 });
 
@@ -2357,7 +2523,7 @@ test("Super Admin Integration: designated account opens the admin console withou
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async (path) => {
       if (path.startsWith('/api/admin/support-tickets')) {
         return { ok: true, data: [{ id: 'TD-TEST-1', subject: 'Test Ticket', status: 'open' }] };
@@ -2410,7 +2576,7 @@ test("Super Admin Integration: API authorization stays server-enforced when admi
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async (path) => {
       if (path.includes('/api/admin/support-tickets')) {
         const err = new Error('Super Admin access required.');
@@ -2432,7 +2598,7 @@ test("Super Admin Workspace: Dedicated shell isolates admin from customer naviga
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2457,7 +2623,7 @@ test("Super Admin Workspace: Multi-screen navigation switches across all 12 admi
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2491,7 +2657,7 @@ test("Super Admin Workspace: Mobile navigation renders exactly 5 tabs and slide-
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2518,7 +2684,7 @@ test("Super Admin Workspace: Support ticket 500/503 failure renders actionable d
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async (path) => {
       if (path.includes('/api/admin/support-tickets')) {
         const err = new Error('503 D1 table support_tickets does not exist');
@@ -2546,7 +2712,7 @@ test("Super Admin Workspace: Token generator creates one-time reveal modal and c
   if (t?.after) t.after(() => h.teardown());
 
   h.eval(`
-    user = { id: 'admin-uuid', email: 'rnyburia@gmail.com' };
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
     workerGet = async () => ({ ok: true, data: [] });
   `);
 
@@ -2560,3 +2726,2962 @@ test("Super Admin Workspace: Token generator creates one-time reveal modal and c
   assert.equal(h.eval("adminRevealedToken"), null, "Token secret must be wiped from memory upon closing the modal");
 });
 
+test("Phase 1 Admin Shell: Account & Security screen displays read-only profile, password meter, and 15-min timeout", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin', user_metadata: { name: 'Lead Admin' } };
+    currentAdminRole = 'super_admin';
+    workerGet = async () => ({ ok: true, data: [] });
+  `);
+
+  await h.eval("nav('admin')");
+  h.eval("switchAdminScreen('account')");
+
+  const name = h.eval("document.getElementById('adminProfileNameDisplay').textContent");
+  const email = h.eval("document.getElementById('adminProfileEmailDisplay').textContent");
+  const role = h.eval("document.getElementById('adminProfileRoleBadge').textContent");
+
+  assert.equal(name, "Lead Admin");
+  assert.equal(email, "admin@carmy.internal");
+  assert.equal(role, "Super Admin");
+
+  const html = h.elements.get("adminContent").innerHTML;
+  assert.ok(html.includes("15 Minutes (900 Seconds)"), "Must display read-only 15-minute timeout policy");
+  assert.ok(html.includes("Phase 4 Specification"), "TPIN must have Phase 4 placeholder");
+});
+
+test("Phase 1 Admin Shell: Password change reports error on failure and success only on server ok", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    toasts = [];
+    toast = (msg, type) => { toasts.push({ msg, type }); };
+    workerGet = async () => ({ ok: true, data: [] });
+    db.auth.updateUser = async ({ password }) => {
+      if (password === 'fail-pass123!') {
+        return { error: { message: 'Weak or rejected password' } };
+      }
+      return { data: {}, error: null };
+    };
+  `);
+
+  await h.eval("nav('admin')");
+  h.eval("switchAdminScreen('account')");
+
+  // Test mismatch
+  h.eval(`
+    document.getElementById('adminCurrentPassword').value = 'old-pass';
+    document.getElementById('adminNewPassword').value = 'new-pass-1';
+    document.getElementById('adminConfirmPassword').value = 'new-pass-2';
+  `);
+  await h.eval("handleAdminPasswordChange()");
+  assert.equal(h.eval("toasts[toasts.length - 1].type"), "error");
+  assert.ok(h.eval("toasts[toasts.length - 1].msg").includes("match"));
+
+  // Test server error
+  h.eval(`
+    document.getElementById('adminNewPassword').value = 'fail-pass123!';
+    document.getElementById('adminConfirmPassword').value = 'fail-pass123!';
+  `);
+  await h.eval("handleAdminPasswordChange()");
+  assert.equal(h.eval("document.getElementById('adminPasswordError').textContent"), "Weak or rejected password");
+  assert.equal(h.eval("toasts[toasts.length - 1].type"), "error");
+
+  // Test success
+  h.eval(`
+    document.getElementById('adminNewPassword').value = 'ValidPass123!';
+    document.getElementById('adminConfirmPassword').value = 'ValidPass123!';
+  `);
+  await h.eval("handleAdminPasswordChange()");
+  assert.equal(h.eval("toasts[toasts.length - 1].type"), "ok");
+  assert.equal(h.eval("toasts[toasts.length - 1].msg"), "Password changed");
+  assert.equal(h.eval("document.getElementById('adminNewPassword').value"), "");
+});
+
+test("Phase 1 Admin Shell: adminSignOut wipes admin storage and removes admin mode class", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    localStorage.setItem('carmy_admin_test', '123');
+    sessionStorage.setItem('td-admin-state', 'abc');
+    document.body.classList.add('td-admin-mode');
+    workerPost = async () => ({ ok: true });
+    db.auth.signOut = async () => {};
+  `);
+
+  await h.eval("adminSignOut()");
+  assert.equal(h.eval("document.body.classList.contains('td-admin-mode')"), false);
+  assert.equal(h.eval("localStorage.getItem('carmy_admin_test')"), null);
+  assert.equal(h.eval("sessionStorage.getItem('td-admin-state')"), null);
+  assert.equal(h.eval("isSuperAdmin"), false);
+});
+
+
+test("Support Ticket Workflow: Unread badge appears for count > 0 and clears when count is 0 or user signs out", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'test-user', email: 'owner@example.com' };
+    const helpBtn = document.createElement('button');
+    helpBtn.id = 'helpBtn';
+    helpBtn.dataset.view = 'help';
+    document.body.appendChild(helpBtn);
+
+    updateHelpUnreadBadge(3);
+  `);
+
+  const badgeCount = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      const badge = btn.querySelector('.ticket-unread-badge');
+      return badge ? badge.textContent : null;
+    })()
+  `);
+  assert.equal(badgeCount, "3", "Unread badge must display count 3");
+
+  h.eval("updateHelpUnreadBadge(0);");
+  const clearedBadge = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      return btn.querySelector('.ticket-unread-badge');
+    })()
+  `);
+  assert.equal(clearedBadge, null, "Unread badge must be removed when count is 0");
+
+  h.eval("updateHelpUnreadBadge(150);");
+  const cappedBadge = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      const badge = btn.querySelector('.ticket-unread-badge');
+      return badge ? badge.textContent : null;
+    })()
+  `);
+  assert.equal(cappedBadge, "99+", "Counts over 99 must format as 99+");
+
+  h.eval("clearUserMemory();");
+  const afterLogoutBadge = h.eval(`
+    (() => {
+      const btn = document.getElementById('helpBtn');
+      return btn.querySelector('.ticket-unread-badge');
+    })()
+  `);
+  assert.equal(afterLogoutBadge, null, "Logout / clearUserMemory must clean up unread badges");
+});
+
+test("Support Ticket Workflow: Customer ticket list renders accessible items with keyboard navigation and unread pills", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [
+      { id: 'TD-TEST-001', subject: 'Transfer assistance', status: 'working', priority: 'high', has_unread: true, created_at: '2026-10-18T10:00:00Z' },
+      { id: 'TD-TEST-002', subject: 'Billing inquiry', status: 'need_info', priority: 'normal', has_unread: false, created_at: '2026-10-17T10:00:00Z' }
+    ];
+    currentHelpTab = 'ticket';
+    helpView();
+  `);
+
+  const html = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(html.includes("TD-TEST-001"), "List must render first ticket ID");
+  assert.ok(html.includes("ticket-unread-pill"), "Ticket with has_unread must show unread pill");
+  assert.ok(html.includes("Working on it"), "Must show human readable status Working on it");
+  assert.ok(html.includes("Required other information"), "Must show human readable status Required other information");
+  assert.ok(html.includes("tabindex=\"0\""), "Ticket rows must be keyboard accessible with tabindex 0");
+
+  h.eval("openCustomerTicketDetail('TD-TEST-001');");
+  assert.equal(h.eval("viewingCustomerTicketId"), "TD-TEST-001", "Opening ticket must set viewingCustomerTicketId");
+  const detailHtml = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(detailHtml.includes("ticket-stepper"), "Detail view must display stepper");
+  assert.ok(detailHtml.includes("ticket-back-btn"), "Detail view must display Back button");
+
+  h.eval("closeCustomerTicketDetail();");
+  assert.equal(h.eval("viewingCustomerTicketId"), null, "Closing ticket detail must reset viewingCustomerTicketId to null");
+});
+
+test("Support Ticket Workflow: Customer ticket stepper progression across statuses and need_info warning banner", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const statuses = [
+    { st: 'pending', expectedStep: 'Submitted' },
+    { st: 'assigned', expectedStep: 'Assigned' },
+    { st: 'working', expectedStep: 'Working on it' },
+    { st: 'solved', expectedStep: 'Solved' },
+    { st: 'closed', expectedStep: 'Closed' }
+  ];
+
+  for (const s of statuses) {
+    h.eval(`
+      user = { id: 'u1', email: 'tester@example.com' };
+      userSupportTickets = [{ id: 'TD-ST-' + '${s.st}', subject: 'Status test', status: '${s.st}', priority: 'normal', created_at: '2026-10-18T10:00:00Z' }];
+      openCustomerTicketDetail('TD-ST-' + '${s.st}');
+    `);
+    const detailHtml = h.elements.get('helpTabContent').innerHTML;
+    assert.ok(detailHtml.includes("ticket-stepper"), `Stepper must be rendered for status ${s.st}`);
+  }
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-NEEDINFO',
+      subject: 'Missing RC page',
+      status: 'need_info',
+      priority: 'high',
+      created_at: '2026-10-18T10:00:00Z',
+      events: [
+        { actor_type: 'user', message: 'I uploaded my RC', created_at: '2026-10-18T10:05:00Z' },
+        { actor_type: 'admin', message: 'Please upload the back side of the RC card.', created_at: '2026-10-18T10:10:00Z' }
+      ]
+    }];
+    openCustomerTicketDetail('TD-NEEDINFO');
+  `);
+
+  const needInfoHtml = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(needInfoHtml.includes("ticket-warning-banner"), "need_info ticket must render distinct warning banner");
+  assert.ok(needInfoHtml.includes("Additional Information Needed"), "Warning title must prompt user action");
+
+  const warningMsg = h.eval("document.getElementById('customerTicketNeedInfoMsg')?.textContent");
+  assert.equal(warningMsg, "Please upload the back side of the RC card.", "Warning text must match latest admin message via textContent");
+});
+
+test("Support Ticket Workflow: Customer chat enabled shows reply box; disabled shows 'Our team will reply here.'", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-NO-CHAT',
+      subject: 'General feedback',
+      status: 'working',
+      chat_enabled: false,
+      created_at: '2026-10-18T10:00:00Z'
+    }];
+    openCustomerTicketDetail('TD-NO-CHAT');
+  `);
+
+  let html = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(html.includes("ticket-chat-disabled-banner"), "Must show disabled chat banner when chat_enabled is false");
+  assert.ok(html.includes("Our team will reply here."), "Disabled banner must display 'Our team will reply here.'");
+  assert.ok(!html.includes("customerTicketReplyInput"), "Reply input must NOT be present when chat is disabled");
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-CHAT-ACTIVE',
+      subject: 'Live support thread',
+      status: 'working',
+      chat_enabled: true,
+      created_at: '2026-10-18T10:00:00Z'
+    }];
+    openCustomerTicketDetail('TD-CHAT-ACTIVE');
+  `);
+
+  html = h.elements.get('helpTabContent').innerHTML;
+  assert.ok(html.includes("ticket-reply-box-sticky"), "Must render sticky reply box when chat is enabled");
+  assert.ok(html.includes("customerTicketReplyInput"), "Textarea for reply must be present");
+});
+
+test("Support Ticket Workflow: Strict XSS protection renders user and admin content via textContent without HTML parsing", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const xssPayload = '<img src="x" onerror="alert(1)"><script>window.__xss=1</script><b>BoldInjected</b>';
+
+  h.eval(`
+    user = { id: 'u1', email: 'tester@example.com' };
+    userSupportTickets = [{
+      id: 'TD-XSS-TEST',
+      subject: ${JSON.stringify(xssPayload)},
+      status: 'need_info',
+      priority: 'high',
+      created_at: '2026-10-18T10:00:00Z',
+      events: [
+        { actor_type: 'user', message: ${JSON.stringify(xssPayload)}, created_at: '2026-10-18T10:05:00Z' },
+        { actor_type: 'admin', message: ${JSON.stringify(xssPayload)}, created_at: '2026-10-18T10:10:00Z' }
+      ]
+    }];
+    openCustomerTicketDetail('TD-XSS-TEST');
+  `);
+
+  const subjectText = h.eval("document.getElementById('customerTicketDetailSubject')?.textContent");
+  assert.equal(subjectText, xssPayload, "Subject must match exact raw string without HTML interpretation");
+
+  const warningText = h.eval("document.getElementById('customerTicketNeedInfoMsg')?.textContent");
+  assert.equal(warningText, xssPayload, "Warning text must match exact raw string without HTML interpretation");
+
+  const threadBubbles = h.eval(`
+    const bubbles = document.querySelectorAll('.ticket-message-text');
+    Array.from(bubbles).map(b => b.textContent);
+  `);
+  for (const bText of threadBubbles) {
+    assert.equal(bText, xssPayload, "Thread bubbles must store exact raw textContent");
+  }
+});
+
+test("Support Ticket Workflow: Admin SLA breach badge displays for pending tickets > 24 hours", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const oldDate = new Date(Date.now() - 36 * 3600 * 1000).toISOString();
+  const recentDate = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTickets = [
+      { id: 'TD-BREACH-1', email: 'user1@test.com', subject: 'Overdue ticket', status: 'pending', priority: 'high', created_at: '${oldDate}' },
+      { id: 'TD-NORMAL-2', email: 'user2@test.com', subject: 'Fresh ticket', status: 'pending', priority: 'normal', created_at: '${recentDate}' }
+    ];
+  `);
+
+  const breachResult = h.eval("isTicketSlaBreached(adminTickets[0])");
+  assert.equal(breachResult, true, "Ticket pending > 24 hours must be marked as SLA breached");
+
+  const freshResult = h.eval("isTicketSlaBreached(adminTickets[1])");
+  assert.equal(freshResult, false, "Fresh pending ticket (<24h) must not be breached");
+
+  const badgeHtml = h.eval("renderSlaBadge(adminTickets[0])");
+  assert.ok(badgeHtml.includes("ticket-sla-badge"), "Breached ticket must return .ticket-sla-badge markup");
+  assert.ok(badgeHtml.includes("SLA Breach"), "Badge must display 'SLA Breach'");
+});
+
+test("Support Ticket Workflow: Admin filters by status, assignee, priority, and SLA breach", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const oldDate = new Date(Date.now() - 30 * 3600 * 1000).toISOString();
+  const recentDate = new Date().toISOString();
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTickets = [
+      { id: 'T-1', email: 'u1@test.com', subject: 'One', status: 'pending', priority: 'urgent', assignee_id: null, created_at: '${oldDate}' },
+      { id: 'T-2', email: 'u2@test.com', subject: 'Two', status: 'working', priority: 'high', assignee_id: 'admin-1', created_at: '${recentDate}' },
+      { id: 'T-3', email: 'u3@test.com', subject: 'Three', status: 'solved', priority: 'normal', assignee_id: 'other-admin', created_at: '${recentDate}' }
+    ];
+    adminStatusFilter = 'all';
+    adminAssigneeFilter = 'all';
+    adminPriorityFilter = 'all';
+    adminSlaFilter = 'all';
+    adminSearchQuery = '';
+  `);
+
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 3, "All tickets returned by default");
+
+  h.eval("adminStatusFilter = 'pending';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Status pending filter must match 1 ticket");
+  assert.equal(h.eval("getFilteredAdminTickets()[0].id"), "T-1");
+
+  h.eval("adminStatusFilter = 'all'; adminAssigneeFilter = 'me';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Assignee 'me' filter must match 1 ticket");
+  assert.equal(h.eval("getFilteredAdminTickets()[0].id"), "T-2");
+
+  h.eval("adminAssigneeFilter = 'unassigned';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Assignee 'unassigned' filter must match 1 ticket");
+  assert.equal(h.eval("getFilteredAdminTickets()[0].id"), "T-1");
+
+  h.eval("adminAssigneeFilter = 'all'; adminPriorityFilter = 'urgent';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "Priority 'urgent' must match 1 ticket");
+
+  h.eval("adminPriorityFilter = 'all'; adminSlaFilter = 'breached';");
+  assert.equal(h.eval("getFilteredAdminTickets().length"), 1, "SLA breach filter must match only overdue ticket T-1");
+});
+
+test("Support Ticket Workflow: Admin detail modal enforces permitted transitions and handles 409 INVALID_TRANSITION", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTickets = [{
+      id: 'TD-TRANS-1',
+      email: 'customer@test.com',
+      subject: 'Transition test',
+      status: 'pending',
+      priority: 'normal',
+      created_at: new Date().toISOString()
+    }];
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-TRANS-1');");
+
+  const modalHtml = h.elements.get('adminTicketDetailModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("STATUS WORKFLOW"), "Modal must display status workflow control");
+  assert.ok(modalHtml.includes("Transition to: Assigned"), "Pending ticket must offer transition to Assigned");
+  assert.ok(!modalHtml.includes("Transition to: Solved"), "Pending ticket must NOT directly offer transition to Solved");
+
+  assert.ok(modalHtml.includes("Internal, not visible to user"), "Internal notes header must be labeled exactly 'Internal, not visible to user'");
+  assert.ok(modalHtml.includes("+91 ••••• •••••"), "Phone number must be masked by default");
+  assert.ok(modalHtml.includes("disabled"), "Contact buttons must be disabled");
+
+  h.eval(`
+    workerPatch = async (path, body) => {
+      const err = new Error('Invalid ticket status transition.');
+      err.status = 409;
+      err.code = 'INVALID_TRANSITION';
+      throw err;
+    };
+  `);
+
+  await h.eval("handleAdminStatusChange('TD-TRANS-1');");
+  assert.equal(h.eval("adminTickets[0].status"), "pending", "Status must not be locally modified on 409 rejection");
+});
+
+test("Support Ticket Workflow: View-as-user requires min 10 char reason, renders read-only panel with no edit controls, and uses textContent", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTickets = [{
+      id: 'TD-VAU-1',
+      email: 'customer@test.com',
+      subject: '<script>alert("xss")</script>Public Subject',
+      status: 'working',
+      priority: 'high',
+      created_at: new Date().toISOString()
+    }];
+    workerPost = async (path, body) => {
+      if (path.includes('/view-as-user')) {
+        return {
+          ok: true,
+          data: {
+            id: 'TD-VAU-1',
+            subject: '<script>alert("xss")</script>Public Subject',
+            status: 'working',
+            priority: 'high',
+            created_at: '2026-10-19T08:00:00.000Z',
+            events: [
+              { actor_type: 'user', message: '<img src=x onerror=alert(1)>User inquiry text', created_at: '2026-10-19T08:05:00.000Z' },
+              { actor_type: 'admin', message: 'Specialist response', created_at: '2026-10-19T08:10:00.000Z' }
+            ]
+          }
+        };
+      }
+      return { ok: false };
+    };
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-VAU-1');");
+
+  // 1. Minimum 10 characters validation
+  h.eval("window.prompt = () => 'short';");
+  await h.eval("openAdminTicketViewAsUser('TD-VAU-1');");
+  assert.equal(h.eval("Boolean(document.getElementById('vauSubject')?.textContent)"), false, "Modal must not open on short reason (< 10 chars)");
+
+  // 2. Successful audited view
+  h.eval("window.prompt = () => 'Security audit for user inquiry verification';");
+  await h.eval("openAdminTicketViewAsUser('TD-VAU-1');");
+
+  const vauModal = h.elements.get('adminTicketViewAsUserModal');
+  assert.ok(vauModal, "Read-only view as user modal must be rendered in DOM");
+
+  const textContent = vauModal.innerHTML;
+  assert.ok(textContent.includes("READ-ONLY AUDITED VIEW"), "Must display read-only badge");
+  assert.ok(!textContent.includes("<input"), "Must have no input elements (read-only)");
+  assert.ok(!textContent.includes("<textarea"), "Must have no textarea elements (read-only)");
+
+  // Strict textContent check (no raw HTML script tags executed)
+  assert.equal(h.eval("document.getElementById('vauSubject').textContent"), '<script>alert("xss")</script>Public Subject');
+  assert.equal(h.eval("document.getElementById('vauReason').textContent"), 'Security audit for user inquiry verification');
+
+  h.eval("closeAdminTicketViewAsUserModal();");
+  assert.equal(h.eval("document.getElementById('adminTicketViewAsUserModal')"), null, "Modal must close on close call");
+});
+
+test("Support Ticket Workflow: View-as-user marks BLOCKED and disables button when backend route returns 404", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTickets = [{
+      id: 'TD-VAU-404',
+      email: 'customer@test.com',
+      subject: 'Missing endpoint test',
+      status: 'pending',
+      priority: 'normal',
+      created_at: new Date().toISOString()
+    }];
+    workerPost = async (path, body) => {
+      const err = new Error('Route not found.');
+      err.status = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    };
+    window.prompt = () => 'Authorized audit inspection for ticket';
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-VAU-404');");
+
+  const btnDisabledBefore = h.eval("document.getElementById('btnAdminViewAsUser').disabled");
+  assert.equal(btnDisabledBefore, false, "Button must be enabled initially");
+
+  await h.eval("openAdminTicketViewAsUser('TD-VAU-404');");
+
+  assert.equal(h.eval("adminViewAsUserBlocked"), true, "adminViewAsUserBlocked flag must be true");
+  assert.equal(h.eval("document.getElementById('btnAdminViewAsUser').disabled"), true, "Button must be disabled when route is missing");
+  assert.equal(h.eval("document.getElementById('btnAdminViewAsUser').textContent"), "Not available yet", "Button text must become 'Not available yet'");
+});
+
+test("Support Ticket Workflow: Unified Enable Chat action includes optional message and 48-hour countdown", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTickets = [{
+      id: 'TD-CHAT-1',
+      email: 'customer@test.com',
+      subject: 'Chat test',
+      status: 'working',
+      priority: 'normal',
+      chat_enabled: 0,
+      chat_enabled_until: null,
+      created_at: new Date().toISOString()
+    }];
+    workerGet = async (path) => {
+      return { ok: true, data: adminTickets };
+    };
+    workerPatch = async (path, body) => {
+      globalThis.__lastPatch = body;
+      adminTickets[0].chat_enabled = 1;
+      adminTickets[0].chat_enabled_until = Math.floor(Date.now() / 1000) + 48 * 3600;
+      return { ok: true, data: adminTickets[0] };
+    };
+  `);
+
+  await h.eval("openAdminTicketDetails('TD-CHAT-1');");
+
+  const modalHtml = h.elements.get('adminTicketDetailModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("Enable Chat (48h Window)"), "Must display Enable Chat (48h Window) action");
+  assert.ok(modalHtml.includes("adminEnableChatMsg"), "Must provide optional initial message field");
+
+  h.eval(`
+    document.getElementById('adminEnableChatMsg').value = 'Please provide odometer photo.';
+  `);
+  await h.eval("handleAdminEnableChatWithMsg('TD-CHAT-1');");
+
+  const lastPatch = h.eval("globalThis.__lastPatch");
+  assert.equal(lastPatch.chat_enabled, true, "Must patch chat_enabled: true");
+  assert.equal(lastPatch.message, 'Please provide odometer photo.', "Must include optional message");
+
+  // Re-open details with active chat
+  await h.eval("openAdminTicketDetails('TD-CHAT-1');");
+  const updatedHtml = h.elements.get('adminTicketDetailModal')?.innerHTML || '';
+  assert.ok(updatedHtml.includes("Chat Active:"), "Must display active countdown");
+  assert.ok(updatedHtml.includes("Disable Chat"), "Must display Disable Chat button when active");
+});
+
+test("Super Admin Phase 2: User management drawer displays user data with textContent and plan update calls PATCH /api/admin/users/:id/plan", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+    adminUsersList = [{
+      id: 'usr-456',
+      name: 'Priya Sharma',
+      email: 'priya@example.com',
+      phone: '9876543210',
+      role: 'owner',
+      plan: 'lite',
+      status: 'active',
+      created_at: 1700000000
+    }];
+    globalThis.__lastPatchCall = null;
+    workerPatch = async (path, body) => {
+      globalThis.__lastPatchCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openAdminUserDetails('usr-456');");
+  const modal = h.elements.get('adminUserModal');
+  assert.ok(modal, "User management modal must be open");
+
+  // Verify textContent elements
+  assert.equal(h.eval("document.getElementById('adminUserModalSubtitle').textContent"), "User: priya@example.com");
+  assert.equal(h.eval("document.getElementById('adminUserModalRole').textContent"), "owner");
+  assert.equal(h.eval("document.getElementById('adminUserModalPlan').textContent"), "lite");
+  assert.equal(h.eval("document.getElementById('adminUserModalStatus').textContent"), "active");
+
+  // Change plan
+  h.eval(`
+    document.getElementById('adminUserPlanSelect').value = 'premium';
+    document.getElementById('adminUserDurationSelect').value = '365';
+    document.getElementById('adminUserPlanNotes').value = 'Approved offline payment';
+  `);
+  await h.eval("saveUserPlanDraft('usr-456')");
+
+  const patchCall = h.eval("globalThis.__lastPatchCall");
+  assert.equal(patchCall.path, "/api/admin/users/usr-456/plan", "Must call PATCH /api/admin/users/:id/plan");
+  assert.equal(patchCall.body.plan, "premium");
+  assert.equal(patchCall.body.notes, "Approved offline payment");
+
+  // Modal must close
+  assert.ok(!h.elements.get('adminUserModal'), "Modal must close on success");
+});
+
+test("Super Admin Phase 2: Promotional coupons can be created via POST /api/admin/coupons and deactivated via DELETE /api/admin/coupons/:id", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+    globalThis.__lastPostCall = null;
+    globalThis.__lastDeleteCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true, data: { id: 'cpn-1' } };
+    };
+    workerDelete = async (path) => {
+      globalThis.__lastDeleteCall = { path };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openCreateCouponModal();");
+  assert.ok(h.elements.get('adminCouponModal'), "Coupon modal must be created");
+
+  h.eval(`
+    document.getElementById('couponCodeInput').value = 'DIWALI50';
+    document.getElementById('couponDiscountInput').value = '50';
+    document.getElementById('couponMaxUsesInput').value = '100';
+  `);
+  await h.eval("submitCreateCoupon()");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/admin/coupons", "Must call POST /api/admin/coupons");
+  assert.equal(postCall.body.code, "DIWALI50");
+  assert.equal(postCall.body.discount_percent, 50);
+  assert.equal(postCall.body.max_uses, 100);
+
+  // Deactivate coupon
+  await h.eval("deleteAdminCoupon('cpn-1')");
+  const deleteCall = h.eval("globalThis.__lastDeleteCall");
+  assert.equal(deleteCall.path, "/api/admin/coupons/cpn-1", "Must call DELETE /api/admin/coupons/:id");
+});
+
+test("Super Admin Phase 2: CSV exports call workerDownloadCsv on real endpoints", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+    globalThis.__downloadCalls = [];
+    workerDownloadCsv = async (path, filename) => {
+      globalThis.__downloadCalls.push({ path, filename });
+    };
+  `);
+
+  await h.eval("exportUsersCsv()");
+  await h.eval("exportTicketsCsv()");
+  await h.eval("exportAuditCsv()");
+
+  const calls = h.eval("globalThis.__downloadCalls");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].path, "/api/admin/users/export.csv");
+  assert.equal(calls[1].path, "/api/admin/tickets/export.csv");
+  assert.equal(calls[2].path, "/api/admin/audit/export.csv");
+});
+
+test("Super Admin Phase 2: Missing or 404 admin endpoints render .admin-blocked-card containing HTTP method and route name", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+    adminOverviewError = { message: 'Route /api/admin/overview returned 404' };
+    adminUsersError = { message: 'Route /api/admin/users returned 404' };
+    adminTokensError = { message: 'Route /api/admin/tokens returned 404' };
+    adminPlansError = { message: 'Route /api/admin/plans returned 404' };
+    adminTeamError = { message: 'Route /api/admin/team/members returned 404' };
+    adminAuditError = { message: 'Route /api/admin/audit returned 404' };
+  `);
+
+  const homeHtml = h.eval("renderScreenHome()");
+  assert.ok(homeHtml.includes("admin-blocked-card"), "Home must render blocked card when overview fails");
+  assert.ok(homeHtml.includes("GET"), "Blocked card must show GET method");
+  assert.ok(homeHtml.includes("/api/admin/overview"), "Blocked card must show /api/admin/overview");
+
+  const usersHtml = h.eval("renderScreenUsers()");
+  assert.ok(usersHtml.includes("admin-blocked-card"));
+  assert.ok(usersHtml.includes("/api/admin/users"));
+
+  const tokensHtml = h.eval("renderScreenTokens()");
+  assert.ok(tokensHtml.includes("admin-blocked-card"));
+  assert.ok(tokensHtml.includes("/api/admin/tokens"));
+
+  const plansHtml = h.eval("renderScreenPlans()");
+  assert.ok(plansHtml.includes("admin-blocked-card"));
+  assert.ok(plansHtml.includes("/api/admin/plans"));
+
+  const teamHtml = h.eval("renderScreenTeam()");
+  assert.ok(teamHtml.includes("admin-blocked-card"));
+  assert.ok(teamHtml.includes("/api/admin/team/members"));
+
+  const auditHtml = h.eval("renderScreenAudit()");
+  assert.ok(auditHtml.includes("admin-blocked-card"));
+  assert.ok(auditHtml.includes("/api/admin/audit"));
+});
+
+test("User Dashboard Phase 3: Plan status card displays plan details, metrics and renders blocked card on 404", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Error state renders blocked card for /api/plan/status
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    userPlanError = { message: 'Route /api/plan/status returned 404' };
+    userPlanStatus = null;
+  `);
+
+  const blockedHtml = h.eval("renderPlanStatusCard()");
+  assert.ok(blockedHtml.includes("admin-blocked-card"), "Must render blocked card when /api/plan/status returns error");
+  assert.ok(blockedHtml.includes("GET"), "Blocked card must show GET method");
+  assert.ok(blockedHtml.includes("/api/plan/status"), "Blocked card must show /api/plan/status endpoint");
+
+  // 2. Active status renders metrics and plan tier
+  h.eval(`
+    userPlanError = null;
+    userPlanStatus = {
+      plan: 'premium',
+      status: 'active',
+      expires_at: '2027-10-19T00:00:00Z',
+      max_vehicles: 5,
+      storage_mb_limit: 500,
+      storage_mb_used: 120.5
+    };
+    cars = [{ id: 'car-1', make_model: 'Swift' }, { id: 'car-2', make_model: 'City' }];
+  `);
+
+  const activeHtml = h.eval("renderPlanStatusCard()");
+  assert.ok(activeHtml.includes("Premium"), "Must display Premium tier badge");
+  assert.ok(activeHtml.includes("2 / 5 Vehicles"), "Must display 2 / 5 vehicles metric");
+  assert.ok(activeHtml.includes("120.5 / 500 MB"), "Must display 120.5 / 500 MB storage metric");
+  assert.ok(activeHtml.includes("ACTIVE"), "Must display ACTIVE badge");
+});
+
+test("User Dashboard Phase 3: Activation code redemption calls POST /api/activation/redeem and refreshes plan", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    globalThis.__lastPostCall = null;
+    globalThis.__planStatusCalls = 0;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true, plan: 'ultra' };
+    };
+    workerGet = async (path) => {
+      if (path.includes('/api/plan/status')) {
+        globalThis.__planStatusCalls++;
+        return { ok: true, data: { plan: 'ultra', status: 'active', max_vehicles: 999, storage_mb_limit: 5000, storage_mb_used: 10 } };
+      }
+      return { ok: true };
+    };
+  `);
+
+  // Open activation code section
+  h.eval("toggleActivationRedeemSection()");
+  assert.equal(h.eval("isActivationRedeemOpen"), true, "Activation redeem section must toggle open");
+
+  // Setup input
+  h.eval(`
+    const input = document.getElementById('activationCodeInput');
+    input.value = 'TD-ULTRA-2026';
+  `);
+
+  await h.eval("redeemActivationCode()");
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/activation/redeem", "Must call POST /api/activation/redeem");
+  assert.equal(postCall.body.code, "TD-ULTRA-2026", "Must submit entered code");
+  assert.ok(h.eval("globalThis.__planStatusCalls") >= 1, "Must reload plan status after successful redemption");
+});
+
+test("User Dashboard Phase 3: Upgrade request modal validates phone and calls POST /api/upgrade-requests", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    ownerProfile = { phone: '9876543210' };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true, data: { id: 'req-1' } };
+    };
+  `);
+
+  h.eval("openUpgradeRequestModal('ultra');");
+  assert.ok(h.elements.get('userUpgradeRequestModal'), "Upgrade request modal must be open");
+
+  // Phone validation (<10 digits fails)
+  h.eval("document.getElementById('userUpgradePhoneInput').value = '12345';");
+  await h.eval("submitUpgradeRequest();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must not submit request with invalid phone");
+
+  // Valid submit
+  h.eval(`
+    document.getElementById('userUpgradePlanSelect').value = 'ultra';
+    document.getElementById('userUpgradePhoneInput').value = '9876543210';
+    document.getElementById('userUpgradePaymentSelect').value = 'upi';
+    document.getElementById('userUpgradeNotesInput').value = 'Need GST receipt';
+  `);
+  await h.eval("submitUpgradeRequest();");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/upgrade-requests", "Must call POST /api/upgrade-requests");
+  assert.equal(postCall.body.requested_plan, "ultra");
+  assert.equal(postCall.body.phone, "9876543210");
+  assert.equal(postCall.body.payment_method, "upi");
+  assert.equal(postCall.body.notes, "Need GST receipt");
+
+  // Modal must close
+  assert.ok(!h.elements.get('userUpgradeRequestModal'), "Modal must close on success");
+});
+
+test("User Dashboard Phase 3: Vehicle addition and Document Vault enforce plan quota limits", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    userPlanStatus = {
+      plan: 'lite',
+      status: 'active',
+      max_vehicles: 1,
+      storage_mb_limit: 10,
+      storage_mb_used: 10.0
+    };
+    cars = [{ id: 'car-1', make_model: 'Alto 800' }];
+  `);
+
+  // 1. Vehicle addition blocked when cars.length >= max_vehicles
+  h.eval("showCarForm();");
+  assert.ok(h.elements.get('planComparisonModal'), "Must open plan comparison modal when vehicle limit reached");
+  assert.equal(h.elements.get('carForm')?.innerHTML || '', '', "Car form must not be populated when limit reached");
+
+  // Close comparison modal
+  h.eval("closePlanComparisonModal();");
+  assert.ok(!h.elements.get('planComparisonModal'), "Comparison modal must close");
+
+  // 2. Document uploader blocked when storage_mb_used >= storage_mb_limit
+  h.eval("openDocUploader('insurance');");
+  assert.ok(h.elements.get('planComparisonModal'), "Must open plan comparison modal when vault storage limit reached");
+  assert.ok(!h.elements.get('docUploadModal'), "Document upload modal must not open when storage limit reached");
+});
+
+test("Administrative TPIN Phase 4: Account card displays status and handles 404 blocked card for /api/tpin/status", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Error state renders blocked card
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTpinError = { message: 'Route /api/tpin/status returned 404', status: 404 };
+    adminTpinStatus = null;
+  `);
+
+  const blockedHtml = h.eval("renderTpinAccountCardInner()");
+  assert.ok(blockedHtml.includes("admin-blocked-card"), "Must render blocked card when /api/tpin/status returns 404");
+  assert.ok(blockedHtml.includes("GET"), "Blocked card must show GET method");
+  assert.ok(blockedHtml.includes("/api/tpin/status"), "Blocked card must show /api/tpin/status");
+
+  // 2. Unconfigured state
+  h.eval(`
+    adminTpinError = null;
+    adminTpinStatus = { is_set: false };
+  `);
+  const unconfiguredHtml = h.eval("renderTpinAccountCardInner()");
+  assert.ok(unconfiguredHtml.includes("Not Configured"), "Must display Not Configured status");
+  assert.ok(unconfiguredHtml.includes("Set 4-Digit TPIN"), "Must offer Set 4-Digit TPIN button");
+
+  // 3. Configured active state
+  h.eval(`
+    adminTpinStatus = { is_set: true };
+  `);
+  const configuredHtml = h.eval("renderTpinAccountCardInner()");
+  assert.ok(configuredHtml.includes("TPIN Active"), "Must display TPIN Active badge");
+  assert.ok(configuredHtml.includes("Change TPIN"), "Must display Change TPIN button");
+  assert.ok(configuredHtml.includes("Forgot / Reset TPIN"), "Must display Reset TPIN button");
+});
+
+test("Administrative TPIN Phase 4: Setup modal enforces 4 digits, disallows trivial sequences, calls POST /api/tpin/setup, and wipes memory", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openTpinSetupModal();");
+  assert.ok(h.elements.get('tpinSetupModal'), "Setup modal must be open");
+
+  // Trivial sequence fails
+  h.eval(`
+    document.getElementById('tpinSetupInput').value = '1234';
+    document.getElementById('tpinSetupConfirm').value = '1234';
+  `);
+  await h.eval("submitTpinSetup();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must reject trivial sequence '1234'");
+  assert.ok(h.elements.get('tpinSetupError')?.innerHTML.includes("Trivial or easily guessed"), "Must show trivial PIN warning");
+
+  // Mismatched confirmation fails
+  h.eval(`
+    document.getElementById('tpinSetupInput').value = '8492';
+    document.getElementById('tpinSetupConfirm').value = '8493';
+  `);
+  await h.eval("submitTpinSetup();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must reject mismatched PIN");
+
+  // Valid setup succeeds
+  h.eval(`
+    document.getElementById('tpinSetupInput').value = '8492';
+    document.getElementById('tpinSetupConfirm').value = '8492';
+  `);
+  await h.eval("submitTpinSetup();");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/setup", "Must call POST /api/tpin/setup");
+  assert.equal(postCall.body.tpin, "8492", "Must submit entered TPIN");
+
+  // Zero-storage check & modal removal
+  assert.ok(!h.elements.get('tpinSetupModal'), "Modal must be closed on success");
+  assert.equal(h.eval("adminTpinStatus?.is_set"), true, "Must update adminTpinStatus.is_set to true");
+});
+
+test("Administrative TPIN Phase 4: Change modal calls POST /api/tpin/change and displays remaining attempts on failure", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTpinStatus = { is_set: true };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      if (body.current_tpin !== '8492') {
+        const err = new Error('Invalid current TPIN.');
+        err.remaining_attempts = 2;
+        throw err;
+      }
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openTpinChangeModal();");
+  assert.ok(h.elements.get('tpinChangeModal'), "Change modal must be open");
+
+  // 1. Identical current and new TPIN rejected
+  h.eval(`
+    document.getElementById('tpinCurrentInput').value = '8492';
+    document.getElementById('tpinNewInput').value = '8492';
+    document.getElementById('tpinNewConfirm').value = '8492';
+  `);
+  await h.eval("submitTpinChange();");
+  assert.equal(h.eval("globalThis.__lastPostCall"), null, "Must reject identical current and new PIN");
+
+  // 2. Incorrect current TPIN renders remaining attempts
+  h.eval(`
+    document.getElementById('tpinCurrentInput').value = '9999';
+    document.getElementById('tpinNewInput').value = '3819';
+    document.getElementById('tpinNewConfirm').value = '3819';
+  `);
+  await h.eval("submitTpinChange();");
+  const errHtml = h.elements.get('tpinChangeError')?.innerHTML || '';
+  assert.ok(errHtml.includes("2 attempts remaining"), "Must display remaining attempts badge on failed attempt");
+
+  // 3. Valid change succeeds
+  h.eval(`
+    document.getElementById('tpinCurrentInput').value = '8492';
+    document.getElementById('tpinNewInput').value = '3819';
+    document.getElementById('tpinNewConfirm').value = '3819';
+  `);
+  await h.eval("submitTpinChange();");
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/change", "Must call POST /api/tpin/change");
+  assert.equal(postCall.body.current_tpin, "8492");
+  assert.equal(postCall.body.new_tpin, "3819");
+  assert.ok(!h.elements.get('tpinChangeModal'), "Modal must close on success");
+});
+
+test("Administrative TPIN Phase 4: Reset request calls POST /api/tpin/reset-request and displays admin email", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'security-lead@torqdesk.internal' };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("openTpinResetModal();");
+  const modalHtml = h.elements.get('tpinResetModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("security-lead@torqdesk.internal"), "Must safely display administrator email");
+
+  await h.eval("submitTpinResetRequest();");
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/reset-request", "Must call POST /api/tpin/reset-request");
+  assert.ok(!h.elements.get('tpinResetModal'), "Modal must close on success");
+});
+
+test("Administrative TPIN Phase 4: Protected actions prompt TPIN verification modal before execution", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' };
+    adminTpinStatus = { is_set: true };
+    globalThis.__actionExecuted = false;
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      if (body.tpin === '3819') {
+        return { ok: true };
+      }
+      const err = new Error('Incorrect TPIN.');
+      err.remaining_attempts = 1;
+      throw err;
+    };
+  `);
+
+  // Prompt TPIN verification
+  h.eval(`
+    promptTpinVerification('Export User Directory CSV', () => {
+      globalThis.__actionExecuted = true;
+    });
+  `);
+
+  assert.ok(h.elements.get('tpinVerifyModal'), "Verification modal must be opened");
+  const modalHtml = h.elements.get('tpinVerifyModal')?.innerHTML || '';
+  assert.ok(modalHtml.includes("Export User Directory CSV"), "Must show target action name");
+
+  // Incorrect TPIN does NOT execute action
+  h.eval("document.getElementById('tpinVerifyInput').value = '0000';");
+  await h.eval("submitTpinVerification('Export User Directory CSV');");
+  assert.equal(h.eval("globalThis.__actionExecuted"), false, "Action must NOT execute on incorrect TPIN");
+  assert.ok(h.elements.get('tpinVerifyError')?.innerHTML.includes("1 attempts remaining"), "Must show remaining attempts");
+
+  // Valid TPIN executes protected action
+  h.eval("document.getElementById('tpinVerifyInput').value = '3819';");
+  await h.eval("submitTpinVerification('Export User Directory CSV');");
+  assert.equal(h.eval("globalThis.__actionExecuted"), true, "Action must execute upon successful verification");
+  assert.ok(!h.elements.get('tpinVerifyModal'), "Modal must close on success");
+});
+
+test("Administrative TPIN Phase 4: First-login forced overlay blocks access when tpin_change_required is flagged", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-new', email: 'newadmin@carmy.internal', tpin_change_required: true };
+    globalThis.__lastPostCall = null;
+    workerPost = async (path, body) => {
+      globalThis.__lastPostCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  h.eval("checkForcedTpinSetup();");
+  assert.ok(h.elements.get('forcedTpinOverlay'), "Forced TPIN overlay must be appended");
+
+  h.eval(`
+    document.getElementById('forcedTpinInput').value = '9152';
+    document.getElementById('forcedTpinConfirm').value = '9152';
+  `);
+  await h.eval("submitForcedTpinSetup();");
+
+  const postCall = h.eval("globalThis.__lastPostCall");
+  assert.equal(postCall.path, "/api/tpin/setup", "Must call POST /api/tpin/setup");
+  assert.equal(postCall.body.tpin, "9152");
+  assert.ok(!h.elements.get('forcedTpinOverlay'), "Overlay must be removed after successful setup");
+  assert.equal(h.eval("user.tpin_change_required"), false, "tpin_change_required flag must be cleared");
+});
+
+test("Super Admin Garages Phase 5: renderScreenGarages displays workshop directory table with data, badges, and action buttons", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminGaragesList = [
+      { id: 'w1', name: 'Himachal Auto Care', city: 'Shimla', state: 'HP', phone: '+91 98160 11111', owner_name: 'Rajesh', gstin: '02AABCT1332L1Z5', plan: 'ultra', bays: 4, staff_count: 5, max_staff: 15, status: 'active' },
+      { id: 'w2', name: 'Speedy Motors', city: 'Solan', state: 'HP', phone: '+91 98160 22222', owner_name: 'Amit', gstin: null, plan: 'lite', bays: 2, staff_count: 2, max_staff: 3, status: 'pending' }
+    ];
+    adminGaragesLoading = false;
+    adminGaragesError = null;
+    adminGaragesFilter = 'all';
+    adminGaragesSearch = '';
+  `);
+
+  const html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("Himachal Auto Care"), "Must show workshop name");
+  assert.ok(html.includes("Shimla, HP"), "Must show city and state");
+  assert.ok(html.includes("02AABCT1332L1Z5"), "Must show GSTIN");
+  assert.ok(html.includes("plan-ultra"), "Must have plan-ultra badge");
+  assert.ok(html.includes("status-active"), "Must show active status badge");
+  assert.ok(html.includes("Suspend"), "Active workshop must have Suspend button");
+
+  assert.ok(html.includes("Speedy Motors"), "Must show pending workshop name");
+  assert.ok(html.includes("Unregistered (Non-GST)"), "Must handle unregistered workshop");
+  assert.ok(html.includes("plan-lite"), "Must have plan-lite badge");
+  assert.ok(html.includes("status-pending"), "Must show pending status badge");
+  assert.ok(html.includes("Verify"), "Pending workshop must have Verify button");
+});
+
+test("Super Admin Garages Phase 5: 404 response on GET /api/admin/garages displays .admin-blocked-card", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminGaragesList = null;
+    workerGet = async (path) => {
+      const err = new Error('Route not found');
+      err.status = 404;
+      throw err;
+    };
+  `);
+
+  await h.eval("loadAdminGarages();");
+  const html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("admin-blocked-card"), "Must render .admin-blocked-card on 404");
+  assert.ok(html.includes("/api/admin/garages"), "Blocked card must specify target route");
+  assert.ok(html.includes("GET"), "Blocked card must specify HTTP method");
+});
+
+test("Super Admin Garages Phase 5: updateAdminGarageStatus calls PATCH /api/admin/garages/:id/status", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminTpinStatus = null;
+    globalThis.__lastPatchCall = null;
+    workerPatch = async (path, body) => {
+      globalThis.__lastPatchCall = { path, body };
+      return { ok: true };
+    };
+  `);
+
+  await h.eval("updateAdminGarageStatus('w2', 'active');");
+  const patchCall = h.eval("globalThis.__lastPatchCall");
+  assert.ok(patchCall, "Must execute patch call");
+  assert.equal(patchCall.path, "/api/admin/garages/w2/status", "Must call status patch route");
+  assert.equal(patchCall.body.status, "active", "Must send new status");
+});
+
+test("Super Admin Garages Phase 5: Status filter and search filter directory rows correctly", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    adminGaragesList = [
+      { id: 'w1', name: 'Shimla Auto Works', city: 'Shimla', status: 'active' },
+      { id: 'w2', name: 'Solan Garage Hub', city: 'Solan', status: 'pending' },
+      { id: 'w3', name: 'Dharamshala Motors', city: 'Kangra', status: 'suspended' }
+    ];
+    adminGaragesLoading = false;
+    adminGaragesError = null;
+    adminGaragesFilter = 'all';
+    adminGaragesSearch = '';
+  `);
+
+  // Filter pending
+  h.eval("adminGaragesFilter = 'pending';");
+  let html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("Solan Garage Hub"), "Pending filter must show pending garage");
+  assert.ok(!html.includes("Shimla Auto Works"), "Pending filter must hide active garage");
+  assert.ok(!html.includes("Dharamshala Motors"), "Pending filter must hide suspended garage");
+
+  // Search by keyword
+  h.eval(`
+    adminGaragesFilter = 'all';
+    adminGaragesSearch = 'Dharamshala';
+  `);
+  html = h.eval("renderScreenGarages()");
+  assert.ok(html.includes("Dharamshala Motors"), "Search must match Dharamshala Motors");
+  assert.ok(!html.includes("Shimla Auto Works"), "Search must hide unmatched garages");
+});
+
+test("Multi-Role Team Phase 6: loadTeamMe calls GET /api/team/me and sets currentAdminRole & currentAdminProfile", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        return {
+          role: 'team_lead',
+          profile: {
+            id: 'mem_123',
+            name: 'Sarah Specialist',
+            email: 'sarah@carmy.internal',
+            role: 'team_lead'
+          }
+        };
+      }
+      throw new Error('Not found: ' + path);
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), "team_lead");
+  assert.equal(h.eval("getCurrentAdminProfile().name"), "Sarah Specialist");
+});
+
+test("Multi-Role Team Phase 6: 404 response on GET /api/team/me renders .admin-blocked-card in Administrator Profile card", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    currentAdminProfile = null;
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        const err = new Error('Route not found');
+        err.status = 404;
+        throw err;
+      }
+      throw new Error('Not found');
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  const cardHtml = h.eval("renderAdminProfileCardInner()");
+  assert.ok(cardHtml.includes("admin-blocked-card"), "Must render admin-blocked-card on 404");
+  assert.ok(cardHtml.includes("/api/team/me"), "Must specify route /api/team/me");
+  assert.ok(cardHtml.includes("GET"), "Must specify HTTP method GET");
+});
+
+test("Multi-Role Team Phase 6: team_lead role shell restricts sidebar and navigation to allowed screens and allows tickets and team triage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setCurrentAdminRole('team_lead');
+    currentAdminScreen = 'tickets';
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+
+  const perms = h.eval("getAdminRolePermissions('team_lead')");
+  assert.deepEqual([...perms.allowedScreens], ['home', 'tickets', 'team', 'account']);
+  assert.equal(perms.canMutateTickets, true);
+  assert.equal(perms.canManageUsers, false);
+  assert.equal(perms.canManageTokens, false);
+  assert.equal(perms.canManageGarages, false);
+  assert.equal(perms.canManageTeam, true);
+
+  const sidebarHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(sidebarHtml.includes("Team Lead Console"), "Must display Team Lead Console in topbar");
+  assert.ok(sidebarHtml.includes("Support Tickets"), "Must include Support Tickets in sidebar");
+  assert.ok(sidebarHtml.includes("Team &amp; Access"), "Must include Team & Access in sidebar");
+  assert.ok(!sidebarHtml.includes("Activation Tokens"), "Must hide Activation Tokens from sidebar");
+  assert.ok(!sidebarHtml.includes("Garage Network"), "Must hide Garage Network from sidebar");
+  assert.ok(!sidebarHtml.includes("Audit Trail"), "Must hide Audit Trail from sidebar");
+
+  // Attempt to switch to disallowed screen
+  h.eval("switchAdminScreen('garages')");
+  assert.equal(h.eval("currentAdminScreen"), "tickets", "currentAdminScreen must not switch to disallowed screen");
+});
+
+test("Multi-Role Team Phase 6: support_agent role shell allows tickets and restricts team/tokens/plans navigation", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setCurrentAdminRole('support_agent');
+    currentAdminScreen = 'tickets';
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+
+  const perms = h.eval("getAdminRolePermissions('support_agent')");
+  assert.deepEqual([...perms.allowedScreens], ['home', 'tickets', 'account']);
+  assert.equal(perms.canManageTokens, false);
+  assert.equal(perms.canManagePlans, false);
+  assert.equal(perms.canMutateTickets, true);
+  assert.equal(perms.canManageTeam, false);
+  assert.equal(perms.canManageGarages, false);
+
+  const html = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(html.includes("Support Agent Console"), "Must display Support Agent Console");
+  assert.ok(html.includes("Support Tickets"), "Must include Support Tickets");
+  assert.ok(!html.includes("Activation Tokens"), "Must hide Activation Tokens");
+  assert.ok(!html.includes("Team &amp; Access"), "Must hide Team & Access");
+  assert.ok(!html.includes("Plans &amp; Limits"), "Must hide Plans & Limits");
+
+  // Attempt disallowed navigation
+  h.eval("switchAdminScreen('team')");
+  assert.equal(h.eval("currentAdminScreen"), "tickets", "currentAdminScreen must remain on allowed screen");
+});
+
+test("Multi-Role Team Phase 6: support_executive role allows status update on assigned tickets and internal notes, while blocking unassigned status, assignment, priority, chat, view-as-user, and team management", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setCurrentAdminRole('support_executive');
+    currentAdminProfile = { id: 'exec-1', email: 'exec@torqdesk.com', role: 'support_executive' };
+    adminTickets = [
+      {
+        id: 't-unassigned-1',
+        subject: 'General Question',
+        category: 'account',
+        status: 'open',
+        priority: 'normal',
+        email: 'user@example.com',
+        assignee_id: null,
+        message: 'Please help.',
+        created_at: new Date().toISOString(),
+        events: []
+      },
+      {
+        id: 't-assigned-1',
+        subject: 'Assigned to Executive',
+        category: 'account',
+        status: 'open',
+        priority: 'normal',
+        email: 'user2@example.com',
+        assignee_id: 'exec-1',
+        message: 'Assigned task.',
+        created_at: new Date().toISOString(),
+        events: []
+      }
+    ];
+    toast = (msg, type) => { globalThis.__lastToast = { msg, type }; };
+  `);
+
+  const perms = h.eval("getAdminRolePermissions('support_executive')");
+  assert.equal(perms.canMutateTickets, false);
+  assert.equal(perms.canUpdateAssignedTicketStatus, true);
+  assert.equal(perms.canAddInternalNotes, true);
+  assert.equal(perms.canAssignTickets, false);
+  assert.equal(perms.canChangePriority, false);
+  assert.equal(perms.canEnableChat, false);
+  assert.equal(perms.canRevealContact, false);
+  assert.equal(perms.canViewAsUser, false);
+  assert.equal(perms.canManageTeam, false);
+
+  // 1. Unassigned ticket: status update blocked (UI-ONLY)
+  await h.eval("openAdminTicketDetails('t-unassigned-1')");
+  const unassignedModal = h.elements.get('adminTicketDetailModal');
+  assert.ok(unassignedModal, "Detail modal rendered");
+  assert.ok(unassignedModal.innerHTML.includes("Internal Staff Note (Support Executive)"), "Must render internal note composer");
+  assert.ok(unassignedModal.innerHTML.includes("disabled"), "Status control must be disabled for unassigned ticket");
+
+  await h.eval("handleAdminStatusChange('t-unassigned-1')");
+  let lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied") && lastToast?.msg?.includes("assigned to them"), "Status update on unassigned ticket must be blocked");
+
+  // Reassignment, priority, and chat must be blocked
+  await h.eval("handleAdminAssigneeChange('t-unassigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Assignee change must be blocked");
+
+  await h.eval("handleAdminPriorityChange('t-unassigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Priority change must be blocked");
+
+  await h.eval("handleAdminChatToggle('t-unassigned-1', true)");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "Chat toggle must be blocked");
+
+  await h.eval("openAdminTicketViewAsUser('t-unassigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Permission denied"), "View-as-user must be blocked");
+
+  // 2. Assigned ticket: status control is enabled and update succeeds
+  await h.eval("openAdminTicketDetails('t-assigned-1')");
+  const assignedModal = h.elements.get('adminTicketDetailModal');
+  assert.ok(!assignedModal.innerHTML.includes("title=\"Support Executive: Status updates restricted to tickets assigned to you (UI-ONLY)\""), "Status select must be enabled for assigned ticket");
+
+  // 3. Adding internal note succeeds
+  let patchPayload = null;
+  h.eval(`
+    workerPatch = async (path, body) => {
+      patchPayload = body;
+      return { ok: true };
+    };
+    document.getElementById('adminReplyText').value = 'Reviewed customer inquiry, pending parts.';
+  `);
+  await h.eval("handleAdminSendReply('t-assigned-1')");
+  lastToast = h.eval("globalThis.__lastToast");
+  assert.ok(lastToast?.msg?.includes("Internal note recorded"), "Internal note must succeed");
+});
+
+test("Multi-Role Team Phase 6: Forced first-login password change overlay blocks access when password_change_required is flagged, enforces new password, and clears flag upon submission", async (t) => {
+  let updatedPassword = null;
+  const h = createAppHarness({
+    db: {
+      auth: {
+        updateUser: async ({ password }) => {
+          updatedPassword = password;
+          return { data: { user: { id: "admin-1" } }, error: null };
+        }
+      }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    currentAdminProfile = {
+      id: 'admin-1',
+      email: 'newadmin@carmy.internal',
+      password_change_required: true,
+      temp_password_active: true
+    };
+    checkForcedPasswordChange();
+  `);
+
+  assert.ok(h.elements.get('forcedPasswordOverlay'), "Forced password overlay must be rendered");
+
+  // Attempt short password
+  h.eval(`
+    document.getElementById('forcedNewPassword').value = 'short';
+    document.getElementById('forcedConfirmPassword').value = 'short';
+  `);
+  await h.eval("submitForcedPasswordChange()");
+  assert.equal(updatedPassword, null, "Should not update password if too short");
+  assert.equal(h.eval("document.getElementById('forcedPasswordError').textContent"), "Password must be at least 8 characters.");
+
+  // Attempt mismatch
+  h.eval(`
+    document.getElementById('forcedNewPassword').value = 'ValidPass123!';
+    document.getElementById('forcedConfirmPassword').value = 'MismatchPass123!';
+  `);
+  await h.eval("submitForcedPasswordChange()");
+  assert.equal(updatedPassword, null, "Should not update password on mismatch");
+  assert.equal(h.eval("document.getElementById('forcedPasswordError').textContent"), "Passwords do not match.");
+
+  // Submit valid password
+  h.eval(`
+    document.getElementById('forcedNewPassword').value = 'NewPermanentPassword2026!';
+    document.getElementById('forcedConfirmPassword').value = 'NewPermanentPassword2026!';
+  `);
+  await h.eval("submitForcedPasswordChange()");
+  assert.equal(updatedPassword, "NewPermanentPassword2026!", "auth.updateUser must receive new permanent password");
+  assert.ok(!h.elements.get('forcedPasswordOverlay'), "Overlay must be dismissed after success");
+  assert.equal(h.eval("currentAdminProfile.password_change_required"), false, "password_change_required flag must be cleared");
+  assert.equal(h.eval("currentAdminProfile.temp_password_active"), false, "temp_password_active flag must be cleared");
+});
+
+// -------------------------------------------------------------
+// Phase 8: Frontend Roadmap — Signup, OTP, Profile Gate & Switch
+// -------------------------------------------------------------
+
+test("Phase 8 Backend Switch: When /api/meta/capabilities returns 404, every capability defaults to false and screens show BLOCKED without calling missing routes", async (t) => {
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/meta/capabilities')) {
+        return new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });
+      }
+      return new Response(JSON.stringify({ ok: false }), { status: 500 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  await h.eval("fetchBackendCapabilities()");
+  assert.equal(h.eval("backendAvailable('auth_signup')"), false);
+  assert.equal(h.eval("backendAvailable('auth_email_otp')"), false);
+  assert.equal(h.eval("backendAvailable('auth_mobile_otp')"), false);
+  assert.equal(h.eval("backendAvailable('profile')"), false);
+  assert.equal(h.eval("backendAvailable('profile_status')"), false);
+  assert.equal(h.eval("backendAvailable('profile_mobile_change')"), false);
+
+  // Render step 2 -> must show BLOCKED card for POST /api/auth/signup, no active submit button
+  h.eval(`
+    signupState.currentStep = 2;
+    renderSignupFlow();
+  `);
+  let containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("backend-blocked-card"), "Must show BLOCKED card for signup");
+  assert.ok(containerHtml.includes("/api/auth/signup"), "Must reference /api/auth/signup");
+  assert.ok(!containerHtml.includes('id="authStepSubmitCredsBtn"'), "Must not render active submit button");
+
+  // Render step 3 -> must show BLOCKED card for POST /api/auth/email-otp/verify
+  h.eval(`
+    signupState.currentStep = 3;
+    renderSignupFlow();
+  `);
+  containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("/api/auth/email-otp/verify"), "Must reference /api/auth/email-otp/verify");
+
+  // Render step 4 -> must show BLOCKED card for POST /api/auth/mobile-otp/verify
+  h.eval(`
+    signupState.currentStep = 4;
+    renderSignupFlow();
+  `);
+  containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("/api/auth/mobile-otp/verify"), "Must reference /api/auth/mobile-otp/verify");
+
+  // Render step 5 -> must show BLOCKED card for PUT /api/profile
+  h.eval(`
+    signupState.currentStep = 5;
+    renderSignupFlow();
+  `);
+  containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("/api/profile"), "Must reference /api/profile");
+});
+
+test("Phase 8 Signup Flow: Step 2 credentials enforces password rule (min 8 chars, letter, number), live meter, duplicate error, and wipes password from memory", async (t) => {
+  let signupCalls = [];
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/auth/signup')) {
+        const body = JSON.parse(opts?.body || '{}');
+        signupCalls.push(body);
+        if (body.email === 'duplicate@example.com') {
+          return new Response(JSON.stringify({ ok: false, error: "An account with this email already exists" }), { status: 409 });
+        }
+        return new Response(JSON.stringify({ ok: true, user_id: "u-new-1" }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ auth_signup: true, auth_email_otp: true });
+    signupState.currentStep = 2;
+    renderSignupFlow();
+  `);
+
+  // Password rule tests:
+  assert.equal(h.eval("evaluatePasswordStrength('short').isValid"), false);
+  assert.equal(h.eval("evaluatePasswordStrength('nonumbershere').isValid"), false);
+  assert.equal(h.eval("evaluatePasswordStrength('12345678').isValid"), false);
+  assert.equal(h.eval("evaluatePasswordStrength('SecurePass1').isValid"), true);
+  assert.equal(h.eval("evaluatePasswordStrength('SuperSecurePass2026!').level"), 3);
+
+  // Duplicate email submission
+  h.eval(`
+    document.getElementById('authStepEmail').value = 'duplicate@example.com';
+    document.getElementById('authStepPassword').value = 'ValidPass123';
+  `);
+  await h.eval("submitSignupCreds()");
+  assert.equal(h.eval("document.getElementById('authStepErrorMsg').textContent"), "An account with this email already exists");
+  assert.equal(h.eval("signupState.currentStep"), 2, "Must not advance on duplicate error");
+
+  // Valid non-duplicate submission
+  h.eval(`
+    document.getElementById('authStepEmail').value = 'newuser@example.com';
+    document.getElementById('authStepPassword').value = 'ValidPass123';
+  `);
+  await h.eval("submitSignupCreds()");
+  assert.equal(h.eval("signupState.currentStep"), 3, "Must advance to step 3 on success");
+  assert.equal(h.eval("document.getElementById('authStepPassword').value"), "", "Password input must be cleared on success");
+  assert.equal(h.store.get('carmy_password'), undefined, "Zero password in localStorage");
+});
+
+test("Phase 8 Signup Flow: Step 3 Email OTP enforces 6 digits only, resend cooldown (30s), and lockout after 5 wrong tries", async (t) => {
+  let verifyAttempts = 0;
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/auth/email-otp/verify')) {
+        verifyAttempts++;
+        const body = JSON.parse(opts?.body || '{}');
+        if (body.otp === '654321') {
+          return new Response(JSON.stringify({ ok: true, email_verified: true }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: false, error: "Invalid verification code" }), { status: 401 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ auth_email_otp: true });
+    signupState.email = 'verify@example.com';
+    signupState.currentStep = 3;
+    renderSignupFlow();
+  `);
+
+  // Invalid length
+  h.eval(`
+    document.getElementById('authStepEmailOtp').value = '123';
+  `);
+  await h.eval("submitEmailOtp()");
+  assert.equal(h.eval("document.getElementById('authStepEmailOtpError').textContent"), "Enter a valid 6-digit verification code.");
+  assert.equal(verifyAttempts, 0, "Must not call server if code is not 6 digits");
+
+  // Simulate cooldown
+  h.eval("startEmailOtpCooldown(30)");
+  assert.equal(h.eval("document.getElementById('authStepEmailResendBtn').disabled"), true);
+  assert.ok(h.eval("document.getElementById('authStepEmailCooldownText').textContent").includes("30s"));
+
+  // 5 wrong tries -> lockout
+  h.eval("document.getElementById('authStepEmailOtp').value = '000000'");
+  for (let i = 0; i < 5; i++) {
+    await h.eval("submitEmailOtp()");
+  }
+  assert.equal(h.eval("signupState.emailOtpLocked"), true, "Must be locked after 5 wrong tries");
+  const containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(containerHtml.includes("otp-lockout-card"), "Must render lockout card in DOM");
+  assert.ok(containerHtml.includes("Temporarily locked for 15 minutes"), "Must show lock message");
+});
+
+test("Phase 8 Signup Flow: Step 4 Mobile enforces 10 digits, +91 format, duplicate server error, and NO skip button", async (t) => {
+  let sentMobile = null;
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/auth/mobile-otp/send')) {
+        const body = JSON.parse(opts?.body || '{}');
+        sentMobile = body.mobile;
+        if (body.mobile === '+919999999999') {
+          return new Response(JSON.stringify({ ok: false, error: "This mobile number is already linked to another account." }), { status: 409 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (String(url).includes('/api/auth/mobile-otp/verify')) {
+        return new Response(JSON.stringify({ ok: true, mobile_verified: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ auth_mobile_otp: true });
+    signupState.currentStep = 4;
+    renderSignupFlow();
+  `);
+
+  const stepHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  // Must NOT have a skip button
+  assert.ok(!stepHtml.toLowerCase().includes("skip"), "Step 4 must not contain a Skip button");
+
+  // Invalid mobile
+  h.eval("document.getElementById('authStepMobile').value = '5555555555'");
+  await h.eval("sendMobileOtp()");
+  assert.ok(h.eval("document.getElementById('authStepMobileError').textContent").includes("valid 10-digit Indian mobile"));
+  assert.equal(sentMobile, null);
+
+  // Duplicate mobile
+  h.eval("document.getElementById('authStepMobile').value = '9999999999'");
+  await h.eval("sendMobileOtp()");
+  assert.equal(h.eval("document.getElementById('authStepMobileError').textContent"), "This mobile number is already linked to another account.");
+
+  // Valid mobile
+  h.eval("document.getElementById('authStepMobile').value = '9816012345'");
+  await h.eval("sendMobileOtp()");
+  assert.equal(sentMobile, "+919816012345", "Must format mobile as +91 format");
+  assert.equal(h.eval("signupState.mobileOtpSent"), true);
+
+  // Verify OTP
+  h.eval("document.getElementById('authStepMobileOtp').value = '123456'");
+  await h.eval("submitMobileOtp()");
+  assert.equal(h.eval("signupState.currentStep"), 5, "Must advance to step 5 on verified mobile");
+  assert.equal(h.eval("document.getElementById('authStepMobileOtp').value"), "", "Mobile OTP field must be cleared");
+});
+
+test("Phase 8 Signup Flow: Step 5 Profile requires mandatory fields, 6-digit pincode, optional 15-char GSTIN, and shows 'Profile saved' only after ok", async (t) => {
+  let profilePayload = null;
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      if (String(url).includes('/api/profile') && opts?.method === 'PUT') {
+        profilePayload = JSON.parse(opts?.body || '{}');
+        return new Response(JSON.stringify({ ok: true, message: "Profile saved" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    setBackendCapabilities({ profile: true });
+    signupState.accountType = 'vehicle_owner';
+    signupState.mobile = '+919816012345';
+    signupState.currentStep = 5;
+    renderSignupFlow();
+  `);
+
+  // Missing fields
+  h.eval(`
+    document.getElementById('authProfileFullName').value = '';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.ok(h.eval("document.getElementById('authProfileErrorMsg').textContent").includes("mandatory"));
+  assert.equal(profilePayload, null);
+
+  // Invalid pincode
+  h.eval(`
+    document.getElementById('authProfileFullName').value = 'Aman Verma';
+    document.getElementById('authProfileAddress').value = 'Flat 202, Sunshine Heights';
+    document.getElementById('authProfileCity').value = 'Shimla';
+    document.getElementById('authProfileState').value = 'Himachal Pradesh';
+    document.getElementById('authProfilePincode').value = '1710';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(h.eval("document.getElementById('authProfileErrorMsg').textContent"), "Pincode must be exactly 6 digits.");
+  assert.equal(profilePayload, null);
+
+  // Valid vehicle owner profile
+  h.eval(`
+    document.getElementById('authProfilePincode').value = '171001';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(profilePayload.account_type, "vehicle_owner");
+  assert.equal(profilePayload.pincode, "171001");
+  assert.equal(h.eval("document.getElementById('authProfileSuccessMsg').textContent"), "Profile saved");
+
+  // Garage profile test with 15-char GSTIN
+  h.eval(`
+    signupState.accountType = 'garage';
+    signupState.currentStep = 5;
+    renderSignupFlow();
+    document.getElementById('authProfileGarageName').value = 'Apex Care';
+    document.getElementById('authProfileOwnerName').value = 'Rajesh Kumar';
+    document.getElementById('authProfileGarageAddress').value = 'Plot 5, Ind Area';
+    document.getElementById('authProfileCity').value = 'Chandigarh';
+    document.getElementById('authProfileState').value = 'Punjab';
+    document.getElementById('authProfilePincode').value = '160002';
+    document.getElementById('authProfileGstin').value = 'INVALID';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(h.eval("document.getElementById('authProfileErrorMsg').textContent"), "GSTIN must be exactly 15 characters if provided.");
+
+  h.eval(`
+    document.getElementById('authProfileGstin').value = '03AAAAA0000A1Z5';
+  `);
+  await h.eval("submitSignupProfile()");
+  assert.equal(profilePayload.account_type, "garage");
+  assert.equal(profilePayload.gstin, "03AAAAA0000A1Z5");
+});
+
+test("Phase 8 Profile Gate: Every login checks GET /api/profile/status, fails closed on 404, blocks dashboard when mobile_verified is false, and overlay cannot be dismissed", async (t) => {
+  let statusResponse = { ok: false };
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/profile/status')) {
+        return new Response(JSON.stringify(statusResponse), { status: statusResponse.ok ? 200 : 404 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Missing route (404) -> Fail closed, BLOCKED card rendered, dashboard locked
+  h.eval("setBackendCapabilities({ profile_status: true });");
+  statusResponse = { ok: false };
+  const gateResult404 = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
+  assert.equal(gateResult404, false, "Must fail closed on 404");
+  assert.ok(h.elements.get('profileGateOverlay'), "Profile gate overlay must be in DOM");
+  assert.ok(h.elements.get('profileGateOverlay').innerHTML.includes("backend-blocked-card"), "Must render BLOCKED card");
+  assert.ok(h.elements.get('profileGateOverlay').innerHTML.includes("GET /api/profile/status"), "Must state GET /api/profile/status");
+
+  // 2. Mobile verified false -> Non-dismissable overlay listing missing items
+  statusResponse = {
+    ok: true,
+    data: {
+      email_verified: true,
+      mobile_verified: false,
+      profile_complete: false,
+      missing: ["mobile_verified", "profile_complete"]
+    }
+  };
+  const gateResultMissing = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
+  assert.equal(gateResultMissing, false, "Must block entry when mobile_verified is false");
+  assert.ok(h.elements.get('profileGateOverlay').innerHTML.includes("Mandatory Indian mobile number"), "Must list mobile missing");
+
+  // Verify Escape does NOT dismiss overlay
+  h.eval(`
+    const escEvt = { key: 'Escape' };
+    document.dispatchEvent ? document.dispatchEvent(escEvt) : null;
+  `);
+  assert.ok(h.elements.get('profileGateOverlay'), "Overlay must remain present after Escape key");
+
+  // 3. Fully verified -> Pass gate and remove overlay
+  statusResponse = {
+    ok: true,
+    data: {
+      email_verified: true,
+      mobile_verified: true,
+      profile_complete: true,
+      missing: []
+    }
+  };
+  const gateResultOk = await h.eval("checkProfileGate({ id: 'u-owner-1', email: 'owner@example.com' })");
+  assert.equal(gateResultOk, true, "Must pass gate when all verified");
+  assert.equal(h.eval("document.getElementById('profileGateOverlay')"), null, "Overlay must be removed");
+
+  // 4. Team member / super admin bypasses profile gate
+  const teamMeResult = await h.eval("checkProfileGate({ id: 'admin-1', email: 'admin@carmy.internal', role: 'super_admin' })");
+  assert.equal(teamMeResult, true, "Team member must bypass vehicle owner profile gate");
+});
+
+test("Phase 8 / Dev: Localhost-only profile gate bypass is OFF on production hostnames even if flag is set, and ON only on localhost with flag", async (t) => {
+  const h = createAppHarness({
+    db: {
+      from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }) }),
+      auth: { getUser: async () => ({ data: { user: { id: "u-dev-1", email: "owner@example.com" } }, error: null }) }
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // Ensure backend profile_status capability is false (simulating missing backend route)
+  h.eval("setBackendCapabilities({ profile_status: false });");
+
+  // 1. By default, bypass is OFF
+  let bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF by default");
+
+  // 2. Production hostname (rdxburia.github.io) with flag set -> must remain OFF
+  await h.eval(`
+    window.location.hostname = 'rdxburia.github.io';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF on production hostname even with localStorage flag set");
+
+  let gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, false, "Gate must block access on production hostname");
+  assert.ok(h.elements.get('profileGateOverlay'), "Overlay must be rendered on production hostname");
+  assert.ok(!h.elements.get('devProfileGateBypassBanner'), "Dev banner must NOT appear on production hostname");
+
+  // 3. Staging hostname (carmy-ticket-staging.pages.dev) with flag set -> must remain OFF
+  await h.eval(`
+    window.location.hostname = 'carmy-ticket-staging.pages.dev';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF on staging hostname even with localStorage flag set");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, false, "Gate must block access on staging hostname");
+  assert.ok(!h.elements.get('devProfileGateBypassBanner'), "Dev banner must NOT appear on staging hostname");
+
+  // 4. Localhost WITHOUT flag -> must remain OFF
+  await h.eval(`
+    window.location.hostname = 'localhost';
+    localStorage.removeItem('td_dev_bypass_profile_gate');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, false, "Bypass must be OFF on localhost when flag is absent");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, false, "Gate must block access on localhost when flag is absent");
+  assert.ok(!h.elements.get('devProfileGateBypassBanner'), "Dev banner must NOT appear without flag");
+
+  // 5. Localhost WITH flag ('1') -> must be ON and show yellow banner
+  await h.eval(`
+    window.location.hostname = 'localhost';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, true, "Bypass must be ON on localhost when flag is set to '1'");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, true, "Gate must allow access on localhost when bypass is active");
+  assert.ok(!h.elements.get('profileGateOverlay'), "Overlay must be removed when bypass is active");
+
+  const banner = h.elements.get('devProfileGateBypassBanner');
+  assert.ok(banner, "Dev banner must be in DOM when bypass is active");
+  assert.equal(banner.textContent, "DEV BYPASS: profile gate disabled (localhost only)");
+
+  // 6. 127.0.0.1 WITH flag ('1') -> also ON
+  await h.eval(`
+    window.location.hostname = '127.0.0.1';
+    localStorage.setItem('td_dev_bypass_profile_gate', '1');
+  `);
+  bypassActive = await h.eval("isLocalhostProfileGateBypass()");
+  assert.equal(bypassActive, true, "Bypass must be ON on 127.0.0.1 when flag is set to '1'");
+
+  gateResult = await h.eval("checkProfileGate({ id: 'u-dev-1', email: 'owner@example.com' })");
+  assert.equal(gateResult, true, "Gate must allow access on 127.0.0.1 when bypass is active");
+
+  // Cleanup harness
+  await h.eval(`
+    localStorage.removeItem('td_dev_bypass_profile_gate');
+    removeDevProfileGateBypassBanner();
+  `);
+});
+
+
+test("Phase 8 Profile Edit: Mobile change in Account screen requires OTP; name/address edit does not; shows BLOCKED when route missing", async (t) => {
+  let profileSavedValues = null;
+  const h = createAppHarness({
+    db: {
+      from: () => ({
+        select: () => ({ eq: () => ({ single: async () => ({ data: { id: "p1", full_name: "Original Name", phone: "+919816000000" }, error: null }) }) }),
+        upsert: (payload) => {
+          profileSavedValues = payload;
+          return { single: async () => ({ data: payload, error: null }) };
+        }
+      })
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    writeIdleActivity(true);
+    user = { id: 'u1', email: 'user@example.com' };
+    ownerProfile = { full_name: 'Original Name', phone: '+919816000000', address: 'Old Address', city: 'Old City', state: 'Old State', pincode: '123456' };
+    nav('owner');
+    document.getElementById('opEditBtn').click();
+  `);
+
+  // 1. Name and address edit only (phone unchanged) -> Saves directly without OTP
+  h.eval(`
+    document.getElementById('opName').value = 'Updated Name';
+    document.getElementById('opAddress').value = 'New Street Address';
+    document.getElementById('opPhone').value = '9816000000'; // Unchanged normalized
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.ok(profileSavedValues, "Profile save should be called directly when phone is unchanged");
+
+  // 2. Mobile changed when route capability is false -> Shows BLOCKED card
+  profileSavedValues = null;
+  h.eval(`
+    setBackendCapabilities({ profile_mobile_change: false });
+    document.getElementById('opEditBtn').click();
+    document.getElementById('opPhone').value = '9816099999'; // Changed phone!
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.equal(profileSavedValues, null, "Must NOT save profile with changed phone without OTP");
+  const blockedCard = h.elements.get('profileMobileChangeBlocked');
+  assert.ok(blockedCard, "Must render blocked card for mobile change");
+  assert.ok(blockedCard.innerHTML.includes("/api/profile/mobile-change/send"), "Must name route in blocked card");
+
+  // 3. Mobile changed when capability is true -> Prompts OTP modal
+  h.eval(`
+    setBackendCapabilities({ profile_mobile_change: true });
+  `);
+  await h.eval("document.getElementById('opSave').onclick()");
+  assert.ok(h.elements.get('profileMobileOtpModal'), "Must open OTP verification modal for phone change");
+});
+
+test("Phase 8 Security & Sanitization: Zero credentials in storage/console and XSS payloads in profile fields render as plain text", async (t) => {
+  let loggedMessages = [];
+  const h = createAppHarness({
+    console: {
+      log: (...args) => loggedMessages.push(args.join(' ')),
+      info: (...args) => loggedMessages.push(args.join(' ')),
+      warn: (...args) => loggedMessages.push(args.join(' ')),
+      error: (...args) => loggedMessages.push(args.join(' '))
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // XSS test: user input with script/tag
+  const xssPayload = '<img src=x onerror=alert(1)>';
+  h.eval(`
+    signupState.accountType = 'garage';
+    signupState.currentStep = 1;
+    renderSignupFlow();
+    signupState.currentStep = 5;
+    renderSignupFlow();
+    document.getElementById('authProfileGarageName').value = ${JSON.stringify(xssPayload)};
+    document.getElementById('authProfileOwnerName').value = ${JSON.stringify(xssPayload)};
+    document.getElementById('authProfileGarageAddress').value = ${JSON.stringify(xssPayload)};
+  `);
+
+  const containerHtml = h.eval("document.getElementById('authSignupFlow').innerHTML");
+  assert.ok(!containerHtml.includes("<img src=x onerror=alert(1)>"), "XSS tag must not execute in DOM markup");
+
+  // Sensitive data check
+  const sensitiveOtp = '948201';
+  const sensitivePass = 'SecretPassword99!';
+  h.eval(`
+    document.getElementById('authStepPassword').value = ${JSON.stringify(sensitivePass)};
+  `);
+  // Check localStorage and sessionStorage
+  assert.equal(h.store.get('carmy_password'), undefined);
+  assert.equal(h.store.get('carmy_otp'), undefined);
+  assert.equal(h.store.get('carmy_mobile_otp'), undefined);
+  // Verify no console log leaked password or OTP
+  assert.ok(!loggedMessages.some(m => m.includes(sensitivePass)), "Console must never log passwords");
+  assert.ok(!loggedMessages.some(m => m.includes(sensitiveOtp)), "Console must never log OTP codes");
+});
+
+test("Phase 8 Responsive Styling: 360px and 1280px viewports enforce zero horizontal scroll and safe-area insets", async (t) => {
+  const css = fs.readFileSync(path.join(root, 'css/styles.css'), 'utf8');
+  assert.ok(css.includes('.backend-blocked-card'), "Must contain .backend-blocked-card");
+  assert.ok(css.includes('.auth-step-container'), "Must contain .auth-step-container");
+  assert.ok(css.includes('.profile-gate-overlay'), "Must contain .profile-gate-overlay");
+  assert.ok(css.includes('safe-area-inset'), "Must respect safe-area insets");
+  assert.ok(css.includes('max-width: 100%'), "Must enforce max-width containment");
+});
+
+test("Phase 9 Owner Decisions: Vehicle list shows 3 badges (Verified, Pending confirmation, Unclaimed) with text label always present", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Badge generator function
+  const verifiedBadge = h.eval("getVehicleClaimBadge({ claim_status: 'verified' })");
+  assert.ok(verifiedBadge.includes("vehicle-claim-badge verified"), "Must have class vehicle-claim-badge verified");
+  assert.ok(verifiedBadge.includes("Verified (linked)"), "Must have label 'Verified (linked)'");
+
+  const pendingBadge = h.eval("getVehicleClaimBadge({ claim_status: 'pending' })");
+  assert.ok(pendingBadge.includes("vehicle-claim-badge pending"), "Must have class vehicle-claim-badge pending");
+  assert.ok(pendingBadge.includes("Pending confirmation"), "Must have label 'Pending confirmation'");
+
+  const pendingConfBadge = h.eval("getVehicleClaimBadge({ claim_status: 'pending_confirmation' })");
+  assert.ok(pendingConfBadge.includes("Pending confirmation"), "Must recognize pending_confirmation");
+
+  const unclaimedBadge = h.eval("getVehicleClaimBadge({ claim_status: 'unclaimed' })");
+  assert.ok(unclaimedBadge.includes("vehicle-claim-badge unclaimed"), "Must have class vehicle-claim-badge unclaimed");
+  assert.ok(unclaimedBadge.includes("Unclaimed (created by garage)"), "Must have label 'Unclaimed (created by garage)'");
+
+  // 2. Render inside carsView()
+  h.eval(`
+    cars = [
+      { id: 'c1', registration_no: 'HP01A1111', make_model: 'Swift', claim_status: 'verified' },
+      { id: 'c2', registration_no: 'HP02B2222', make_model: 'i20', claim_status: 'pending' },
+      { id: 'c3', registration_no: 'HP03C3333', make_model: 'Nexon', claim_status: 'unclaimed' }
+    ];
+    carsView();
+  `);
+  const listHtml = h.eval("document.getElementById('carsList').innerHTML");
+  assert.ok(listHtml.includes("Verified (linked)"), "carsList must contain Verified badge");
+  assert.ok(listHtml.includes("Pending confirmation"), "carsList must contain Pending confirmation badge");
+  assert.ok(listHtml.includes("Unclaimed (created by garage)"), "carsList must contain Unclaimed badge");
+});
+
+test("Phase 9 Owner Decisions: Pending confirmation card shows vehicle number and garage name only after server response; missing route shows BLOCKED", async (t) => {
+  let claimsResponse = { ok: false };
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/vehicle-claims')) {
+        return new Response(JSON.stringify(claimsResponse), { status: claimsResponse.ok ? 200 : 404 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Missing route or capability false -> renders BLOCKED card
+  h.eval("setBackendCapabilities({ vehicle_claims: false });");
+  h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML = '';");
+  await h.eval("loadVehicleClaims()");
+  const blockedHtml = h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML");
+  assert.ok(blockedHtml.includes("backend-blocked-card"), "Must render backend-blocked-card when disabled");
+  assert.ok(blockedHtml.includes("GET /api/vehicle-claims"), "Must state GET /api/vehicle-claims");
+
+  // 2. Capability true, server returns claims -> renders vehicle number, garage name, Confirm & Reject buttons
+  h.eval("setBackendCapabilities({ vehicle_claims: true });");
+  claimsResponse = {
+    ok: true,
+    data: [
+      { id: 'clm-1', registration_no: 'HP01A9999', garage_name: 'Super Speed Garage' }
+    ]
+  };
+  await h.eval("loadVehicleClaims()");
+  const claimsHtml = h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML");
+  assert.ok(claimsHtml.includes("HP01A9999"), "Must display vehicle registration number");
+  assert.ok(claimsHtml.includes("Super Speed Garage"), "Must display garage name");
+  assert.ok(claimsHtml.includes("Confirm (owner)"), "Must have 'Confirm (owner)' button");
+  assert.ok(claimsHtml.includes("Not my vehicle (owner)"), "Must have 'Not my vehicle (owner)' button");
+});
+
+test("Phase 9 Owner Decisions: Confirm claim requires fresh mobile OTP; reject claim calls reject route", async (t) => {
+  let lastRoute = '';
+  let lastMethod = '';
+
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      lastRoute = String(url);
+      lastMethod = opts?.method || 'GET';
+      if (lastRoute.includes('/otp/send') || lastRoute.includes('/otp/verify') || lastRoute.includes('/confirm') || lastRoute.includes('/reject')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true, data: [] }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ vehicle_claims: true });");
+  h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML = '';");
+  h.eval("document.getElementById('claimActionBlocked-clm-100').innerHTML = '';");
+
+  // 1. Confirm initiation calls POST /api/vehicle-claims/:id/otp/send
+  await h.eval("startClaimConfirm('clm-100')");
+  assert.ok(lastRoute.includes('/api/vehicle-claims/clm-100/otp/send'), "Must send OTP for confirmation");
+  assert.equal(lastMethod, 'POST');
+  assert.ok(h.elements.get('claimOtpModal'), "Must open OTP modal");
+
+  // 2. Submit OTP verifies and confirms
+  h.eval("document.getElementById('claimOtpInput').value = '654321'");
+  await h.eval("submitClaimOtp('clm-100')");
+  assert.ok(lastRoute.includes('/api/vehicle-claims/clm-100/confirm'), "Must call confirm route after verify");
+  assert.equal(h.eval("document.getElementById('claimOtpModal')"), null, "Modal must be closed after confirmation");
+
+  // 3. Reject claim calls POST /api/vehicle-claims/:id/reject
+  await h.eval("rejectVehicleClaim('clm-100')");
+  assert.ok(lastRoute.includes('/api/vehicle-claims/clm-100/reject'), "Must call reject route");
+  assert.equal(lastMethod, 'POST');
+});
+
+test("Phase 9 Owner Decisions: Garage-created history is locked behind card when claim is pending", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    car = { id: 'car-pending-1', registration_no: 'HP01P0001', claim_status: 'pending' };
+    records = [{ id: 'rec-1', car_id: 'car-pending-1', service_date: '2026-10-18', workshop: 'Secret Garage', total_cost: 5000 }];
+    renderHistory();
+  `);
+
+  const historyHtml = h.eval("document.getElementById('historyTable').innerHTML");
+  assert.ok(historyHtml.includes("locked-garage-history-card"), "Must render locked-garage-history-card");
+  assert.ok(historyHtml.includes("History from a garage is waiting for your confirmation."), "Must render locked message");
+  assert.ok(!historyHtml.includes("Secret Garage"), "Must NOT render garage service history while claim is pending");
+  assert.equal(h.eval("document.getElementById('historySpendSummary').innerHTML"), "", "Spend summary must be empty");
+});
+
+test("Phase 9 Owner Decisions: Garage vehicle match preview is strictly server-decided; customer name required on no_match", async (t) => {
+  let serverMatchData = {
+    match_state: 'exact_match',
+    preview_text: 'Matches existing owner'
+  };
+
+  const h = createAppHarness({
+    fetch: async (url) => {
+      if (String(url).includes('/api/garage/vehicle-match')) {
+        return new Response(JSON.stringify({ ok: true, data: serverMatchData }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ garage_vehicle_match: true });");
+
+  // 1. Exact match preview from server
+  serverMatchData = { match_state: 'exact_match', preview_text: 'Matches existing owner' };
+  h.eval(`
+    document.getElementById('testMatchBox').innerHTML = '';
+    document.getElementById('testCustomerInput').value = '';
+  `);
+  await h.eval("checkGarageVehicleMatch('HP01A1234', '9816012345', 'testMatchBox', '#testCustomerInput')");
+  let matchContent = h.eval("document.getElementById('testMatchBox').textContent");
+  assert.ok(matchContent.includes("Matches existing owner"), "Must display server exact match text");
+
+  // 2. Pending claim preview from server
+  serverMatchData = { match_state: 'pending_claim', preview_text: 'Will be sent for owner confirmation' };
+  await h.eval("checkGarageVehicleMatch('HP01A1234', '9816099999', 'testMatchBox', '#testCustomerInput')");
+  matchContent = h.eval("document.getElementById('testMatchBox').textContent");
+  assert.ok(matchContent.includes("Will be sent for owner confirmation"), "Must display server pending claim text");
+
+  // 3. No match preview: Customer name is required
+  serverMatchData = { match_state: 'no_match', preview_text: 'New vehicle record will be created' };
+  await h.eval("checkGarageVehicleMatch('HP99X9999', '9800000000', 'testMatchBox', '#testCustomerInput')");
+  matchContent = h.eval("document.getElementById('testMatchBox').textContent");
+  assert.ok(matchContent.includes("New vehicle record will be created"), "Must display server no-match text");
+  assert.equal(h.eval("document.getElementById('testCustomerInput').getAttribute('required')"), "required", "Customer name must be required when no match");
+
+  // 4. Missing capability shows BLOCKED card
+  h.eval("setBackendCapabilities({ garage_vehicle_match: false });");
+  await h.eval("checkGarageVehicleMatch('HP99X9999', '9800000000', 'testMatchBox', '#testCustomerInput')");
+  const blockedMatch = h.eval("document.getElementById('testMatchBox').innerHTML");
+  assert.ok(blockedMatch.includes("backend-blocked-card"), "Must show BLOCKED card when capability false");
+  assert.ok(blockedMatch.includes("POST /api/garage/vehicle-match"), "Must name vehicle-match route");
+});
+
+test("Phase 9 Owner Decisions: WhatsApp bill send shows template preview; 'Sent' only after server ok; Join invite is unchecked by default with consent note", async (t) => {
+  let templateResponse = {
+    ok: true,
+    data: {
+      template_name: 'service_invoice_v1',
+      preview_text: 'Dear Customer, your invoice is ready.',
+      template_approved: true
+    }
+  };
+  let sendResponse = { ok: true };
+  let sentPayload = null;
+
+  const h = createAppHarness({
+    fetch: async (url, opts) => {
+      const u = String(url);
+      if (u.includes('/api/garage/bills/template')) {
+        return new Response(JSON.stringify(templateResponse), { status: templateResponse.ok ? 200 : 400 });
+      }
+      if (u.includes('/api/garage/bills/send')) {
+        sentPayload = opts?.body ? JSON.parse(opts.body) : null;
+        return new Response(JSON.stringify(sendResponse), { status: sendResponse.ok ? 200 : 400 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ bill_send: true });");
+
+  // 1. WhatsApp template approved preview
+  h.eval(`
+    document.getElementById('invBillChannel').value = 'whatsapp';
+    document.getElementById('invWhatsAppDetails').style.display = 'none';
+  `);
+  await h.eval("onBillChannelChange()");
+  assert.ok(h.eval("document.getElementById('invWhatsAppTemplateName').textContent").includes("service_invoice_v1"));
+  assert.equal(h.eval("document.getElementById('invWhatsAppPreviewText').textContent"), "Dear Customer, your invoice is ready.");
+  assert.equal(h.eval("document.getElementById('invWhatsAppStatus').textContent"), "Template Approved & Ready");
+
+  // 2. Unapproved template shows server error as is
+  templateResponse = {
+    ok: true,
+    data: {
+      template_name: 'custom_bill',
+      template_approved: false,
+      error: "WhatsApp template 'custom_bill' is pending Meta approval."
+    }
+  };
+  await h.eval("onBillChannelChange()");
+  assert.equal(h.eval("document.getElementById('invWhatsAppStatus').textContent"), "WhatsApp template 'custom_bill' is pending Meta approval.");
+
+  // 3. Send join invite checkbox must be unchecked by default
+  assert.equal(Boolean(h.eval("document.getElementById('invSendJoinInvite').checked")), false, "Send join invite must be false by default");
+
+  // 4. Send bill calls POST /api/garage/bills/send with send_join_invite flag
+  h.eval(`
+    if (!document.getElementById('gdToast')) {
+      const gt = document.createElement('div');
+      gt.id = 'gdToast';
+      document.body.appendChild(gt);
+    }
+  `);
+  await h.eval("sendBillNotification({ id: 'INV-55', customer: 'Ramesh', phone: '9816000000' }, 'whatsapp', false)");
+  assert.equal(sentPayload.invoice_id, 'INV-55');
+  assert.equal(sentPayload.channel, 'whatsapp');
+  assert.equal(sentPayload.send_join_invite, false);
+  assert.equal(h.eval("document.getElementById('gdToast').textContent"), "Sent (WHATSAPP)", "Must show 'Sent (WHATSAPP)' on success");
+
+  // 5. When POST /api/garage/bills/send returns 404, UI shows error and NEVER shows 'Sent'
+  sendResponse = { ok: false, error: 'Route not found' };
+  h.eval("document.getElementById('gdToast').textContent = '';");
+  await h.eval("sendBillNotification({ id: 'INV-56', customer: 'Suresh', phone: '9816000000' }, 'whatsapp', false)");
+  const failedToast = h.eval("document.getElementById('gdToast').textContent");
+  assert.ok(!failedToast.includes("Sent (WHATSAPP)"), "UI must NEVER show 'Sent' when route returns error/404");
+  assert.ok(failedToast.includes("Error:") || failedToast.includes("Route not found"), "UI must show error toast");
+
+  // 6. When bill_send capability is false, UI shows BLOCKED and NEVER shows 'Sent'
+  h.eval("setBackendCapabilities({ bill_send: false }); document.getElementById('gdToast').textContent = '';");
+  await h.eval("sendBillNotification({ id: 'INV-57', customer: 'Mahesh', phone: '9816000000' }, 'whatsapp', false)");
+  const blockedToast = h.eval("document.getElementById('gdToast').textContent");
+  assert.ok(!blockedToast.includes("Sent (WHATSAPP)"), "UI must NEVER show 'Sent' when capability is BLOCKED");
+  assert.ok(blockedToast.includes("BLOCKED") && blockedToast.includes("POST /api/garage/bills/send"), "UI must show BLOCKED notice with route name");
+});
+
+test("Phase 9 Owner Decisions: E-bill preview shows 'Powered by Torq Desk', server tax labels or BLOCKED on missing labels, and 'Preview only' badge", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // 1. Missing server tax_lines on GST invoice renders BLOCKED
+  h.eval(`
+    data = { profile: { name: 'City Auto Care', city: 'Shimla' }, invoices: [] };
+    openPrintableInvoice({
+      id: 'INV-201',
+      customer: 'Suresh Raina',
+      phone: '9816011111',
+      vehicle: 'Mahindra Thar',
+      reg: 'HP 01T 0007',
+      date: '2026-10-20',
+      parts: 4000,
+      labour: 1000,
+      other: 0,
+      discount: 0,
+      isGst: true,
+      amount: 5900,
+      saved: false
+    });
+  `);
+
+  let detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
+  assert.ok(detailsHtml.includes("Powered by Torq Desk"), "Must include 'Powered by Torq Desk' footer");
+  assert.ok(detailsHtml.includes("Preview only"), "Must show 'Preview only' badge for unsaved invoice");
+  assert.ok(detailsHtml.includes("BLOCKED"), "Must show BLOCKED when tax_lines is missing on GST invoice");
+  assert.ok(detailsHtml.includes("GET /api/garage/invoices/:id/taxes"), "Must show route GET /api/garage/invoices/:id/taxes in BLOCKED card");
+  assert.ok(!detailsHtml.includes("9%"), "Must NOT hard-code 9% tax label");
+  assert.ok(detailsHtml.includes("Pending owner decision"), "Must show GSTIN Pending owner decision");
+
+  // 2. Server-returned tax_lines renders exact server labels and amounts
+  h.eval(`
+    openPrintableInvoice({
+      id: 'INV-202',
+      customer: 'Suresh Raina',
+      phone: '9816011111',
+      vehicle: 'Mahindra Thar',
+      reg: 'HP 01T 0007',
+      date: '2026-10-20',
+      parts: 4000,
+      labour: 1000,
+      other: 0,
+      discount: 0,
+      isGst: true,
+      amount: 5900,
+      saved: false,
+      tax_lines: [
+        { label: 'Central GST (CGST)', amount: 450 },
+        { label: 'State GST (SGST)', amount: 450 }
+      ]
+    });
+  `);
+  detailsHtml = h.eval("document.getElementById('printInvoiceDetails').innerHTML");
+  assert.ok(detailsHtml.includes("Central GST (CGST)"), "Must render server tax label Central GST");
+  assert.ok(detailsHtml.includes("State GST (SGST)"), "Must render server tax label State GST");
+  assert.ok(detailsHtml.includes("₹450"), "Must render server tax amount ₹450");
+});
+
+test("Phase 9 Owner Decisions: Non-approved roles are completely absent; only 3 approved team roles and super_admin exist", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // Check 3 approved team roles
+  const teamLeadPerms = h.eval("getAdminRolePermissions('team_lead')");
+  assert.equal(teamLeadPerms.role, 'team_lead');
+  assert.equal(teamLeadPerms.label, 'Team Lead');
+  assert.equal(teamLeadPerms.canMutateTickets, true);
+  assert.equal(teamLeadPerms.canManageTeam, true);
+
+  const agentPerms = h.eval("getAdminRolePermissions('support_agent')");
+  assert.equal(agentPerms.role, 'support_agent');
+  assert.equal(agentPerms.label, 'Support Agent');
+  assert.equal(agentPerms.canMutateTickets, true);
+  assert.equal(agentPerms.canManageTeam, false);
+
+  const execPerms = h.eval("getAdminRolePermissions('support_executive')");
+  assert.equal(execPerms.role, 'support_executive');
+  assert.equal(execPerms.label, 'Support Executive');
+  assert.equal(execPerms.canMutateTickets, false, "Support Executive has canMutateTickets false");
+  assert.equal(execPerms.canUpdateAssignedTicketStatus, true, "Support Executive can update assigned ticket status");
+  assert.equal(execPerms.canAddInternalNotes, true, "Support Executive can add internal notes");
+  assert.equal(execPerms.canAssignTickets, false, "Support Executive cannot assign tickets");
+  assert.equal(execPerms.canChangePriority, false, "Support Executive cannot change priority");
+  assert.equal(execPerms.canEnableChat, false, "Support Executive cannot enable chat");
+  assert.equal(execPerms.canRevealContact, false, "Support Executive cannot reveal contact");
+  assert.equal(execPerms.canViewAsUser, false, "Support Executive cannot view as user");
+  assert.equal(execPerms.canManageTeam, false, "Support Executive cannot manage team");
+
+  const superAdminPerms = h.eval("getAdminRolePermissions('super_admin')");
+  assert.equal(superAdminPerms.role, 'super_admin');
+  assert.equal(superAdminPerms.canMutateTickets, true);
+
+  // Fallback for unapproved roles: defaults to super_admin or owner
+  const unapprovedPerms = h.eval("getAdminRolePermissions('auditor')");
+  assert.equal(unapprovedPerms.role, 'super_admin');
+
+  // Verify CSS contains badges for 3 approved roles and 0 for unapproved
+  const css = fs.readFileSync(path.join(root, 'css/styles.css'), 'utf8');
+  assert.ok(css.includes('.role-team-lead'), "Must contain .role-team-lead");
+  assert.ok(css.includes('.role-support-agent'), "Must contain .role-support-agent");
+  assert.ok(css.includes('.role-support-executive'), "Must contain .role-support-executive");
+  assert.ok(!css.includes('.role-support-lead'), "Must NOT contain .role-support-lead");
+  assert.ok(!css.includes('.role-billing-admin'), "Must NOT contain .role-billing-admin");
+});
+
+test("Phase 9 Security & XSS: All dynamic claim, garage and customer text rendered via textContent and safe escaping", async (t) => {
+  const h = createAppHarness({
+    fetch: async () => new Response(JSON.stringify({
+      ok: true,
+      data: [{
+        id: 'clm-xss',
+        registration_no: '<script>alert(1)</script>HP01A',
+        garage_name: '<img src=x onerror=alert(2)>Best Garage'
+      }]
+    }), { status: 200 })
+  });
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("setBackendCapabilities({ vehicle_claims: true });");
+  h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML = '';");
+  await h.eval("loadVehicleClaims()");
+  const claimsHtml = h.eval("document.getElementById('pendingVehicleClaimsSection').innerHTML");
+  assert.ok(!claimsHtml.includes("<script>alert(1)</script>"), "Registration script must be escaped");
+  assert.ok(!claimsHtml.includes("<img src=x onerror=alert(2)>"), "Garage img tag must be escaped");
+});
+
+
+test("Multi-Role Team Phase 6 / Dev: when /api/team/me returns 404 and /api/admin/me returns super_admin, role is super_admin and admin screens are allowed", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    currentAdminProfile = null;
+    currentAdminRole = null;
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        const err = new Error('Route not found');
+        err.status = 404;
+        throw err;
+      }
+      if (path === '/api/admin/me') {
+        return {
+          ok: true,
+          data: {
+            id: 'admin-uuid-1',
+            email: 'rnyburia@gmail.com',
+            role: 'super_admin'
+          }
+        };
+      }
+      throw new Error('Not found: ' + path);
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), "super_admin");
+  assert.equal(h.eval("getCurrentAdminProfile().email"), "rnyburia@gmail.com");
+
+  const perms = h.eval("getAdminRolePermissions('super_admin')");
+  assert.ok(perms.allowedScreens.includes('home'), "home must be allowed for super_admin");
+  assert.ok(perms.allowedScreens.includes('tickets'), "tickets must be allowed for super_admin");
+  assert.ok(perms.allowedScreens.includes('users'), "users must be allowed for super_admin");
+  assert.ok(perms.allowedScreens.includes('garages'), "garages must be allowed for super_admin");
+  assert.equal(perms.canManageUsers, true, "canManageUsers must be true for super_admin");
+  assert.equal(perms.canManageGarages, true, "canManageGarages must be true for super_admin");
+
+  // Verify renderAdminViewContent renders admin console shell
+  h.eval(`
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+  const adminHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(adminHtml.includes("admin-workspace-shell"), "Must render admin workspace shell when role is super_admin");
+  assert.ok(!adminHtml.includes("Administrative Access Required"), "Must NOT show access required card");
+});
+
+test("Multi-Role Team Phase 6 / Dev: when both /api/team/me and /api/admin/me return 404 or 403, role stays null and no admin screen is rendered", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  // Subcase A: team/me 404 and admin/me 403
+  h.eval(`
+    currentAdminProfile = null;
+    currentAdminRole = null;
+    workerGet = async (path) => {
+      if (path === '/api/team/me') {
+        const err = new Error('Route not found');
+        err.status = 404;
+        throw err;
+      }
+      if (path === '/api/admin/me') {
+        const err = new Error('Super Admin access required.');
+        err.status = 403;
+        err.code = 'FORBIDDEN';
+        throw err;
+      }
+      throw new Error('Not found: ' + path);
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), null, "Role must stay null when admin/me returns 403");
+  assert.equal(h.eval("getCurrentAdminProfile()"), null, "Profile must stay null when admin/me returns 403");
+
+  
+  h.eval(`
+    if (!document.getElementById('adminContent')) {
+      const c = document.createElement('div');
+      c.id = 'adminContent';
+      document.body.appendChild(c);
+    }
+    renderAdminViewContent();
+  `);
+  let contentHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(!contentHtml.includes("admin-workspace-shell"), "Must NOT render admin shell when role is null");
+  assert.ok(contentHtml.includes("Administrative Access Required"), "Must show access required when role is null");
+
+  // Subcase B: team/me 404 and admin/me 404
+  h.eval(`
+    currentAdminProfile = null;
+    currentAdminRole = null;
+    workerGet = async (path) => {
+      const err = new Error('Route not found');
+      err.status = 404;
+      throw err;
+    };
+  `);
+
+  await h.eval("loadTeamMe(true)");
+  assert.equal(h.eval("getCurrentAdminRole()"), null, "Role must stay null when both return 404");
+  assert.equal(h.eval("getCurrentAdminProfile()"), null, "Profile must stay null when both return 404");
+
+  h.eval("renderAdminViewContent();");
+  contentHtml = h.eval("document.getElementById('adminContent').innerHTML");
+  assert.ok(!contentHtml.includes("admin-workspace-shell"), "Must NOT render admin shell when both 404");
+  assert.ok(contentHtml.includes("Administrative Access Required"), "Must show access required when both 404");
+});
+
+test("Client Production: landing page markup contains visible Sign in control outside signup modal", () => {
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const landingSection = html.match(/<section id="torqLanding"[\s\S]*?<\/section>/)?.[0] || '';
+
+  assert.ok(landingSection.includes('Sign in'), "Landing page section must contain 'Sign in' text");
+  assert.match(landingSection, /data-torq-auth="login"/, "Landing page section must have a control with data-torq-auth='login'");
+
+  const ownersPanel = html.match(/<article class="td-audience-panel" data-audience-panel="owners"[\s\S]*?<\/article>/)?.[0] || '';
+  const workshopsPanel = html.match(/<article class="td-audience-panel" data-audience-panel="workshops"[\s\S]*?<\/article>/)?.[0] || '';
+
+  assert.match(ownersPanel, /<button[^>]*data-torq-auth="login"[^>]*>Sign in<\/button>/, "Vehicle owners panel must have a visible Sign in button");
+  assert.match(workshopsPanel, /data-torq-auth="login"/, "Workshops panel must have a visible Sign in control");
+  assert.ok(!ownersPanel.includes('id="auth"'), "Sign in control must not be inside #auth");
+});
+
+test("Client Production: when vehicle owner type is selected, modal title does not contain GARAGE", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("showTorqDeskAuth('signup')");
+  h.eval("selectSignupAccountType('vehicle_owner')");
+
+  const title = h.eval("document.getElementById('authTitle')?.textContent || ''");
+  const kicker = h.eval("document.getElementById('authModeKicker')?.textContent || ''");
+
+  assert.equal(title, "Create your vehicle owner account", "Modal title must reflect vehicle owner account");
+  assert.ok(!title.toUpperCase().includes("GARAGE"), "Modal title must not contain 'GARAGE' when vehicle owner is selected");
+  assert.ok(!kicker.toUpperCase().includes("GARAGE"), "Modal kicker must not contain 'GARAGE' when vehicle owner is selected");
+
+  h.eval("selectSignupAccountType('garage')");
+  const garageTitle = h.eval("document.getElementById('authTitle')?.textContent || ''");
+  const garageKicker = h.eval("document.getElementById('authModeKicker')?.textContent || ''");
+  assert.equal(garageTitle, "Create your garage account");
+  assert.equal(garageKicker, "NEW GARAGE");
+});
+
+test("Client Production: signup step labels have the auth-step class", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("showTorqDeskAuth('signup')");
+  h.eval("signupState.currentStep = 1; renderSignupFlow();");
+
+  const flowHtml = h.eval("document.getElementById('authSignupFlow')?.innerHTML || ''");
+
+  assert.ok(flowHtml.includes("auth-step-bubbles-wrap"), "Bubbles wrapper must use auth-step-bubbles-wrap class");
+  assert.ok(flowHtml.includes("auth-step-bubble"), "Step indicators must use auth-step-bubble class");
+  assert.ok(flowHtml.includes("auth-step-line"), "Step dividers must use auth-step-line class");
+  assert.ok(flowHtml.includes("auth-step-label"), "Step labels must use auth-step-label class");
+  assert.ok(flowHtml.includes("auth-step-kicker"), "Step kicker must use auth-step-kicker class");
+
+  const stepLabels = ['Account', 'Credentials', 'Email OTP', 'Mobile', 'Profile', 'Ready'];
+  stepLabels.forEach(label => {
+    assert.ok(flowHtml.includes(label), `Step label '${label}' must be rendered`);
+  });
+
+  assert.ok(flowHtml.includes("is-active") || flowHtml.includes("auth-step-active"), "Active step must have active indicator class");
+});
+
+test("Client Production: stepper has 6 bubbles, 5 connectors, and zero stray tooltips or bare numbers", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("showTorqDeskAuth('signup')");
+  h.eval("signupState.currentStep = 1; renderSignupFlow();");
+
+  const flowHtml = h.eval("document.getElementById('authSignupFlow')?.innerHTML || ''");
+
+  // 1. Stepper has 6 bubbles and 5 connectors
+  const bubbles = (flowHtml.match(/class="[^"]*\bauth-step-bubble\b[^"]*"/g) || []);
+  const connectors = (flowHtml.match(/class="[^"]*\bauth-step-line\b[^"]*"/g) || []);
+  assert.equal(bubbles.length, 6, "Stepper must have exactly 6 bubbles");
+  assert.equal(connectors.length, 5, "Stepper must have exactly 5 connectors");
+
+  // 2. No "Step 6: Ready" tooltip text or title attributes creating hover tooltips
+  assert.ok(!flowHtml.includes('title="Step 6: Ready"'), "Must not have 'Step 6: Ready' tooltip attribute");
+  assert.ok(!flowHtml.includes('title="Step'), "Must not have title attributes creating browser tooltips on steps");
+  assert.ok(!flowHtml.includes('data-tip'), "Must not contain data-tip tooltips");
+
+  // 3. No text node matching exactly "1" to "6" outside the stepper
+  // Labels row has only step labels, no bare numbers
+  const labelsText = h.eval("document.querySelector('.auth-step-labels')?.textContent || ''");
+  assert.ok(!/\b[1-6]\b/.test(labelsText), "Labels row must not contain bare step numbers");
+
+  // Head / kicker has no bare numbers
+  const kickerText = h.eval("document.querySelector('.auth-step-kicker')?.textContent || ''");
+  assert.ok(!/\b[1-6]\b/.test(kickerText), "Step kicker must not contain bare numbers");
+
+  // Outside the stepper, no text token matching exactly "1" to "6"
+  const cardText = h.eval("document.querySelector('.auth-step-card')?.textContent || ''");
+  const hasBareNumberOutside = cardText.split(/\s+/).some(token => /^([1-6])$/.test(token));
+  assert.equal(hasBareNumberOutside, false, "No text node matching exactly '1' to '6' outside the stepper");
+});
+
+test("Plans Phase 7: Owner plan cards contain Free, Plus, Family 3, Family 9 and no 'Ultra' text", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  const html = h.eval("document.getElementById('planComparisonModalBox')?.innerHTML || renderPlanComparisonModalContent()");
+  assert.ok(html.includes("Free"), "Owner plan cards must contain Free plan");
+  assert.ok(html.includes("Plus"), "Owner plan cards must contain Plus plan");
+  assert.ok(html.includes("Family 3"), "Owner plan cards must contain Family 3 plan");
+  assert.ok(html.includes("Family 9"), "Owner plan cards must contain Family 9 plan");
+  assert.ok(!html.includes("Ultra"), "Owner plan cards must not contain Ultra text");
+});
+
+test("Plans Phase 7: Owner Plus yearly total shows ₹708", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal(); setComparisonCycle('yearly');");
+  const html = h.eval("document.getElementById('planComparisonModalBox')?.innerHTML || renderPlanComparisonModalContent()");
+  assert.ok(html.includes("708") || html.includes("₹708"), "Owner Plus yearly total must show ₹708");
+});
+
+test("Plans Phase 7: Garage cards show 2999, 5399, 3299, 5939, 9999, 17999", async (t) => {
+  const portalHtml = fs.readFileSync(path.join(root, "garage-portal.html"), "utf8");
+  assert.ok(portalHtml.includes("2999") || portalHtml.includes("2,999"), "Garage cards must show 2999");
+  assert.ok(portalHtml.includes("5399") || portalHtml.includes("5,399"), "Garage cards must show 5399");
+  assert.ok(portalHtml.includes("3299") || portalHtml.includes("3,299"), "Garage cards must show 3299");
+  assert.ok(portalHtml.includes("5939") || portalHtml.includes("5,939"), "Garage cards must show 5939");
+  assert.ok(portalHtml.includes("9999") || portalHtml.includes("9,999"), "Garage cards must show 9999");
+  assert.ok(portalHtml.includes("17999") || portalHtml.includes("17,999"), "Garage cards must show 17999");
+});
+
+test("Plans Phase 7: Ultra staff badge shows 'Pending confirmation'", async (t) => {
+  const portalHtml = fs.readFileSync(path.join(root, "garage-portal.html"), "utf8");
+  assert.ok(portalHtml.includes("Pending confirmation"), "Ultra card must contain 'Pending confirmation' badge");
+  const catalog = (await import("../js/plan-catalog.js")).default || (await import("../js/plan-catalog.js"));
+  assert.equal(catalog.garage.plans.ultra.staff_status, "PENDING_OWNER_CONFIRM", "Ultra staff status must be PENDING_OWNER_CONFIRM");
+});
+
+test("Plans Phase 7: Redeem code input rejects codes shorter than 8 characters before calling route", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    let routeCalled = false;
+    workerPost = async () => { routeCalled = true; return { ok: true }; };
+    document.body.innerHTML += '<input id="activationCodeInput" value="SHORT"><div id="redeemCodeMsg"></div>';
+  `);
+
+  await h.eval("redeemActivationCode()");
+  assert.equal(h.eval("routeCalled"), false, "Route must not be called when code is shorter than 8 characters");
+});
+
+test("Plans Phase 7: Admin code generator does not contain Math.random", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  const fnStr = h.eval("generateAdminToken.toString()");
+  assert.ok(!fnStr.includes("Math.random"), "Admin code generator must not contain Math.random");
+});
+
+test("Plans Phase 7: Admin code duration select offers exactly 1 to 12", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+  `);
+  h.eval("openTokenGenModal()");
+
+  const modalHtml = h.eval("document.getElementById('adminTokenGenModal')?.innerHTML || ''");
+  assert.ok(modalHtml.includes('id="tokenGenDurationMonths"'), "Must render tokenGenDurationMonths select");
+
+  const selectMatch = modalHtml.match(/<select[^>]*id="tokenGenDurationMonths"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(selectMatch, "Must contain tokenGenDurationMonths select block");
+
+  const optionValues = [...selectMatch[1].matchAll(/value="(\d+)"/g)].map(m => parseInt(m[1], 10));
+  assert.deepEqual(optionValues, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "Duration select must offer exactly 1 to 12 months");
+});
+
+test("Plans Phase 7: No plan price is written to localStorage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-uuid', email: 'admin@carmy.internal', role: 'super_admin' };
+    currentAdminRole = 'super_admin';
+    adminPlansList = [
+      { id: 'plus', name: 'Plus', account_type: 'vehicle_owner', price_monthly: 69, price_yearly: 708 }
+    ];
+    workerPatch = async () => ({ ok: true, data: { id: 'plus' } });
+    document.body.innerHTML += '<input id="plan_price_monthly_plus" value="79"><input id="plan_price_yearly_plus" value="750"><div id="adminPlanPriceStatus"></div>';
+  `);
+
+  await h.eval("saveAdminPlanPrice('plus')");
+
+  const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
+  assert.ok(!storageDump.includes("79"), "Updated monthly price 79 must not be written to localStorage");
+  assert.ok(!storageDump.includes("750"), "Updated yearly price 750 must not be written to localStorage");
+});
+
+test("Plans Phase 7: when plan route returns 404, card contains btnOpenPlanComparisonBlocked and no price is written to localStorage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    userPlanError = { status: 404, message: 'Route /api/plan/status returned 404' };
+    userPlanStatus = null;
+  `);
+
+  const cardHtml = h.eval("renderPlanStatusCard()");
+  assert.ok(cardHtml.includes('id="btnOpenPlanComparisonBlocked"'), "Card must contain button id btnOpenPlanComparisonBlocked");
+  assert.ok(cardHtml.includes("View Plans"), "Button text must be 'View Plans'");
+  assert.ok(cardHtml.includes("Plan status is not verified yet. You can still view plans. Upgrades are submitted for manual review."), "Card must contain unverified notice note");
+
+  // Opening the modal when userPlanStatus is null does not write any price to localStorage
+  h.eval("openPlanComparisonModal()");
+  const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
+  assert.ok(!storageDump.includes("69") && !storageDump.includes("708"), "Opening plan comparison modal must not write plan prices to localStorage");
+});
+
+test("Plans Phase 7: Plan modal contains redeemCodeInput and btnRedeemFromPlanModal", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  const modalHtml = h.eval("document.getElementById('planComparisonModalBox')?.innerHTML || renderPlanComparisonModalContent()");
+  assert.ok(modalHtml.includes('id="redeemCodeInput"'), "Modal must contain input id redeemCodeInput");
+  assert.ok(modalHtml.includes('id="btnRedeemFromPlanModal"'), "Modal must contain button id btnRedeemFromPlanModal");
+  assert.ok(modalHtml.includes("Redeem code"), "Button text must be 'Redeem code'");
+  assert.ok(modalHtml.includes("Have an activation code?"), "Modal must contain 'Have an activation code?' heading");
+});
+
+test("Plans Phase 7: Plan modal redeem input rejects length under 8 before calling route", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  h.eval(`
+    let routeCalled = false;
+    workerPost = async () => { routeCalled = true; return { ok: true }; };
+    const input = document.getElementById('redeemCodeInput');
+    if (input) input.value = 'SHORT';
+  `);
+
+  await h.eval("redeemActivationCode('redeemCodeInput', 'modalRedeemMsg', 'btnRedeemFromPlanModal')");
+  assert.equal(h.eval("routeCalled"), false, "Route must not be called when code length is under 8");
+  const msgText = h.eval("document.getElementById('modalRedeemMsg')?.textContent || ''");
+  assert.ok(msgText.includes("at least 8 characters"), "Must display error for short code");
+});
+
+test("Plans Phase 7: Plan modal redeem route 404 shows BLOCKED card containing POST /api/activation/redeem", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  h.eval(`
+    workerPost = async (path) => {
+      const err = new Error('Route ' + path + ' returned 404');
+      err.status = 404;
+      throw err;
+    };
+    const input = document.getElementById('redeemCodeInput');
+    if (input) input.value = 'TD-TEST-CODE';
+  `);
+
+  await h.eval("redeemActivationCode('redeemCodeInput', 'modalRedeemMsg', 'btnRedeemFromPlanModal')");
+  const msgHtml = h.eval("document.getElementById('modalRedeemMsg')?.innerHTML || ''");
+  assert.ok(msgHtml.includes("BLOCKED") || msgHtml.includes("admin-blocked-card"), "Must render BLOCKED card");
+  assert.ok(msgHtml.includes("POST /api/activation/redeem"), "BLOCKED card must contain POST /api/activation/redeem");
+});
+
+test("Plans Phase 7: Plan modal redeem success path reloads plan status via GET /api/plan/status and does not write plan to localStorage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    let planStatusReloaded = false;
+    workerPost = async (path, body) => {
+      return {
+        ok: true,
+        data: {
+          plan: 'plus',
+          plan_name: 'Plus',
+          duration_months: 12,
+          expires_at: '2027-10-22T00:00:00.000Z',
+          days_left: 365,
+          status: 'ACTIVE'
+        }
+      };
+    };
+    workerGet = async (path) => {
+      if (path === '/api/plan/status') {
+        planStatusReloaded = true;
+        return { ok: true, data: { plan: 'plus', status: 'active', expires_at: '2027-10-22' } };
+      }
+      return { ok: true, data: [] };
+    };
+    const input = document.getElementById('redeemCodeInput');
+    if (input) input.value = 'TD-VALID-CODE';
+  `);
+
+  await h.eval("redeemActivationCode('redeemCodeInput', 'modalRedeemMsg', 'btnRedeemFromPlanModal')");
+  assert.equal(h.eval("planStatusReloaded"), true, "Must reload plan status via GET /api/plan/status");
+
+  const msgText = h.eval("document.getElementById('modalRedeemMsg')?.textContent || ''");
+  assert.ok(msgText.includes("Plus"), "Success message must show server plan name");
+  assert.ok(msgText.includes("12 months"), "Success message must show server duration_months");
+  assert.ok(msgText.includes("22-10-2027"), "Success message must show formatted DD-MM-YYYY expiry");
+  assert.ok(msgText.includes("365 days left"), "Success message must show server days_left");
+
+  // Verify no plan is written to localStorage
+  const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
+  assert.ok(!storageDump.includes("plus") || !storageDump.includes("plan_price"), "Redeem must not write plan or plan price to localStorage");
+});
+
+
+test("Ticket Tabs Phase 10: Owner tab - tickets with status solved or closed do NOT appear under Open tab", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-1', email: 'owner@example.com' };
+    userSupportTickets = [
+      { id: 'TD-SOLVED-1', subject: 'Solved ticket issue', status: 'solved', priority: 'normal', created_at: '2026-10-20T10:00:00Z' },
+      { id: 'TD-CLOSED-2', subject: 'Closed ticket issue', status: 'closed', priority: 'normal', created_at: '2026-10-21T10:00:00Z' }
+    ];
+    customerTicketTab = 'open';
+  `);
+
+  const openHtml = h.eval("renderTicketPastList()");
+  assert.ok(!openHtml.includes("TD-SOLVED-1"), "Solved ticket must not appear under Open tab");
+  assert.ok(!openHtml.includes("TD-CLOSED-2"), "Closed ticket must not appear under Open tab");
+  assert.ok(openHtml.includes("No open tickets."), "Open tab must show 'No open tickets.' when only solved/closed tickets exist");
+  assert.ok(openHtml.includes("Open (0)"), "Open tab button count must be 0");
+  assert.ok(openHtml.includes("Closed (2)"), "Closed tab button count must be 2");
+
+  h.eval("setCustomerTicketTab('closed')");
+  const closedHtml = h.eval("renderTicketPastList()");
+  assert.ok(closedHtml.includes("TD-SOLVED-1"), "Solved ticket must appear under Closed tab");
+  assert.ok(closedHtml.includes("TD-CLOSED-2"), "Closed ticket must appear under Closed tab");
+});
+
+test("Ticket Tabs Phase 10: Owner tab - tickets with status pending appear under Open tab and not under Closed", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-1', email: 'owner@example.com' };
+    userSupportTickets = [
+      { id: 'TD-PENDING-1', subject: 'Pending query', status: 'pending', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+    customerTicketTab = 'open';
+  `);
+
+  const openHtml = h.eval("renderTicketPastList()");
+  assert.ok(openHtml.includes("TD-PENDING-1"), "Pending ticket must appear under Open tab");
+  assert.ok(openHtml.includes("Open (1)"), "Open tab button count must be 1");
+  assert.ok(openHtml.includes("Closed (0)"), "Closed tab button count must be 0");
+
+  h.eval("setCustomerTicketTab('closed')");
+  const closedHtml = h.eval("renderTicketPastList()");
+  assert.ok(!closedHtml.includes("TD-PENDING-1"), "Pending ticket must not appear under Closed tab");
+  assert.ok(closedHtml.includes("No closed tickets."), "Closed tab must show 'No closed tickets.' when only pending tickets exist");
+});
+
+test("Ticket Tabs Phase 10: Admin tab - counts for Open and Closed match the number of tickets in each group", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@torqdesk.com' };
+    adminTickets = [
+      { id: 'T-PENDING', status: 'pending', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-ASSIGNED', status: 'assigned', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-WORKING', status: 'working', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-NEEDINFO', status: 'need_info', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-SOLVED', status: 'solved', priority: 'normal', created_at: '2026-10-22T08:00:00Z' },
+      { id: 'T-CLOSED', status: 'closed', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+  `);
+
+  const screenHtml = h.eval("renderScreenTickets()");
+  assert.ok(screenHtml.includes("Open (4)"), "Admin screen must show Open (4)");
+  assert.ok(screenHtml.includes("Closed (2)"), "Admin screen must show Closed (2)");
+
+  const statsHtml = h.eval("renderAdminStatsHtml()");
+  assert.ok(statsHtml.includes('<span class="admin-stat-val" style="color:#d97706">4</span><span class="admin-stat-label">In Progress</span>') ||
+            (statsHtml.includes(">4</span>") && statsHtml.includes("In Progress")), "In Progress stat card must match Open tab count 4");
+  assert.ok(statsHtml.includes('<span class="admin-stat-val" style="color:#16a34a">2</span><span class="admin-stat-label">Solved / Closed</span>') ||
+            (statsHtml.includes(">2</span>") && statsHtml.includes("Solved / Closed")), "Solved / Closed stat card must match Closed tab count 2");
+});
+
+test("Ticket Tabs Phase 10: Unknown status appears under Open with its raw label", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'usr-1', email: 'owner@example.com' };
+    userSupportTickets = [
+      { id: 'TD-CUSTOM-1', subject: 'Custom status test', status: 'waiting_for_parts', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+    customerTicketTab = 'open';
+  `);
+
+  const ownerHtml = h.eval("renderTicketPastList()");
+  assert.ok(ownerHtml.includes("TD-CUSTOM-1"), "Ticket with unknown status must appear under Open tab");
+  assert.ok(ownerHtml.includes("waiting_for_parts"), "Ticket with unknown status must display its raw status label");
+
+  h.eval(`
+    adminTickets = [
+      { id: 'T-CUSTOM-2', subject: 'Admin custom status', status: 'escalated_to_tier3', priority: 'normal', created_at: '2026-10-22T08:00:00Z' }
+    ];
+    adminTicketTab = 'open';
+    adminStatusFilter = 'all';
+  `);
+
+  const adminHtml = h.eval("renderAdminListHtml()");
+  assert.ok(adminHtml.includes("T-CUSTOM-2"), "Admin ticket with unknown status must appear under Open tab");
+  assert.ok(adminHtml.includes("escalated_to_tier3"), "Admin ticket with unknown status must display its raw label");
+});
+
+test("Ticket Tabs Phase 10: Admin SLA breach filter only filters inside Open tab", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval(`
+    user = { id: 'admin-1', email: 'admin@torqdesk.com' };
+    const nowSec = Math.floor(Date.now() / 1000);
+    adminTickets = [
+      { id: 'T-OPEN-BREACHED', status: 'working', priority: 'urgent', sla_due_at: nowSec - 3600, created_at: new Date(Date.now() - 7200000).toISOString() },
+      { id: 'T-OPEN-HEALTHY', status: 'working', priority: 'normal', sla_due_at: nowSec + 3600, created_at: new Date().toISOString() },
+      { id: 'T-CLOSED-DOC', status: 'solved', priority: 'normal', sla_due_at: nowSec - 3600, created_at: new Date(Date.now() - 7200000).toISOString() }
+    ];
+    adminTicketTab = 'open';
+    adminStatusFilter = 'all';
+    adminSlaFilter = 'breached';
+  `);
+
+  const openBreached = h.eval("getFilteredAdminTickets().map(t => t.id)");
+  assert.ok(openBreached.includes("T-OPEN-BREACHED"), "Open tab must include breached open ticket");
+  assert.ok(!openBreached.includes("T-OPEN-HEALTHY"), "Open tab with SLA breach filter must exclude non-breached open ticket");
+
+  // When switching to closed tab, SLA breach filter does not filter out closed tickets
+  h.eval("adminTicketTab = 'closed'");
+  const closedTickets = h.eval("getFilteredAdminTickets().map(t => t.id)");
+  assert.ok(closedTickets.includes("T-CLOSED-DOC"), "Closed tab must not be filtered out by SLA breach filter");
+});
