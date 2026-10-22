@@ -4582,11 +4582,50 @@ function toggleActivationRedeemSection(){
 }
 
 async function redeemActivationCode(inputElId, msgElId, btnElId){
-  const input = document.getElementById(inputElId || 'activationCodeInput') || document.getElementById('garageActivationCodeInput') || document.getElementById('activationCode');
+  let input = inputElId ? document.getElementById(inputElId) : null;
+  let msgEl = msgElId ? document.getElementById(msgElId) : null;
+  let btn = btnElId ? document.getElementById(btnElId) : null;
+
+  if (!input) {
+    const candInputs = [
+      document.getElementById('redeemCodeInput'),
+      document.getElementById('activationCodeInput'),
+      document.getElementById('garageActivationCodeInput'),
+      document.getElementById('activationCode')
+    ].filter(el => el && el.value && String(el.value).trim().length > 0);
+
+    if (candInputs.length > 0) {
+      input = candInputs[0];
+    } else {
+      input = document.getElementById('activationCodeInput') ||
+              document.getElementById('garageActivationCodeInput') ||
+              document.getElementById('redeemCodeInput') ||
+              document.getElementById('activationCode');
+    }
+  }
+
+  if (!msgEl) {
+    if (input?.id === 'redeemCodeInput') {
+      msgEl = document.getElementById('modalRedeemMsg') || document.getElementById('redeemCodeMsg');
+    } else if (input?.id === 'garageActivationCodeInput') {
+      msgEl = document.getElementById('garageActivationRedeemMsg');
+    } else {
+      msgEl = document.getElementById('activationRedeemMsg') || document.getElementById('garageActivationRedeemMsg') || document.getElementById('modalRedeemMsg') || document.getElementById('redeemCodeMsg');
+    }
+  }
+
+  if (!btn) {
+    if (input?.id === 'redeemCodeInput') {
+      btn = document.getElementById('btnRedeemFromPlanModal');
+    } else if (input?.id === 'garageActivationCodeInput') {
+      btn = document.getElementById('btnGarageRedeemCode');
+    } else {
+      btn = document.getElementById('btnRedeemActivationCode') || document.getElementById('btnGarageRedeemCode') || document.getElementById('btnRedeemFromPlanModal');
+    }
+  }
+
   const rawVal = input?.value || '';
   const code = String(rawVal).trim().toUpperCase();
-  const msgEl = document.getElementById(msgElId || 'activationRedeemMsg') || document.getElementById('garageActivationRedeemMsg') || document.getElementById('redeemCodeMsg');
-  const btn = document.getElementById(btnElId || 'btnRedeemActivationCode') || document.getElementById('btnGarageRedeemCode');
 
   if (msgEl) {
     msgEl.style.display = 'none';
@@ -4666,17 +4705,57 @@ async function redeemActivationCode(inputElId, msgElId, btnElId){
 
     const srvData = res?.data || res;
     const srvPlan = srvData?.plan_name || srvData?.plan || 'Plan';
-    const srvDuration = srvData?.duration_months != null ? `${srvData.duration_months} months` : 'Valid term';
-    const srvExpires = srvData?.expires_at ? (typeof formatAdminDate === 'function' ? formatAdminDate(srvData.expires_at) : new Date(srvData.expires_at).toLocaleDateString('en-IN')) : 'Active';
+    const srvDuration = srvData?.duration_months != null ? `${srvData.duration_months} months` : '';
 
-    const okMsg = `Code redeemed successfully! Server activated: ${srvPlan} · ${srvDuration} (Expires: ${srvExpires}).`;
-    if (typeof toast === 'function') toast(okMsg, 'ok');
-    if (msgEl) {
-      msgEl.style.display = 'block';
-      msgEl.style.background = 'rgba(22,163,74,.08)';
-      msgEl.style.color = '#166534';
-      msgEl.textContent = okMsg;
+    let formattedExpiry = '';
+    if (srvData?.expires_at) {
+      try {
+        const d = new Date(srvData.expires_at);
+        if (!isNaN(d.getTime())) {
+          const day = String(d.getUTCDate()).padStart(2, '0');
+          const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const year = d.getUTCFullYear();
+          formattedExpiry = `${day}-${month}-${year}`;
+        } else {
+          formattedExpiry = String(srvData.expires_at);
+        }
+      } catch (_) {
+        formattedExpiry = String(srvData.expires_at);
+      }
     }
+
+    const daysLeftPart = srvData?.days_left != null ? ` (${srvData.days_left} days left)` : '';
+    const expiryPart = formattedExpiry ? ` · Expires: ${formattedExpiry}` : '';
+    const durationPart = srvDuration ? ` · ${srvDuration}` : '';
+
+    let okMsg = '';
+    const rawStatus = String(srvData?.status || '').toUpperCase();
+    if (rawStatus === 'GRACE') {
+      okMsg = `Code redeemed. Plan: ${srvPlan}${durationPart}${expiryPart}${daysLeftPart}. Status: GRACE (7-day grace period, read-only).`;
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = 'rgba(245,158,11,.1)';
+        msgEl.style.color = '#b45309';
+        msgEl.textContent = okMsg;
+      }
+    } else if (rawStatus === 'EXPIRED') {
+      okMsg = `Code redeemed. Plan: ${srvPlan}${durationPart}${expiryPart}. Status: EXPIRED (read-only).`;
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = 'rgba(220,38,38,.08)';
+        msgEl.style.color = '#b91c1c';
+        msgEl.textContent = okMsg;
+      }
+    } else {
+      okMsg = `Code redeemed successfully! Server activated: ${srvPlan}${durationPart}${expiryPart}${daysLeftPart}.`;
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.style.background = 'rgba(22,163,74,.08)';
+        msgEl.style.color = '#166534';
+        msgEl.textContent = okMsg;
+      }
+    }
+    if (typeof toast === 'function') toast(okMsg, 'ok');
     if (input) input.value = '';
 
     if (typeof loadUserPlanStatus === 'function') await loadUserPlanStatus(true);
@@ -4695,25 +4774,32 @@ async function redeemActivationCode(inputElId, msgElId, btnElId){
     }
 
     const ERROR_MAP = {
+      'CODE_INVALID': 'Invalid activation code. Please check characters and try again.',
       'INVALID_CODE': 'Invalid activation code. Please check characters and try again.',
       'CODE_EXPIRED': 'This activation code has expired and can no longer be redeemed.',
-      'CODE_ALREADY_USED': 'This activation code has already been redeemed.',
+      'CODE_EXHAUSTED': 'This activation code has already been redeemed (max uses reached).',
+      'CODE_ALREADY_USED': 'This activation code has already been redeemed (max uses reached).',
+      'CODE_WRONG_ACCOUNT_TYPE': 'This code is not valid for your account type.',
       'ACCOUNT_TYPE_MISMATCH': 'This code is not valid for your account type.',
+      'CODE_MOBILE_MISMATCH': 'This code is bound to a different mobile number.',
       'MOBILE_MISMATCH': 'This code is bound to a different mobile number.',
       'RATE_LIMITED': 'Too many redemption attempts. Please try again later.'
     };
 
-    const rawCode = err?.code || err?.message || '';
+    const rawCode = String(err?.code || err?.error?.code || '').trim();
     let clearText = ERROR_MAP[rawCode];
     if (!clearText) {
+      const errMsg = String(err?.message || err?.error?.message || '');
       for (const k of Object.keys(ERROR_MAP)) {
-        if (rawCode.includes(k)) {
+        if (errMsg.includes(k) || rawCode.includes(k)) {
           clearText = ERROR_MAP[k];
           break;
         }
       }
     }
-    if (!clearText) clearText = err?.message || 'Invalid or expired activation code.';
+    if (!clearText) {
+      clearText = err?.error?.message || err?.message || 'Invalid or expired activation code.';
+    }
 
     if (typeof toast === 'function') toast('Redemption failed: ' + clearText, 'error');
     if (msgEl) {
@@ -4723,7 +4809,10 @@ async function redeemActivationCode(inputElId, msgElId, btnElId){
       msgEl.textContent = clearText;
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Apply Code'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = (btnElId === 'btnRedeemFromPlanModal' || btn?.id === 'btnRedeemFromPlanModal') ? 'Redeem code' : 'Apply Code';
+    }
   }
 }
 
@@ -4762,7 +4851,7 @@ function renderPlanComparisonModalContent(){
   const isRouteBlocked=Boolean(userPlanError);
   const curPlan=serverPlanKey || 'free';
 
-  const modalHtml='<div class="admin-modal-head">'+
+  let modalHtml='<div class="admin-modal-head">'+
     '<div>'+
       '<h3 style="margin:0;font-size:18px">Choose the Right Plan for Your Vehicles</h3>'+
       '<p class="muted" style="margin:2px 0 0;font-size:12.5px">Transparent pricing with zero hidden fees. Upgrade or cancel anytime.</p>'+
@@ -4890,6 +4979,21 @@ function renderPlanComparisonModalContent(){
       '</div>'+
     '</div>'+
   '</div>';
+
+  const isRedeemBlocked = (typeof window.backendAvailable === 'function' && !window.backendAvailable('activation_redeem'));
+
+  modalHtml += '<div class="plan-modal-redeem-section" style="margin-top:20px;padding:16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px">'+
+    '<div style="font-weight:700;font-size:13.5px;color:#1e293b;margin-bottom:6px">Have an activation code?</div>'+
+    '<p class="muted" style="margin:0 0 10px;font-size:12px">Enter a server-issued activation code to unlock plan entitlements or extended validity.</p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+      '<input type="text" id="redeemCodeInput" placeholder="e.g. TD-XXXX-XXXX" maxlength="24" style="flex:1;min-width:200px;text-transform:uppercase;font-family:monospace;font-weight:700;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px">'+
+      '<button type="button" class="primary btn-sm" id="btnRedeemFromPlanModal" onclick="redeemActivationCode(\'redeemCodeInput\',\'modalRedeemMsg\',\'btnRedeemFromPlanModal\')">Redeem code</button>'+
+    '</div>'+
+    '<div id="modalRedeemMsg" style="'+(isRedeemBlocked ? 'display:block;' : 'display:none;')+'margin-top:10px;font-size:12px;padding:8px 12px;border-radius:6px">'+
+      (isRedeemBlocked ? (typeof renderAdminBlockedCard === 'function' ? renderAdminBlockedCard('/api/activation/redeem', 'POST', 'Capability activation_redeem is disabled (404).') : '<div class="admin-blocked-card"><span class="admin-badge">BLOCKED</span> <code>POST /api/activation/redeem</code></div>') : '')+
+    '</div>'+
+  '</div>';
+
   if(box)box.innerHTML=modalHtml;
   return modalHtml;
 }

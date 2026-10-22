@@ -5456,3 +5456,100 @@ test("Plans Phase 7: when plan route returns 404, card contains btnOpenPlanCompa
   const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
   assert.ok(!storageDump.includes("69") && !storageDump.includes("708"), "Opening plan comparison modal must not write plan prices to localStorage");
 });
+
+test("Plans Phase 7: Plan modal contains redeemCodeInput and btnRedeemFromPlanModal", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  const modalHtml = h.eval("document.getElementById('planComparisonModalBox')?.innerHTML || renderPlanComparisonModalContent()");
+  assert.ok(modalHtml.includes('id="redeemCodeInput"'), "Modal must contain input id redeemCodeInput");
+  assert.ok(modalHtml.includes('id="btnRedeemFromPlanModal"'), "Modal must contain button id btnRedeemFromPlanModal");
+  assert.ok(modalHtml.includes("Redeem code"), "Button text must be 'Redeem code'");
+  assert.ok(modalHtml.includes("Have an activation code?"), "Modal must contain 'Have an activation code?' heading");
+});
+
+test("Plans Phase 7: Plan modal redeem input rejects length under 8 before calling route", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  h.eval(`
+    let routeCalled = false;
+    workerPost = async () => { routeCalled = true; return { ok: true }; };
+    const input = document.getElementById('redeemCodeInput');
+    if (input) input.value = 'SHORT';
+  `);
+
+  await h.eval("redeemActivationCode('redeemCodeInput', 'modalRedeemMsg', 'btnRedeemFromPlanModal')");
+  assert.equal(h.eval("routeCalled"), false, "Route must not be called when code length is under 8");
+  const msgText = h.eval("document.getElementById('modalRedeemMsg')?.textContent || ''");
+  assert.ok(msgText.includes("at least 8 characters"), "Must display error for short code");
+});
+
+test("Plans Phase 7: Plan modal redeem route 404 shows BLOCKED card containing POST /api/activation/redeem", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  h.eval(`
+    workerPost = async (path) => {
+      const err = new Error('Route ' + path + ' returned 404');
+      err.status = 404;
+      throw err;
+    };
+    const input = document.getElementById('redeemCodeInput');
+    if (input) input.value = 'TD-TEST-CODE';
+  `);
+
+  await h.eval("redeemActivationCode('redeemCodeInput', 'modalRedeemMsg', 'btnRedeemFromPlanModal')");
+  const msgHtml = h.eval("document.getElementById('modalRedeemMsg')?.innerHTML || ''");
+  assert.ok(msgHtml.includes("BLOCKED") || msgHtml.includes("admin-blocked-card"), "Must render BLOCKED card");
+  assert.ok(msgHtml.includes("POST /api/activation/redeem"), "BLOCKED card must contain POST /api/activation/redeem");
+});
+
+test("Plans Phase 7: Plan modal redeem success path reloads plan status via GET /api/plan/status and does not write plan to localStorage", async (t) => {
+  const h = createAppHarness();
+  if (t?.after) t.after(() => h.teardown());
+
+  h.eval("openPlanComparisonModal()");
+  h.eval(`
+    user = { id: 'usr-123', email: 'owner@example.com' };
+    let planStatusReloaded = false;
+    workerPost = async (path, body) => {
+      return {
+        ok: true,
+        data: {
+          plan: 'plus',
+          plan_name: 'Plus',
+          duration_months: 12,
+          expires_at: '2027-10-22T00:00:00.000Z',
+          days_left: 365,
+          status: 'ACTIVE'
+        }
+      };
+    };
+    workerGet = async (path) => {
+      if (path === '/api/plan/status') {
+        planStatusReloaded = true;
+        return { ok: true, data: { plan: 'plus', status: 'active', expires_at: '2027-10-22' } };
+      }
+      return { ok: true, data: [] };
+    };
+    const input = document.getElementById('redeemCodeInput');
+    if (input) input.value = 'TD-VALID-CODE';
+  `);
+
+  await h.eval("redeemActivationCode('redeemCodeInput', 'modalRedeemMsg', 'btnRedeemFromPlanModal')");
+  assert.equal(h.eval("planStatusReloaded"), true, "Must reload plan status via GET /api/plan/status");
+
+  const msgText = h.eval("document.getElementById('modalRedeemMsg')?.textContent || ''");
+  assert.ok(msgText.includes("Plus"), "Success message must show server plan name");
+  assert.ok(msgText.includes("12 months"), "Success message must show server duration_months");
+  assert.ok(msgText.includes("22-10-2027"), "Success message must show formatted DD-MM-YYYY expiry");
+  assert.ok(msgText.includes("365 days left"), "Success message must show server days_left");
+
+  // Verify no plan is written to localStorage
+  const storageDump = h.eval("JSON.stringify(Array.from(localStorage._store ? localStorage._store.entries() : []))");
+  assert.ok(!storageDump.includes("plus") || !storageDump.includes("plan_price"), "Redeem must not write plan or plan price to localStorage");
+});

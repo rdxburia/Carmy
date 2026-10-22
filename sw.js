@@ -1,8 +1,8 @@
 /* Torq Desk PWA shell. Retired: torq-desk-shell-v15, CACHE_NAME='torq-desk-shell-v16'. Never cache API, auth, POST or other non-GET responses. */
-const CACHE_NAME='torq-desk-shell-v18';
+const CACHE_NAME='torq-desk-shell-2026.10.22-v19-redeem';
 const isLocal=self.location.hostname==='localhost'||self.location.hostname==='127.0.0.1';
 const BASE=self.location.pathname.startsWith('/Carmy/')?'/Carmy/':(isLocal?'/':'/Carmy/');
-const BUILD='v18';
+const BUILD='2026.10.22-v19-redeem';
 const SHELL=[
   BASE,
   BASE+'index.html',
